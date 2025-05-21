@@ -3,7 +3,7 @@ import { Tabs } from "expo-router";
 import { View, Text } from "react-native";
 import ThemeToggle from "../../components/theme/ThemeToggle";
 import { useTheme } from "../../context/ThemeContext";
-import { Calendar, QrCode, User, PlusCircle } from "lucide-react-native";
+import { Calendar, QrCode, User } from "lucide-react-native";
 
 interface TabIconProps {
   icon: React.ReactNode;
@@ -19,7 +19,7 @@ const TabIcon: React.FC<TabIconProps> = ({ icon }) => {
 };
 
 export default function TabsLayout() {
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
 
   // Log when TabsLayout initializes to confirm it's being rendered
   useEffect(() => {
@@ -30,13 +30,21 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.secondary,
+        tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBarBorder,
+          borderTopWidth: 1,
+          paddingBottom: 4,
+          paddingTop: 6,
+          height: 60,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginTop: -4,
         },
         headerStyle: {
-          backgroundColor: colors.card,
+          backgroundColor: colors.background,
         },
         headerTintColor: colors.text,
         headerTitleStyle: {
@@ -52,36 +60,36 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Events",
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={<Calendar size={20} color={color} />} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <Calendar size={24} color={color} />
+            </View>
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="add-event"
-        options={{
-          title: "Add Event",
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={<PlusCircle size={20} color={color} />} />
-          ),
+          headerShown: true,
         }}
       />
       <Tabs.Screen
         name="scanner"
         options={{
           title: "Scanner",
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={<QrCode size={20} color={color} />} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <QrCode size={24} color={color} />
+            </View>
           ),
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={<User size={20} color={color} />} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ opacity: focused ? 1 : 0.7 }}>
+              <User size={24} color={color} />
+            </View>
           ),
+          headerShown: false,
         }}
       />
     </Tabs>

@@ -5,7 +5,6 @@ import { StorageProvider } from "../context/StorageContext";
 import { StatusBar, View } from "react-native";
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
-import { FontAwesome5 } from '@expo/vector-icons';
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -23,13 +22,11 @@ export default function RootLayout() {
   useEffect(() => {
     async function loadResourcesAndDataAsync() {
       try {
-        // Load fonts
-        await Font.loadAsync({
-          ...FontAwesome5.font,
-        });
+        // Load fonts if needed, but Lucide doesn't require extra fonts
+        setFontsLoaded(true);
       } catch (e) {
         // We might want to provide this error information to an error reporting service
-        console.warn('Error loading fonts:', e);
+        console.warn('Error loading resources:', e);
       } finally {
         setFontsLoaded(true);
       }

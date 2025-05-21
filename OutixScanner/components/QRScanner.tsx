@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { X, QrCode } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 interface QRScannerProps {
@@ -33,14 +33,14 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.9)' }]}>
         <View style={styles.headerBar}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <FontAwesome5 name="times" size={24} color="#FFFFFF" />
+            <X size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerText}>Scan QR Code</Text>
           <View style={styles.placeholderRight} />
         </View>
         
         <View style={styles.mockScannerArea}>
-          <FontAwesome5 name="qrcode" size={80} color="#FFFFFF" style={styles.qrcodeIcon} />
+          <QrCode size={80} color="#FFFFFF" style={styles.qrcodeIcon} />
           <View style={styles.scanArea}>
             <View style={styles.cornerTL} />
             <View style={styles.cornerTR} />

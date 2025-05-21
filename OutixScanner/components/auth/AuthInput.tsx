@@ -1,6 +1,6 @@
 import React, { ReactNode } from "react";
 import { StyleSheet, View, TextInput, TextInputProps } from "react-native";
-import { FontAwesome5 } from "@expo/vector-icons";
+import { Mail, Lock } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 
 interface AuthInputProps extends TextInputProps {
@@ -16,6 +16,18 @@ export default function AuthInput({
 }: AuthInputProps) {
   const { colors } = useTheme();
   
+  // Function to render the appropriate icon based on the iconName
+  const renderIcon = () => {
+    switch (iconName) {
+      case 'envelope':
+        return <Mail size={16} color={colors.secondary} />;
+      case 'lock':
+        return <Lock size={16} color={colors.secondary} />;
+      default:
+        return <Mail size={16} color={colors.secondary} />;
+    }
+  };
+  
   return (
     <View style={[
       styles.inputContainer, 
@@ -25,7 +37,7 @@ export default function AuthInput({
       }
     ]}>
       <View style={styles.iconContainer}>
-        <FontAwesome5 name={iconName} size={16} color={colors.secondary} />
+        {renderIcon()}
       </View>
       
       <TextInput

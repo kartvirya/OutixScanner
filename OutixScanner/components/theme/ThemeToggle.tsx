@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function ThemeToggle() {
@@ -20,11 +20,11 @@ export default function ThemeToggle() {
         isDarkMode ? styles.indicatorRight : styles.indicatorLeft,
         { backgroundColor: isDarkMode ? '#333333' : '#FFFFFF' }
       ]}>
-        <FontAwesome5
-          name={isDarkMode ? 'moon' : 'sun'}
-          size={16}
-          color={isDarkMode ? '#FFFFFF' : colors.primary}
-        />
+        {isDarkMode ? (
+          <Moon size={16} color="#FFFFFF" />
+        ) : (
+          <Sun size={16} color={colors.primary} />
+        )}
       </View>
       
       <Text 

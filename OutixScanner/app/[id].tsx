@@ -13,7 +13,23 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  QrCode, 
+  Users, 
+  BarChart, 
+  Settings,
+  Ticket, 
+  Tags, 
+  DollarSign,
+  CheckCircle,
+  UserCheck,
+  User,
+  Plus,
+  ChevronRight
+} from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { getGuestList, checkInGuest } from '../services/api';
 import QRScanner from '../components/QRScanner';
@@ -302,6 +318,51 @@ export default function EventDetail() {
     }
   };
 
+  const handleCheckIn = async (attendeeId: string) => {
+    if (!event) return;
+    
+    try {
+      // Create timestamp for check-in
+      const now = new Date();
+      const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      // Find attendee by ID
+      const attendeeIndex = event.attendees.findIndex(a => a.id === attendeeId);
+      if (attendeeIndex < 0) {
+        Alert.alert('Error', 'Attendee not found');
+        return;
+      }
+      
+      // Call API to check in the guest
+      await checkInGuest(eventId, attendeeId);
+      
+      // Update attendee check-in status locally
+      const updatedAttendees = [...event.attendees];
+      updatedAttendees[attendeeIndex] = {
+        ...updatedAttendees[attendeeIndex],
+        checkedIn: true,
+        checkInTime: timeString
+      };
+      
+      // Update event state with checked-in attendee
+      setEvent(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          attendees: updatedAttendees
+        };
+      });
+      
+      Alert.alert(
+        'Check-in Successful',
+        `${updatedAttendees[attendeeIndex].name} has been checked in at ${timeString}.`
+      );
+    } catch (error) {
+      console.error('API check-in error:', error);
+      Alert.alert('Check-in Error', 'Failed to check in attendee. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -337,19 +398,19 @@ export default function EventDetail() {
 
   const renderTabBar = () => (
     <View style={styles.tabBar}>
-      {tabs.map(tab => (
+      {tabs.map((tab) => (
         <TouchableOpacity
           key={tab}
           style={[
-            styles.tabItem,
-            activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 }
+            styles.tab,
+            activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
           ]}
           onPress={() => setActiveTab(tab)}
         >
           <Text
             style={[
               styles.tabText,
-              { color: activeTab === tab ? colors.primary : colors.secondary }
+              { color: activeTab === tab ? colors.primary : colors.secondary },
             ]}
           >
             {tab}
@@ -359,236 +420,243 @@ export default function EventDetail() {
     </View>
   );
 
-  // Render tab content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'Overview':
         return (
           <View style={styles.tabContent}>
-            <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Details</Text>
-              <View style={styles.infoRow}>
-                <FontAwesome5 name="calendar" size={16} color={colors.primary} />
-                <Text style={[styles.infoText, { color: colors.text }]}>{event.date}</Text>
+              
+              <View style={styles.detailRow}>
+                <Calendar size={16} color={colors.primary} style={styles.detailIcon} />
+                <View>
+                  <Text style={[styles.detailLabel, { color: colors.secondary }]}>Date</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>{event?.date}</Text>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <FontAwesome5 name="clock" size={16} color={colors.primary} />
-                <Text style={[styles.infoText, { color: colors.text }]}>{event.time}</Text>
+              
+              <View style={styles.detailRow}>
+                <Clock size={16} color={colors.primary} style={styles.detailIcon} />
+                <View>
+                  <Text style={[styles.detailLabel, { color: colors.secondary }]}>Time</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>{event?.time}</Text>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <FontAwesome5 name="map-marker-alt" size={16} color={colors.primary} />
-                <Text style={[styles.infoText, { color: colors.text }]}>{event.location}</Text>
+              
+              <View style={styles.detailRow}>
+                <MapPin size={16} color={colors.primary} style={styles.detailIcon} />
+                <View>
+                  <Text style={[styles.detailLabel, { color: colors.secondary }]}>Location</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>{event?.location}</Text>
+                </View>
               </View>
-              <Text style={[styles.description, { color: colors.text }]}>{event.description}</Text>
-            </View>
 
-            <View style={[styles.statsContainer, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Stats</Text>
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>{event.ticketsSold}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Tickets Sold</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>${event.revenue}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Revenue</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>{attendancePercentage}%</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Attendance</Text>
-                </View>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              
+              <Text style={[styles.subSectionTitle, { color: colors.text }]}>Description</Text>
+              <Text style={[styles.description, { color: colors.secondary }]}>
+                {event?.description || 'No description available.'}
+              </Text>
+            </View>
+            
+            <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+              
+              <View style={styles.actionsGrid}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                  onPress={handleOpenScanner}
+                >
+                  <QrCode size={24} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Scan Ticket</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]}>
+                  <Users size={24} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>View Guests</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]}>
+                  <BarChart size={24} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Analytics</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]}>
+                  <Settings size={24} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Settings</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
         );
-
+        
       case 'Analytics':
         return (
           <View style={styles.tabContent}>
-            <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Analytics</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Tickets Overview</Text>
               
-              {/* Ticket sales summary */}
-              <View style={styles.analyticsSection}>
-                <Text style={[styles.subSectionTitle, { color: colors.text }]}>Ticket Sales</Text>
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: colors.primary }]}>{event.ticketsSold}</Text>
-                    <Text style={[styles.statLabel, { color: colors.secondary }]}>Sold</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: colors.primary }]}>{event.totalTickets - event.ticketsSold}</Text>
-                    <Text style={[styles.statLabel, { color: colors.secondary }]}>Available</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: colors.primary }]}>
-                      {event.totalTickets > 0 ? Math.round((event.ticketsSold / event.totalTickets) * 100) : 0}%
-                    </Text>
-                    <Text style={[styles.statLabel, { color: colors.secondary }]}>Capacity</Text>
-                  </View>
-                </View>
-              </View>
-              
-              {/* Sales progress bar */}
-              <View style={styles.progressContainer}>
-                <View style={styles.progressLabelContainer}>
-                  <Text style={[styles.progressLabel, { color: colors.text }]}>Sales Progress</Text>
-                  <Text style={[styles.progressValue, { color: colors.primary }]}>
-                    {event.ticketsSold}/{event.totalTickets}
-                  </Text>
-                </View>
-                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                  <View 
-                    style={[
-                      styles.progressFill, 
-                      { 
-                        backgroundColor: colors.primary,
-                        width: `${(event.ticketsSold / event.totalTickets) * 100}%` 
-                      }
-                    ]} 
-                  />
-                </View>
-              </View>
-              
-              {/* Ticket breakdown by type */}
-              <View style={styles.analyticsSection}>
-                <Text style={[styles.subSectionTitle, { color: colors.text }]}>Ticket Breakdown</Text>
-                {event.tickets.map((ticket, index) => (
-                  <View key={ticket.id} style={styles.ticketBreakdownItem}>
-                    <View style={styles.ticketBreakdownHeader}>
-                      <Text style={[styles.ticketTypeName, { color: colors.text }]}>{ticket.type}</Text>
-                      <Text style={[styles.ticketTypeCount, { color: colors.primary }]}>
-                        {ticket.sold}/{ticket.sold + ticket.available}
-                      </Text>
-                    </View>
-                    <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                      <View 
-                        style={[
-                          styles.progressFill, 
-                          { 
-                            backgroundColor: getTicketColor(index),
-                            width: `${(ticket.sold / (ticket.sold + ticket.available)) * 100}%` 
-                          }
-                        ]} 
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-              
-              {/* Revenue breakdown */}
-              <View style={styles.analyticsSection}>
-                <Text style={[styles.subSectionTitle, { color: colors.text }]}>Revenue</Text>
-                <View style={styles.revenueContainer}>
-                  <Text style={[styles.revenueAmount, { color: colors.primary }]}>${event.revenue}</Text>
-                  <Text style={[styles.revenueLabel, { color: colors.secondary }]}>Total Revenue</Text>
+              <View style={styles.statRow}>
+                <View style={styles.statItem}>
+                  <Ticket size={24} color={colors.primary} />
+                  <Text style={[styles.statValue, { color: colors.text }]}>{event?.totalTickets || 0}</Text>
+                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Tickets</Text>
                 </View>
                 
-                <Text style={[styles.revenueBreakdownTitle, { color: colors.text }]}>Revenue by Ticket Type</Text>
-                {event.tickets.map((ticket, index) => (
-                  <View key={ticket.id} style={styles.revenueBreakdownItem}>
-                    <View style={styles.ticketTypeInfo}>
-                      <View style={[styles.colorDot, { backgroundColor: getTicketColor(index) }]} />
-                      <Text style={[styles.ticketTypeName, { color: colors.text }]}>{ticket.type}</Text>
-                    </View>
-                    <Text style={[styles.revenueItemAmount, { color: colors.primary }]}>
-                      ${ticket.price * ticket.sold}
+                <View style={styles.statItem}>
+                  <Tags size={24} color={colors.primary} />
+                  <Text style={[styles.statValue, { color: colors.text }]}>{event?.ticketsSold || 0}</Text>
+                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Tickets Sold</Text>
+                </View>
+                
+                <View style={styles.statItem}>
+                  <DollarSign size={24} color={colors.primary} />
+                  <Text style={[styles.statValue, { color: colors.text }]}>${event?.revenue || 0}</Text>
+                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Revenue</Text>
+                </View>
+              </View>
+            </View>
+            
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Attendance</Text>
+              
+              <View style={styles.attendanceContainer}>
+                <View style={styles.attendanceItem}>
+                  <View style={[styles.attendanceCircle, { borderColor: colors.primary }]}>
+                    <Text style={[styles.attendancePercentage, { color: colors.primary }]}>
+                      {event?.attendees ? 
+                        Math.round((event.attendees.filter(a => a.checkedIn).length / event.attendees.length) * 100) : 0}%
                     </Text>
                   </View>
-                ))}
+                  <Text style={[styles.attendanceLabel, { color: colors.secondary }]}>Check-in Rate</Text>
+                </View>
+                
+                <View style={styles.attendanceStats}>
+                  <View style={styles.attendanceStat}>
+                    <UserCheck size={16} color={colors.primary} />
+                    <Text style={[styles.attendanceValue, { color: colors.text }]}>
+                      {event?.attendees ? event.attendees.filter(a => a.checkedIn).length : 0}
+                    </Text>
+                    <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>Checked In</Text>
+                  </View>
+                  
+                  <View style={styles.attendanceStat}>
+                    <User size={16} color={colors.primary} />
+                    <Text style={[styles.attendanceValue, { color: colors.text }]}>
+                      {event?.attendees ? event.attendees.filter(a => !a.checkedIn).length : 0}
+                    </Text>
+                    <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>Not Arrived</Text>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
         );
-
+        
       case 'Tickets':
         return (
           <View style={styles.tabContent}>
-            <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Ticket Sales</Text>
-              <FlatList
-                data={event.tickets}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={[styles.ticketItem, { borderBottomColor: colors.border }]}>
-                    <View style={styles.ticketInfo}>
-                      <Text style={[styles.ticketType, { color: colors.text }]}>{item.type}</Text>
-                      <Text style={[styles.ticketPrice, { color: colors.secondary }]}>${item.price}</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Ticket Types</Text>
+                <TouchableOpacity style={styles.addButton}>
+                  <Plus size={16} color={colors.primary} />
+                  <Text style={[styles.addButtonText, { color: colors.primary }]}>Add</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {event?.tickets && event.tickets.length > 0 ? (
+                <FlatList
+                  data={event.tickets}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item, index }) => (
+                    <View style={[styles.ticketItem, { backgroundColor: getTicketColor(index) }]}>
+                      <View style={styles.ticketHeader}>
+                        <Text style={styles.ticketType}>{item.type}</Text>
+                        <Text style={styles.ticketPrice}>${item.price}</Text>
+                      </View>
+                      <View style={styles.ticketStats}>
+                        <View style={styles.ticketStatItem}>
+                          <Text style={styles.ticketStatValue}>{item.sold}</Text>
+                          <Text style={styles.ticketStatLabel}>Sold</Text>
+                        </View>
+                        <View style={styles.ticketStatItem}>
+                          <Text style={styles.ticketStatValue}>{item.available}</Text>
+                          <Text style={styles.ticketStatLabel}>Available</Text>
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.ticketStats}>
-                      <Text style={[styles.ticketSold, { color: colors.primary }]}>{item.sold} sold</Text>
-                      <Text style={[styles.ticketAvailable, { color: colors.secondary }]}>{item.available} available</Text>
-                    </View>
-                  </View>
-                )}
-                ListFooterComponent={() => (
-                  <View style={styles.totalContainer}>
-                    <Text style={[styles.totalLabel, { color: colors.text }]}>Total Sold:</Text>
-                    <Text style={[styles.totalValue, { color: colors.primary }]}>{event.ticketsSold} tickets</Text>
-                  </View>
-                )}
-              />
+                  )}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.ticketList}
+                />
+              ) : (
+                <Text style={[styles.emptyText, { color: colors.secondary }]}>No ticket types defined</Text>
+              )}
             </View>
           </View>
         );
-
+        
       case 'Attendance':
         return (
           <View style={styles.tabContent}>
-            <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
-              <View style={styles.attendanceHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Attendance Tracking</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Guest List</Text>
                 <TouchableOpacity 
                   style={[styles.scanButton, { backgroundColor: colors.primary }]}
                   onPress={handleOpenScanner}
                 >
-                  <FontAwesome5 name="qrcode" size={16} color="#FFFFFF" style={styles.scanButtonIcon} />
-                  <Text style={styles.scanButtonText}>Scan QR</Text>
+                  <QrCode size={16} color="#FFFFFF" />
+                  <Text style={styles.scanButtonText}>Scan</Text>
                 </TouchableOpacity>
               </View>
               
-              <View style={styles.attendanceStats}>
-                <View style={styles.attendanceGraph}>
-                  <View
-                    style={[
-                      styles.attendanceBar,
-                      { 
-                        backgroundColor: colors.primary,
-                        width: `${attendancePercentage}%`
-                      }
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.attendanceText, { color: colors.text }]}>
-                  {checkedInCount} of {event.attendees.length} checked in ({attendancePercentage}%)
-                </Text>
-              </View>
-              
-              <View style={styles.checkInsContainer}>
-                <Text style={[styles.subsectionTitle, { color: colors.text }]}>Attendee List</Text>
-                {event.attendees.map(attendee => (
-                  <View key={attendee.id} style={[styles.checkInItem, { borderBottomColor: colors.border }]}>
-                    <Text style={[styles.attendeeName, { color: colors.text }]}>{attendee.name}</Text>
-                    <View style={styles.checkInInfo}>
-                      <Text style={[styles.checkInType, { color: colors.secondary }]}>{attendee.ticketType}</Text>
-                      <Text 
-                        style={[
-                          styles.checkInStatus, 
-                          { color: attendee.checkedIn ? '#4CAF50' : colors.secondary }
-                        ]}
-                      >
-                        {attendee.checkedIn 
-                          ? `Checked in at ${attendee.checkInTime}` 
-                          : 'Not checked in'}
-                      </Text>
+              {event?.attendees && event.attendees.length > 0 ? (
+                <FlatList
+                  data={event.attendees}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <View style={[styles.attendeeItem, { backgroundColor: colors.background }]}>
+                      <View style={styles.attendeeDetails}>
+                        <Text style={[styles.attendeeName, { color: colors.text }]}>{item.name}</Text>
+                        <Text style={[styles.attendeeEmail, { color: colors.secondary }]}>{item.email}</Text>
+                        <View style={styles.attendeeTypeRow}>
+                          <Text style={[styles.attendeeTicketType, { backgroundColor: colors.primary, color: '#FFFFFF' }]}>{item.ticketType}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.attendeeStatus}>
+                        {item.checkedIn ? (
+                          <View style={[styles.checkedInBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
+                            <CheckCircle size={14} color="#2ecc71" />
+                            <Text style={[styles.checkedInText, { color: '#2ecc71' }]}>Checked In</Text>
+                            {item.checkInTime && (
+                              <Text style={styles.checkInTime}>{item.checkInTime}</Text>
+                            )}
+                          </View>
+                        ) : (
+                          <TouchableOpacity 
+                            style={[styles.checkInButton, { backgroundColor: colors.primary }]}
+                            onPress={() => handleCheckIn(item.id)}
+                          >
+                            <UserCheck size={14} color="#FFFFFF" />
+                            <Text style={styles.checkInButtonText}>Check In</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
+                  )}
+                  style={styles.attendeeList}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                />
+              ) : (
+                <Text style={[styles.emptyText, { color: colors.secondary }]}>No guests registered</Text>
+              )}
             </View>
           </View>
         );
-
       default:
         return null;
     }
@@ -608,11 +676,11 @@ export default function EventDetail() {
           <Text style={[styles.eventTitle, { color: colors.text }]}>{event.title}</Text>
           <View style={styles.eventMeta}>
             <View style={styles.metaItem}>
-              <FontAwesome5 name="calendar" size={14} color={colors.secondary} />
+              <Calendar size={14} color={colors.secondary} />
               <Text style={[styles.metaText, { color: colors.secondary }]}>{event.date}</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome5 name="clock" size={14} color={colors.secondary} />
+              <Clock size={14} color={colors.secondary} />
               <Text style={[styles.metaText, { color: colors.secondary }]}>{event.time}</Text>
             </View>
           </View>
@@ -692,7 +760,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#EEEEEE',
     marginBottom: 16,
   },
-  tabItem: {
+  tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
@@ -704,7 +772,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
-  eventCard: {
+  infoCard: {
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
@@ -719,32 +787,61 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  infoRow: {
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  infoText: {
+  detailIcon: {
+    marginRight: 10,
+  },
+  detailLabel: {
     fontSize: 16,
-    marginLeft: 10,
+  },
+  detailValue: {
+    fontSize: 16,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 16,
+  },
+  subSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
   },
   description: {
     marginTop: 16,
     fontSize: 15,
     lineHeight: 20,
   },
-  statsContainer: {
+  actionsCard: {
     padding: 16,
     borderRadius: 12,
   },
-  statsRow: {
+  actionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  actionButton: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  statRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
   statItem: {
     alignItems: 'center',
   },
-  statNumber: {
+  statValue: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
@@ -752,198 +849,46 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 14,
   },
-  ticketItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  ticketInfo: {
-    flex: 1,
-  },
-  ticketType: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  ticketPrice: {
-    fontSize: 14,
-  },
-  ticketStats: {
-    alignItems: 'flex-end',
-  },
-  ticketSold: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  ticketAvailable: {
-    fontSize: 14,
-  },
-  totalContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
-    marginTop: 8,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  attendanceStats: {
+  attendanceContainer: {
     marginBottom: 24,
   },
-  attendanceGraph: {
-    height: 20,
-    backgroundColor: '#EEEEEE',
-    borderRadius: 10,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  attendanceBar: {
-    height: '100%',
-  },
-  attendanceText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  checkInsContainer: {
-    marginTop: 8,
-  },
-  subsectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  attendanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  checkInItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  attendeeName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  checkInInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  checkInType: {
-    fontSize: 14,
-  },
-  checkInStatus: {
-    fontSize: 14,
-  },
-  analyticsSection: {
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  subSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  ticketBreakdownItem: {
-    marginBottom: 16,
-  },
-  ticketBreakdownHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  ticketTypeName: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  ticketTypeCount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  progressContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  progressLabelContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  progressValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  progressBar: {
-    height: 12,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: '#E0E0E0',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 6,
-  },
-  revenueContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  revenueAmount: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  revenueLabel: {
-    fontSize: 16,
-  },
-  revenueBreakdownTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  revenueBreakdownItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  ticketTypeInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  revenueItemAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  loadingContainer: {
-    flex: 1,
+  attendanceCircle: {
+    width: 40,
+    height: 40,
+    borderWidth: 2,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 16,
-    textAlign: 'center',
+  attendancePercentage: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  attendanceHeader: {
+  attendanceLabel: {
+    fontSize: 14,
+    marginLeft: 12,
+  },
+  attendanceStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  attendanceStat: {
+    alignItems: 'center',
+  },
+  attendanceValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  attendanceStatLabel: {
+    fontSize: 14,
+  },
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -956,12 +901,138 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
   },
-  scanButtonIcon: {
-    marginRight: 6,
-  },
   scanButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
+    marginLeft: 6,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  ticketItem: {
+    width: 160,
+    padding: 12,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  ticketHeader: {
+    marginBottom: 12,
+  },
+  ticketType: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  ticketPrice: {
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  ticketStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  ticketStatItem: {
+    alignItems: 'center',
+  },
+  ticketStatValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  ticketStatLabel: {
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  ticketList: {
+    paddingVertical: 8,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    padding: 20,
+  },
+  attendeeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  attendeeDetails: {
+    flex: 1,
+  },
+  attendeeName: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  attendeeEmail: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  attendeeTypeRow: {
+    flexDirection: 'row',
+  },
+  attendeeTicketType: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    fontSize: 12,
+  },
+  attendeeStatus: {
+    justifyContent: 'center',
+  },
+  checkedInBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 4,
+  },
+  checkedInText: {
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  checkInTime: {
+    fontSize: 12,
+    marginTop: 4,
+    opacity: 0.8,
+  },
+  checkInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  checkInButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  attendeeList: {
+    marginTop: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '500',
+    marginTop: 16,
+    textAlign: 'center',
   },
 }); 

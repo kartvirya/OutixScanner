@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
-import { FontAwesome5 } from "@expo/vector-icons";
+import { CalendarCheck, Eye, EyeOff, Mail } from "lucide-react-native";
 import AuthInput from "../../components/auth/AuthInput";
 import AuthButton from "../../components/auth/AuthButton";
 import { useTheme } from "../../context/ThemeContext";
@@ -75,7 +75,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.logoContainer}>
             <View style={[styles.logoCircle, { backgroundColor: colors.primary }]}>
-              <FontAwesome5 name="calendar-check" size={40} color="#FFFFFF" />
+              <CalendarCheck size={40} color="#FFFFFF" />
             </View>
             <Text style={[styles.appName, { color: colors.text }]}>Outix Events</Text>
             <Text style={[styles.tagline, { color: colors.secondary }]}>Manage your events with ease</Text>
@@ -101,11 +101,10 @@ export default function LoginScreen() {
               iconName="lock"
               rightIcon={
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <FontAwesome5
-                    name={showPassword ? "eye-slash" : "eye"}
-                    size={18}
-                    color={colors.secondary}
-                  />
+                  {showPassword ? 
+                    <EyeOff size={18} color={colors.secondary} /> : 
+                    <Eye size={18} color={colors.secondary} />
+                  }
                 </TouchableOpacity>
               }
             />
@@ -137,8 +136,8 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity style={[styles.socialButton, { backgroundColor: colors.primary }]}>
-              <FontAwesome5 name="google" size={20} color="#FFFFFF" />
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
+              <Mail size={20} color="#FFFFFF" />
+              <Text style={styles.socialButtonText}>Continue with Email</Text>
             </TouchableOpacity>
 
             <View style={styles.signupContainer}>

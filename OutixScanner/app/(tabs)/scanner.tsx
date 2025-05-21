@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   TextInput,
-  SafeAreaView,
-  ScrollView,
-  Modal,
-  Image,
-  Alert,
   FlatList,
+  SafeAreaView,
+  Alert,
+  Modal,
   Dimensions,
-  ActivityIndicator
+  Animated,
+  Platform,
+  ScrollView,
+  Image,
+  StatusBar,
 } from 'react-native';
+import { Search, QrCode, List, UserPlus, CheckCircle, Calendar, Clock, MapPin, User, Check, Lock } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { FontAwesome5 } from '@expo/vector-icons';
-import { Ionicons } from '@expo/vector-icons';
+import { Camera } from 'expo-camera';
+import { BarCodeScanner } from 'expo-barcode-scanner';
+import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import axios from 'axios';
 
 // Define types
@@ -579,7 +584,7 @@ export default function ScannerScreen() {
   const renderDashboard = () => (
     <View style={styles.dashboardContainer}>
       <View style={[styles.searchBar, { backgroundColor: colors.card }]}>
-        <FontAwesome5 name="search" size={18} color={colors.secondary} style={styles.searchIcon} />
+        <Search size={18} color={colors.secondary} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search by name, ticket, phone, or email"
@@ -612,7 +617,7 @@ export default function ScannerScreen() {
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('scan')}
         >
-          <FontAwesome5 name="qrcode" size={24} color="#FFFFFF" />
+          <QrCode size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Scan</Text>
         </TouchableOpacity>
         
@@ -620,7 +625,7 @@ export default function ScannerScreen() {
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('search')}
         >
-          <FontAwesome5 name="search" size={24} color="#FFFFFF" />
+          <Search size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Search</Text>
         </TouchableOpacity>
         
@@ -628,7 +633,7 @@ export default function ScannerScreen() {
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('log')}
         >
-          <FontAwesome5 name="list-alt" size={24} color="#FFFFFF" />
+          <List size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Data Log</Text>
         </TouchableOpacity>
         
@@ -636,7 +641,7 @@ export default function ScannerScreen() {
           style={[styles.actionButton, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('registration')}
         >
-          <FontAwesome5 name="user-plus" size={24} color="#FFFFFF" />
+          <UserPlus size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Registration</Text>
         </TouchableOpacity>
       </View>
@@ -738,7 +743,7 @@ export default function ScannerScreen() {
         <View style={styles.scanner}>
           {!scanned ? (
             <View style={{...StyleSheet.absoluteFillObject, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center'}}>
-              <Ionicons name="scan-outline" size={100} color="rgba(255,255,255,0.5)" />
+              <QrCode size={100} color="rgba(255,255,255,0.5)" />
               <Text style={{color: '#fff', marginTop: 20, fontSize: 16}}>Camera would appear here</Text>
               <TouchableOpacity
                 style={{marginTop: 30, backgroundColor: colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8}}
@@ -749,7 +754,7 @@ export default function ScannerScreen() {
             </View>
           ) : (
             <View style={styles.scanResultContainer}>
-              <FontAwesome5 name="check-circle" size={60} color="#4CAF50" />
+              <CheckCircle size={60} color="#4CAF50" />
               <Text style={[styles.scanResultText, { color: colors.text }]}>
                 Scan Complete
               </Text>
@@ -776,7 +781,7 @@ export default function ScannerScreen() {
   const renderSearchScreen = () => (
     <View style={styles.searchContainer}>
       <View style={[styles.searchBar, { backgroundColor: colors.card }]}>
-        <FontAwesome5 name="search" size={18} color={colors.secondary} style={styles.searchIcon} />
+        <Search size={18} color={colors.secondary} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search by name, ticket, phone, or email"
@@ -906,9 +911,7 @@ export default function ScannerScreen() {
               <Text style={[styles.filterLabel, { color: colors.text }]}>Date:</Text>
               <View style={styles.datePickerContainer}>
                 <Text style={[styles.dateText, { color: colors.secondary }]}>{selectedDate}</Text>
-                <TouchableOpacity>
-                  <FontAwesome5 name="calendar" size={16} color={colors.primary} />
-                </TouchableOpacity>
+                <Calendar size={16} color={colors.primary} />
               </View>
             </View>
             
@@ -981,17 +984,17 @@ export default function ScannerScreen() {
                   {item.ticketNumber} • {item.ticketType}
                 </Text>
                 <View style={styles.logTimeContainer}>
-                  <FontAwesome5 name="clock" size={14} color={colors.secondary} style={styles.logIcon} />
+                  <Clock size={14} color={colors.secondary} style={styles.logIcon} />
                   <Text style={[styles.logTime, { color: colors.secondary }]}>{item.scanTime}</Text>
                 </View>
                 
                 <View style={styles.logMetaInfo}>
                   <View style={styles.logMeta}>
-                    <FontAwesome5 name="map-marker-alt" size={12} color={colors.secondary} style={styles.logIcon} />
+                    <MapPin size={12} color={colors.secondary} style={styles.logIcon} />
                     <Text style={[styles.logMetaText, { color: colors.secondary }]}>{item.location}</Text>
                   </View>
                   <View style={styles.logMeta}>
-                    <FontAwesome5 name="user" size={12} color={colors.secondary} style={styles.logIcon} />
+                    <User size={12} color={colors.secondary} style={styles.logIcon} />
                     <Text style={[styles.logMetaText, { color: colors.secondary }]}>{item.scannerOperator}</Text>
                   </View>
                 </View>
@@ -1043,7 +1046,7 @@ export default function ScannerScreen() {
           style={[styles.registrationAction, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('search')}
         >
-          <FontAwesome5 name="search" size={24} color="#FFFFFF" />
+          <Search size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Search by Name</Text>
         </TouchableOpacity>
         
@@ -1051,7 +1054,7 @@ export default function ScannerScreen() {
           style={[styles.registrationAction, { backgroundColor: colors.primary }]}
           onPress={() => setActiveView('scan')}
         >
-          <FontAwesome5 name="qrcode" size={24} color="#FFFFFF" />
+          <QrCode size={24} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>Scan Ticket</Text>
         </TouchableOpacity>
       </View>
@@ -1130,7 +1133,7 @@ export default function ScannerScreen() {
               onPress={() => setSignature(!signature)}
             >
               {signature ? (
-                <FontAwesome5 name="check" size={24} color={colors.primary} />
+                <Check size={24} color={colors.primary} />
               ) : (
                 <Text style={[styles.signatureText, { color: colors.secondary }]}>
                   Tap to sign
@@ -1149,7 +1152,7 @@ export default function ScannerScreen() {
               onPress={() => setWitnessSignature(!witnessSignature)}
             >
               {witnessSignature ? (
-                <FontAwesome5 name="check" size={24} color={colors.primary} />
+                <Check size={24} color={colors.primary} />
               ) : (
                 <Text style={[styles.signatureText, { color: colors.secondary }]}>
                   Tap for witness to sign
@@ -1224,7 +1227,7 @@ export default function ScannerScreen() {
               </Text>
               
               <View style={styles.photoPlaceholder}>
-                <FontAwesome5 name="user-circle" size={60} color={colors.secondary} />
+                <User size={60} color={colors.secondary} />
                 <Text style={[styles.photoText, { color: colors.secondary }]}>ID Photo</Text>
               </View>
               
@@ -1241,7 +1244,7 @@ export default function ScannerScreen() {
                     styles.checkbox, 
                     nameMatches && { backgroundColor: colors.primary, borderColor: colors.primary }
                   ]}>
-                    {nameMatches && <FontAwesome5 name="check" size={14} color="#FFFFFF" />}
+                    {nameMatches && <Check size={14} color="#FFFFFF" />}
                   </View>
                   <Text style={[styles.checklistText, { color: colors.text }]}>Name matches ID</Text>
                 </TouchableOpacity>
@@ -1254,7 +1257,7 @@ export default function ScannerScreen() {
                     styles.checkbox, 
                     photoIdMatches && { backgroundColor: colors.primary, borderColor: colors.primary }
                   ]}>
-                    {photoIdMatches && <FontAwesome5 name="check" size={14} color="#FFFFFF" />}
+                    {photoIdMatches && <Check size={14} color="#FFFFFF" />}
                   </View>
                   <Text style={[styles.checklistText, { color: colors.text }]}>Photo ID matches</Text>
                 </TouchableOpacity>
@@ -1267,7 +1270,7 @@ export default function ScannerScreen() {
                     styles.checkbox, 
                     ageVerified && { backgroundColor: colors.primary, borderColor: colors.primary }
                   ]}>
-                    {ageVerified && <FontAwesome5 name="check" size={14} color="#FFFFFF" />}
+                    {ageVerified && <Check size={14} color="#FFFFFF" />}
                   </View>
                   <Text style={[styles.checklistText, { color: colors.text }]}>Age requirement met</Text>
                 </TouchableOpacity>
@@ -1306,7 +1309,7 @@ export default function ScannerScreen() {
                         {reason.reason}
                       </Text>
                       {reason.requiresOverride && (
-                        <FontAwesome5 name="lock" size={12} color={reason.color} style={styles.lockIcon} />
+                        <Lock size={12} color={reason.color} style={styles.lockIcon} />
                       )}
                     </TouchableOpacity>
                   ))}

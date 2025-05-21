@@ -11,7 +11,7 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
-import { FontAwesome5 } from "@expo/vector-icons";
+import { ArrowLeft, CheckCircle } from "lucide-react-native";
 import AuthInput from "../../components/auth/AuthInput";
 import AuthButton from "../../components/auth/AuthButton";
 import { useTheme } from "../../context/ThemeContext";
@@ -43,7 +43,7 @@ export default function ForgotPasswordScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <FontAwesome5 name="arrow-left" size={20} color={colors.text} />
+            <ArrowLeft size={20} color={colors.text} />
           </TouchableOpacity>
 
           <View style={styles.contentContainer}>
@@ -73,7 +73,7 @@ export default function ForgotPasswordScreen() {
             ) : (
               <View style={styles.successContainer}>
                 <View style={styles.successIcon}>
-                  <FontAwesome5 name="check-circle" size={60} color={colors.primary} />
+                  <CheckCircle size={60} color={colors.primary} />
                 </View>
                 
                 <Text style={[styles.successTitle, { color: colors.text }]}>Check Your Email</Text>

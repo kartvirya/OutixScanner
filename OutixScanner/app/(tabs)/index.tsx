@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Text, View, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
-import { FontAwesome5 } from "@expo/vector-icons";
+import { Calendar, Clock, MapPin, ChevronRight, CalendarX } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 import { router } from "expo-router";
 import { login, getEvents } from "../../services/api";
@@ -64,37 +64,35 @@ export default function Index() {
       setError(null);
       try {
         let token = null;
-        // Try to get token from storage or login
+        // Try to get token from storage
         try {
-          // Try to get token from storage
-          token = await AsyncStorage.getItem('auth_token');
-          
-          // If no token, login first
-          if (!token) {
-            token = await login();
-            if (token) {
-              await AsyncStorage.setItem('auth_token', token);
-            }
+          const tokenResult = await login();
+          if (tokenResult) {
+            token = tokenResult;
           }
         } catch (loginErr) {
-          console.error("Login error:", loginErr);
-          setError("Authentication failed. Please try again later.");
-          // Don't return here - still try to get events in case the API works without auth
+          console.error("Authentication error:", loginErr);
+          setError("Authentication failed. Using cached data.");
         }
 
         // Fetch events from API
         let eventsData;
         try {
           eventsData = await getEvents();
+          
+          // Clear error if we successfully got data
+          if (Array.isArray(eventsData) && eventsData.length > 0) {
+            setError(null);
+          }
         } catch (eventsErr) {
           console.error("Error fetching events:", eventsErr);
-          throw eventsErr; // Propagate to the outer catch
+          setError("Error loading events. Using cached data.");
         }
         
         if (Array.isArray(eventsData) && eventsData.length > 0) {
           // Map the API response to our Event interface
           const formattedEvents = eventsData.map(event => ({
-            id: event.id || event.eventId || event.EventId || String(event._id),
+            id: event.id || event.eventId || event.EventId || String(event._id || '0'),
             title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
             date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
             time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
@@ -103,18 +101,22 @@ export default function Index() {
           }));
           setEvents(formattedEvents);
         } else {
-          // Fallback to mock data ONLY if API returns empty array
+          // If for some reason eventsData is empty, use mock data
+          console.log("No events found in response, using default data");
           setEvents(mockEvents);
-          setError("No events found from API. Showing mock data.");
+          if (!error) {
+            setError("No events found. Showing sample data.");
+          }
         }
       } catch (err: any) {
-        console.error("Error fetching events:", err);
+        console.error("Unexpected error:", err);
         setEvents(mockEvents);
-        setError("Failed to load events from API. Showing mock data.");
+        setError("An unexpected error occurred. Showing sample data.");
       } finally {
         setLoading(false);
       }
     };
+    
     fetchEvents();
   }, []);
 
@@ -157,20 +159,20 @@ export default function Index() {
         </View>
         <View style={styles.eventDetails}>
           <View style={styles.detailRow}>
-            <FontAwesome5 name="calendar" size={14} color="#FFFFFF" style={styles.icon} />
+            <Calendar size={14} color="#FFFFFF" style={styles.icon} />
             <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.date}</Text>
           </View>
           <View style={styles.detailRow}>
-            <FontAwesome5 name="clock" size={14} color="#FFFFFF" style={styles.icon} />
+            <Clock size={14} color="#FFFFFF" style={styles.icon} />
             <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.time}</Text>
           </View>
           <View style={styles.detailRow}>
-            <FontAwesome5 name="map-marker-alt" size={14} color="#FFFFFF" style={styles.icon} />
+            <MapPin size={14} color="#FFFFFF" style={styles.icon} />
             <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.location}</Text>
           </View>
         </View>
         <View style={[styles.viewDetails, { borderTopColor: 'rgba(255,255,255,0.2)' }]}> 
-          <Text style={{ color: '#FFFFFF' }}>View Details <FontAwesome5 name="chevron-right" size={12} color="#FFFFFF" /></Text>
+          <Text style={{ color: '#FFFFFF' }}>View Details <ChevronRight size={12} color="#FFFFFF" /></Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -184,7 +186,15 @@ export default function Index() {
       ) : (
         <>
           {error && (
-            <Text style={{ color: colors.error, textAlign: 'center', marginTop: 8, marginBottom: 8 }}>{error}</Text>
+            <Text style={{ 
+              color: colors.error, 
+              textAlign: 'center', 
+              marginVertical: 8, 
+              fontSize: 14,
+              paddingHorizontal: 16
+            }}>
+              {error}
+            </Text>
           )}
           {events.length > 0 ? (
             <FlatList
@@ -195,9 +205,9 @@ export default function Index() {
             />
           ) : (
             <View style={styles.emptyState}>
-              <FontAwesome5 name="calendar-times" size={50} color={colors.secondary} />
+              <CalendarX size={50} color={colors.secondary} />
               <Text style={[styles.emptyStateText, { color: colors.text }]}>No events found</Text>
-              <Text style={[styles.emptyStateSubtext, { color: colors.secondary }]}>Add new events from the Add Event tab</Text>
+              <Text style={[styles.emptyStateSubtext, { color: colors.secondary }]}>Please check your internet connection</Text>
             </View>
           )}
         </>
