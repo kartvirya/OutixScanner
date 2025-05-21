@@ -1,0 +1,296 @@
+import React, { useState, useEffect } from "react";
+import { Text, View, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
+import { FontAwesome5 } from "@expo/vector-icons";
+import { useTheme } from "../../context/ThemeContext";
+import { router } from "expo-router";
+import { login, getEvents } from "../../services/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// Define event type
+interface Event {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  imageUrl: string;
+}
+
+// Mock data for events as fallback
+const mockEvents: Event[] = [
+  { 
+    id: '1', 
+    title: 'Team Meeting', 
+    date: '2023-10-15', 
+    time: '09:00 AM', 
+    location: 'Conference Room A',
+    imageUrl: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80'
+  },
+  { 
+    id: '2', 
+    title: 'Project Deadline', 
+    date: '2023-10-20', 
+    time: '05:00 PM', 
+    location: 'Office',
+    imageUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80'
+  },
+  { 
+    id: '3', 
+    title: 'Client Presentation', 
+    date: '2023-10-25', 
+    time: '02:00 PM', 
+    location: 'Meeting Room B',
+    imageUrl: 'https://images.unsplash.com/photo-1556761175-b413da4baf72?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80'
+  },
+  { 
+    id: '4', 
+    title: 'Lunch with Colleagues', 
+    date: '2023-10-18', 
+    time: '12:30 PM', 
+    location: 'Cafe Downtown',
+    imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80'
+  },
+];
+
+export default function Index() {
+  const { colors } = useTheme();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        let token = null;
+        // Try to get token from storage or login
+        try {
+          // Try to get token from storage
+          token = await AsyncStorage.getItem('auth_token');
+          
+          // If no token, login first
+          if (!token) {
+            token = await login();
+            if (token) {
+              await AsyncStorage.setItem('auth_token', token);
+            }
+          }
+        } catch (loginErr) {
+          console.error("Login error:", loginErr);
+          setError("Authentication failed. Please try again later.");
+          // Don't return here - still try to get events in case the API works without auth
+        }
+
+        // Fetch events from API
+        let eventsData;
+        try {
+          eventsData = await getEvents();
+        } catch (eventsErr) {
+          console.error("Error fetching events:", eventsErr);
+          throw eventsErr; // Propagate to the outer catch
+        }
+        
+        if (Array.isArray(eventsData) && eventsData.length > 0) {
+          // Map the API response to our Event interface
+          const formattedEvents = eventsData.map(event => ({
+            id: event.id || event.eventId || event.EventId || String(event._id),
+            title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
+            date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
+            time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
+            location: event.location || event.venue || event.VenueName || 'TBD',
+            imageUrl: event.imageUrl || event.image || event.EventImage || 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'
+          }));
+          setEvents(formattedEvents);
+        } else {
+          // Fallback to mock data ONLY if API returns empty array
+          setEvents(mockEvents);
+          setError("No events found from API. Showing mock data.");
+        }
+      } catch (err: any) {
+        console.error("Error fetching events:", err);
+        setEvents(mockEvents);
+        setError("Failed to load events from API. Showing mock data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvents();
+  }, []);
+
+  // Helper function to format date from API 
+  const formatDateFromAPI = (dateString: string): string => {
+    if (dateString === 'TBD') return 'TBD';
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  // Helper function to format time from API
+  const formatTimeFromAPI = (timeString: string): string => {
+    if (timeString === 'TBD') return 'TBD';
+    try {
+      const date = new Date(timeString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return timeString;
+    }
+  };
+
+  const renderEventItem = ({ item }: { item: Event }) => (
+    <TouchableOpacity 
+      style={styles.eventCard}
+      onPress={() => router.push(`/${item.id}`)}
+      activeOpacity={0.9}
+    >
+      <Image 
+        source={{ uri: item.imageUrl }} 
+        style={styles.eventImage}
+        resizeMode="cover"
+      />
+      <View style={styles.eventOverlay} pointerEvents="box-none">
+        <View style={styles.eventHeader}>
+          <Text style={[styles.eventTitle, { color: '#FFFFFF' }]}>{item.title}</Text>
+        </View>
+        <View style={styles.eventDetails}>
+          <View style={styles.detailRow}>
+            <FontAwesome5 name="calendar" size={14} color="#FFFFFF" style={styles.icon} />
+            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.date}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <FontAwesome5 name="clock" size={14} color="#FFFFFF" style={styles.icon} />
+            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.time}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <FontAwesome5 name="map-marker-alt" size={14} color="#FFFFFF" style={styles.icon} />
+            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.location}</Text>
+          </View>
+        </View>
+        <View style={[styles.viewDetails, { borderTopColor: 'rgba(255,255,255,0.2)' }]}> 
+          <Text style={{ color: '#FFFFFF' }}>View Details <FontAwesome5 name="chevron-right" size={12} color="#FFFFFF" /></Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}> 
+      <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+      ) : (
+        <>
+          {error && (
+            <Text style={{ color: colors.error, textAlign: 'center', marginTop: 8, marginBottom: 8 }}>{error}</Text>
+          )}
+          {events.length > 0 ? (
+            <FlatList
+              data={events}
+              renderItem={renderEventItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContainer}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <FontAwesome5 name="calendar-times" size={50} color={colors.secondary} />
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>No events found</Text>
+              <Text style={[styles.emptyStateSubtext, { color: colors.secondary }]}>Add new events from the Add Event tab</Text>
+            </View>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F2F2F7",
+    padding: 16,
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+    color: "#000000",
+  },
+  listContainer: {
+    paddingBottom: 20,
+  },
+  eventCard: {
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+    height: 200,
+    position: 'relative',
+    flexDirection: 'column',
+  },
+  eventImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  eventOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  eventHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  eventTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  eventDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  icon: {
+    marginRight: 8,
+  },
+  detailText: {
+    fontSize: 14,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#3C3C43",
+    marginTop: 12,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#8E8E93",
+    marginTop: 4,
+  },
+  viewDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    alignItems: 'flex-end',
+  },
+}); 
