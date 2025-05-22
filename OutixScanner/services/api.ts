@@ -1,7 +1,11 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Base URL for direct API calls
 const BASE_URL = 'https://www.outix.co/apis';
+
+// Proxy server URL for CORS-bypassing requests
+const PROXY_URL = 'http://localhost:3000/api';
 
 // In-memory token storage (no AsyncStorage dependency)
 let authToken: string | null = null;
@@ -158,10 +162,13 @@ export const login = async (): Promise<string | null> => {
       formData.append('username', 'Outix@thebend.co');
       formData.append('password', 'Scan$9841');
       
-      // Configure axios to send form-data
-      const response = await axios.post(`${BASE_URL}/auth`, formData, {
+      // Configure axios to send form-data through our proxy server
+      const response = await axios.post(`${PROXY_URL}/auth`, {
+        username: 'Outix@thebend.co',
+        password: 'Scan$9841'
+      }, {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
         // Adding a timeout to prevent long hangs
         timeout: 10000
@@ -273,10 +280,10 @@ export const getEvents = async (): Promise<any[]> => {
     console.log("Sending request with token:", authToken ? "token-exists" : "no-token");
     
     try {
-      // Use the same Auth-Token header format shown in Postman
-      const response = await axios.get(`${BASE_URL}/events`, {
+      // Use the proxy server to bypass CORS
+      const response = await axios.get(`${PROXY_URL}/events`, {
         headers: {
-          'Auth-Token': authToken || '',
+          'auth-token': authToken || '',
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
@@ -321,7 +328,7 @@ export const getEvents = async (): Promise<any[]> => {
       // Continue to mock data
     }
     
-    // Return expanded mock data with more events
+    // Return mock data (existing code)
     console.log("Using mock events data");
     return [
       { 
