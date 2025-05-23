@@ -2,6 +2,45 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'https://www.outix.co/apis';
+// Add proxy URL that points to our local proxy server
+const PROXY_URL = 'http://localhost:3000/api';
+
+// Type definitions for QR code validation
+export interface TicketInfo {
+  id: string;
+  booking_id: string;
+  reference_num: string;
+  ticket_identifier: string;
+  ticket_title: string;
+  checkedin: number;
+  checkedin_date: string;
+  totaladmits: string;
+  admits: string;
+  available: number;
+  price: string;
+  remarks: string;
+  email: string;
+  fullname: string;
+  address: string;
+  notes: string;
+  purchased_date: string;
+  reason: string;
+  message: string;
+  mobile: string;
+  picture_display: string;
+  scannable: string;
+  ticket_id: string;
+  passout: string;
+}
+
+export interface QRValidationResponse {
+  error: boolean;
+  msg: {
+    message: string;
+    info: TicketInfo;
+  };
+  status: number;
+}
 
 // Type definitions
 export interface UserProfile {
@@ -60,10 +99,13 @@ export const login = async (
     formData.append('username', username);
     formData.append('password', password);
 
-    // Make login request
-    const response = await axios.post<AuthResponse>(`${BASE_URL}/auth`, formData, {
+    // Make login request through our proxy instead of directly
+    const response = await axios.post<AuthResponse>(`${PROXY_URL}/auth`, {
+      username,
+      password
+    }, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/json',
       },
     });
 
@@ -124,7 +166,8 @@ export const logout = async (): Promise<boolean> => {
 
 // Create axios instance with auth interceptor
 const api = axios.create({
-  baseURL: BASE_URL,
+  // Use the proxy URL instead of the direct BASE_URL
+  baseURL: PROXY_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -143,13 +186,31 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Keep the other functions empty for now as requested
+// Updated implementations to use the proxy
 export const getEvents = async (): Promise<Event[]> => {
+  try {
+    const response = await api.get('/events');
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching events:', error);
   return [];
+  }
 };
 
 export const getGuestList = async (eventId: string): Promise<any[]> => {
+  try {
+    const response = await api.get(`/events/${eventId}/guests`);
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  } catch (error) {
+    console.error(`Error fetching guest list for event ${eventId}:`, error);
   return [];
+  }
 };
 
 export const checkInGuest = async (eventId: string, bookingReference: string): Promise<any> => {
@@ -184,6 +245,37 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     eventsAttended: 0,
     profileImage: null
   };
+};
+
+// QR Code validation functions
+export const validateQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    const response = await api.get(`/validate/${eventId}/${scanCode}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error validating QR code for event ${eventId}:`, error);
+    return null;
+  }
+};
+
+export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    const response = await api.get(`/scan/${eventId}/${scanCode}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error scanning QR code for event ${eventId}:`, error);
+    return null;
+  }
+};
+
+export const unscanQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    const response = await api.get(`/scan/${eventId}/${scanCode}?unscan=1`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error unscanning QR code for event ${eventId}:`, error);
+    return null;
+  }
 };
 
 export default api; 

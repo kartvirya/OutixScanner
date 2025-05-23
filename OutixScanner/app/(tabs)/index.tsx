@@ -5,6 +5,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { router } from "expo-router";
 import { login, getEvents } from "../../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 
 // Define event type
 interface Event {
@@ -146,12 +147,18 @@ export default function Index() {
     <TouchableOpacity 
       style={styles.eventCard}
       onPress={() => router.push(`/${item.id}`)}
-      activeOpacity={0.9}
+      activeOpacity={0.8}
     >
       <Image 
         source={{ uri: item.imageUrl }} 
         style={styles.eventImage}
         resizeMode="cover"
+      />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        style={styles.gradientOverlay}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
       />
       <View style={styles.eventOverlay} pointerEvents="box-none">
         <View style={styles.eventHeader}>
@@ -171,8 +178,11 @@ export default function Index() {
             <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.location}</Text>
           </View>
         </View>
-        <View style={[styles.viewDetails, { borderTopColor: 'rgba(255,255,255,0.2)' }]}> 
-          <Text style={{ color: '#FFFFFF' }}>View Details <ChevronRight size={12} color="#FFFFFF" /></Text>
+        <View style={styles.viewDetailsContainer}> 
+          <View style={styles.viewDetails}>
+            <Text style={styles.viewDetailsText}>View Details</Text>
+            <ChevronRight size={12} color="#FFFFFF" />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -223,22 +233,22 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
-    marginBottom: 16,
+    marginBottom: 20,
     color: "#000000",
   },
   listContainer: {
     paddingBottom: 20,
   },
   eventCard: {
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
     overflow: 'hidden',
     height: 200,
     position: 'relative',
@@ -252,11 +262,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    opacity: 0.75,
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   eventOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 16,
+    padding: 18,
     justifyContent: 'space-between',
   },
   eventHeader: {
@@ -265,11 +283,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   eventTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   eventDetails: {
-    gap: 8,
+    gap: 10,
   },
   detailRow: {
     flexDirection: "row",
@@ -277,9 +298,17 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginRight: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 1,
   },
   detailText: {
     fontSize: 14,
+    fontWeight: "500",
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   emptyState: {
     flex: 1,
@@ -297,10 +326,23 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
     marginTop: 4,
   },
-  viewDetails: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    alignItems: 'flex-end',
+  viewDetailsContainer: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
+  viewDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  viewDetailsText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginRight: 4,
+    fontSize: 13,
+  }
 }); 

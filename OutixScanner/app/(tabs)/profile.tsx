@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Switch } from "react-native";
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Switch, SafeAreaView } from "react-native";
 import { Bell, Paintbrush, Lock, HelpCircle, Info, ChevronRight, LogOut } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 import { getUserProfile, logout, UserProfile } from "../../services/api";
@@ -13,57 +13,6 @@ interface SettingsOption {
   badge: string | null;
   action: () => void;
 }
-
-const renderSettingsItem = (item: SettingsOption, colors: any, isDarkMode: boolean, notificationsEnabled: boolean, handleNotificationsToggle: () => void) => {
-  const getIconContainerStyle = () => {
-    return {
-      backgroundColor: isDarkMode ? 'rgba(255,107,0,0.2)' : 'rgba(255,107,0,0.1)',
-      borderWidth: 0,
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      justifyContent: 'center' as 'center',
-      alignItems: 'center' as 'center',
-      marginRight: 12,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
-      shadowRadius: 2,
-      elevation: 2,
-    };
-  };
-
-  return (
-    <TouchableOpacity 
-      key={item.id} 
-      style={[styles.settingsItem, { borderBottomColor: colors.border }]}
-      onPress={item.action}
-    >
-      <View style={styles.settingsItemLeft}>
-        <View style={getIconContainerStyle()}>
-          {item.icon}
-        </View>
-        <Text style={[styles.settingsLabel, { color: colors.text }]}>{item.label}</Text>
-      </View>
-      
-      <View style={styles.settingsItemRight}>
-        {item.id === 1 ? (
-          <Switch 
-            value={notificationsEnabled}
-            onValueChange={handleNotificationsToggle}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.card}
-          />
-        ) : (
-          <>
-            {item.badge && <Text style={[styles.badge, { color: colors.secondary }]}>{item.badge}</Text>}
-            <ChevronRight size={16} color={colors.secondary} />
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-};
 
 export default function Profile() {
   const { colors, isDarkMode, toggleTheme } = useTheme();
@@ -124,7 +73,6 @@ export default function Profile() {
 
   const handleNotificationsToggle = () => {
     setNotificationsEnabled(!notificationsEnabled);
-    // Save notification preferences to storage
     AsyncStorage.setItem('notifications_enabled', (!notificationsEnabled).toString())
       .catch(err => console.error("Error saving notification preference:", err));
   };
@@ -145,7 +93,6 @@ export default function Profile() {
     Alert.alert("About OutixScanner", "Version 1.0.0\n\nOutixScanner is a powerful tool for event management and ticket scanning.");
   };
 
-  // Settings options with actions
   const settingsOptions: SettingsOption[] = [
     { 
       id: 1, 
@@ -186,15 +133,49 @@ export default function Profile() {
 
   if (loading) {
     return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
       </View>
+      </SafeAreaView>
     );
   }
 
+  const renderSettingsItem = (item: SettingsOption) => (
+    <TouchableOpacity 
+      key={item.id} 
+      style={[styles.settingsItem, { borderBottomColor: colors.border }]}
+      onPress={item.action}
+    >
+      <View style={styles.settingsItemLeft}>
+        <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(255,107,0,0.2)' : 'rgba(255,107,0,0.1)' }]}>
+          {item.icon}
+        </View>
+        <Text style={[styles.settingsLabel, { color: colors.text }]}>{item.label}</Text>
+      </View>
+      
+      <View style={styles.settingsItemRight}>
+        {item.id === 1 ? (
+          <Switch 
+            value={notificationsEnabled}
+            onValueChange={handleNotificationsToggle}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor={colors.card}
+          />
+        ) : (
+          <>
+            {item.badge && <Text style={[styles.badge, { color: colors.secondary }]}>{item.badge}</Text>}
+            <ChevronRight size={16} color={colors.secondary} />
+          </>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView style={[styles.scrollView, { backgroundColor: colors.background }]} contentContainerStyle={styles.scrollContent}>
       <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
         <View style={styles.profileImageContainer}>
           {user?.profileImage ? (
@@ -218,20 +199,20 @@ export default function Profile() {
           )}
         </View>
         
-        <Text style={[styles.userName, { color: colors.text }]}>{user?.name || "User"}</Text>
-        <Text style={[styles.userEmail, { color: colors.secondary }]}>{user?.email || "user@example.com"}</Text>
-        <Text style={[styles.userRole, { color: colors.primary }]}>{user?.role || "User"}</Text>
+          <Text style={[styles.userName, { color: colors.text }]}>{user?.name || "Outix Scanner"}</Text>
+          <Text style={[styles.userEmail, { color: colors.secondary }]}>{user?.email || "Outix@thebend.co"}</Text>
+          <Text style={[styles.userRole, { color: colors.primary }]}>{user?.role || "Event Manager"}</Text>
         
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsCreated || 0}</Text>
+              <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsCreated || 12}</Text>
             <Text style={[styles.statLabel, { color: colors.secondary }]}>Created</Text>
           </View>
           
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
           
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsAttended || 0}</Text>
+              <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsAttended || 8}</Text>
             <Text style={[styles.statLabel, { color: colors.secondary }]}>Attended</Text>
           </View>
         </View>
@@ -247,7 +228,7 @@ export default function Profile() {
       <View style={styles.settingsSection}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
         <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
-          {settingsOptions.map(item => renderSettingsItem(item, colors, isDarkMode, notificationsEnabled, handleNotificationsToggle))}
+            {settingsOptions.map(renderSettingsItem)}
         </View>
       </View>
       
@@ -262,38 +243,36 @@ export default function Profile() {
         ]}
         onPress={handleLogout}
       >
-        <LogOut 
-          size={16} 
-          color={colors.error}
-          style={styles.logoutIcon}
-        />
+          <LogOut size={16} color={colors.error} style={styles.logoutIcon} />
         <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
       </TouchableOpacity>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: "#F2F2F7",
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: "#8E8E93",
   },
   profileSection: {
-    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     marginHorizontal: 16,
-    marginTop: 16,
     padding: 20,
     alignItems: "center",
     shadowColor: "#000",
@@ -314,7 +293,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "#FF6B00",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -326,18 +304,18 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#000000",
     marginBottom: 4,
+    textAlign: "center",
   },
   userEmail: {
     fontSize: 16,
-    color: "#8E8E93",
     marginBottom: 4,
+    textAlign: "center",
   },
   userRole: {
     fontSize: 14,
-    color: "#FF6B00",
     marginBottom: 16,
+    textAlign: "center",
   },
   statsContainer: {
     flexDirection: "row",
@@ -351,27 +329,22 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    backgroundColor: "#E5E5EA",
     marginHorizontal: 20,
   },
   statNumber: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#000000",
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 14,
-    color: "#8E8E93",
   },
   editButton: {
-    backgroundColor: "#F2F2F7",
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 20,
   },
   editButtonText: {
-    color: "#FF6B00",
     fontWeight: "600",
   },
   settingsSection: {
@@ -381,18 +354,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#000000",
     marginBottom: 12,
     marginLeft: 4,
   },
   settingsContainer: {
-    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    overflow: 'hidden',
   },
   settingsItem: {
     flexDirection: "row",
@@ -401,7 +373,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F2F2F7",
   },
   settingsItemLeft: {
     flexDirection: "row",
@@ -415,23 +386,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#F2F2F7",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
   },
   settingsLabel: {
     fontSize: 16,
-    color: "#000000",
   },
   badge: {
     fontSize: 14,
-    color: "#8E8E93",
     marginRight: 8,
   },
   logoutButton: {
@@ -441,7 +404,6 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 40,
     marginHorizontal: 16,
-    backgroundColor: "#FFFFFF",
     padding: 16,
     borderRadius: 12,
     shadowColor: "#000",
@@ -454,7 +416,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   logoutText: {
-    color: "#FF3B30",
     fontSize: 16,
     fontWeight: "600",
   },

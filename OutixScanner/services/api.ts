@@ -455,17 +455,123 @@ export const getEvents = async (): Promise<any[]> => {
 
 export const getGuestList = async (eventId: string): Promise<any[]> => {
   try {
-    const response = await axios.get(`${BASE_URL}/guestlist/${eventId}`, {
-      headers: {
-        'Auth-Token': authToken || '',
-        'Content-Type': 'application/json',
+    // Make sure we have the token
+    if (!authToken) {
+      console.log("No auth token available for guest list, trying to get from storage");
+      const storedToken = await getStorageItem('auth_token');
+      if (storedToken) {
+        authToken = storedToken;
+      } else {
+        console.log("No token in storage for guest list, using default token");
+        authToken = '8534838IGWQYmheB4432355'; // Use the default token from the curl example
       }
-    });
-    
-    if (response.data && response.data.msg) {
-      return response.data.msg;
     }
-    return response.data;
+    
+    console.log("Sending guest list request with token:", authToken);
+    
+    // First try with standard endpoint
+    try {
+      console.log(`Trying first endpoint: /events/${eventId}/guests`);
+      const response = await axios.get(`${PROXY_URL}/events/${eventId}/guests`, {
+        headers: {
+          'auth-token': authToken,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+      
+      console.log("Guest list API response status:", response.status);
+      
+      // Log full response data for debugging
+      console.log("Sample response data:", JSON.stringify(response.data).substring(0, 500));
+      
+      if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
+        // Log sample guest data
+        if (response.data.msg.length > 0) {
+          console.log("Sample guest fields:", Object.keys(response.data.msg[0]));
+        }
+        return response.data.msg;
+      } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
+        // Log available fields
+        console.log("Guest data fields:", Object.keys(response.data.msg));
+        // Convert object to array if needed
+        return [response.data.msg];
+      } else if (Array.isArray(response.data)) {
+        // Log sample guest data
+        if (response.data.length > 0) {
+          console.log("Sample guest fields:", Object.keys(response.data[0]));
+        }
+        return response.data;
+      } else if (response.data && typeof response.data === 'object') {
+        // Log available fields
+        console.log("Response data fields:", Object.keys(response.data));
+        // Handle case where response might be a single object
+        return [response.data];
+      }
+      
+      return [];
+    } catch (error) {
+      console.log("First guest list endpoint failed, trying alternative endpoint");
+      
+      // If first endpoint fails, try the alternative endpoint
+      try {
+        console.log(`Trying alternative endpoint: /guestlist/${eventId}`);
+        const response = await axios.get(`${PROXY_URL}/guestlist/${eventId}`, {
+          headers: {
+            'auth-token': authToken,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        console.log("Alternative guest list API response status:", response.status);
+        
+        // Log full response data for debugging
+        console.log("Sample alternative response data:", JSON.stringify(response.data).substring(0, 500));
+        
+        // Check for different response formats
+        if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
+          // Log sample guest data
+          if (response.data.msg.length > 0) {
+            console.log("Sample alternative guest fields:", Object.keys(response.data.msg[0]));
+          }
+          return response.data.msg;
+        } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
+          // Log available fields
+          console.log("Alternative guest data fields:", Object.keys(response.data.msg));
+          // Convert object to array if needed
+          return [response.data.msg];
+        } else if (Array.isArray(response.data)) {
+          // Log sample guest data
+          if (response.data.length > 0) {
+            console.log("Sample alternative guest fields:", Object.keys(response.data[0]));
+          }
+          return response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          // Log available fields
+          console.log("Alternative response data fields:", Object.keys(response.data));
+          // Handle case where response might be a single object
+          return [response.data];
+        }
+        
+        return [];
+      } catch (altError) {
+        console.error("Both guest list endpoints failed");
+        // Both attempts failed, continue to mock data fallback
+      }
+    }
+    
+    console.log("Using mock guest list data as fallback");
+    // Return mock attendees when both API endpoints fail
+    return [
+      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', checkedIn: true, checkInTime: '08:45 AM' },
+      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', checkedIn: true, checkInTime: '08:30 AM' },
+      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', checkedIn: false },
+      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', checkedIn: false },
+      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', checkedIn: false },
+    ];
   } catch (error) {
     console.error(`Get guest list error for event ${eventId}:`, error);
     // Return mock attendees on error
@@ -481,18 +587,32 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
 
 export const checkInGuest = async (eventId: string, guestId: string): Promise<any> => {
   try {
-    // Create form data for check-in
-    const formData = new FormData();
-    formData.append('eventId', eventId);
-    formData.append('guestId', guestId);
-    formData.append('timestamp', new Date().toISOString());
-    
-    const response = await axios.post(`${BASE_URL}/checkin`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Auth-Token': authToken || ''
+    // Make sure we have the token
+    if (!authToken) {
+      console.log("No auth token available for check-in, trying to get from storage");
+      const storedToken = await getStorageItem('auth_token');
+      if (storedToken) {
+        authToken = storedToken;
+      } else {
+        console.log("No token in storage for check-in, trying to login");
+        await login();
       }
+    }
+    
+    // Send data as JSON through the proxy
+    const response = await axios.post(`${PROXY_URL}/checkin`, {
+      eventId,
+      guestId,
+      timestamp: new Date().toISOString()
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'auth-token': authToken || ''
+      },
+      timeout: 10000
     });
+    
+    console.log("Check-in API response status:", response.status);
     
     if (response.data && response.data.msg) {
       return response.data.msg;
@@ -517,6 +637,43 @@ export const generateSampleQRData = (guestId: string): string => {
 export const getToken = (): string | null => {
   return authToken;
 };
+
+// Type definitions for QR code validation
+export interface TicketInfo {
+  id: string;
+  booking_id: string;
+  reference_num: string;
+  ticket_identifier: string;
+  ticket_title: string;
+  checkedin: number;
+  checkedin_date: string;
+  totaladmits: string;
+  admits: string;
+  available: number;
+  price: string;
+  remarks: string;
+  email: string;
+  fullname: string;
+  address: string;
+  notes: string;
+  purchased_date: string;
+  reason: string;
+  message: string;
+  mobile: string;
+  picture_display: string;
+  scannable: string;
+  ticket_id: string;
+  passout: string;
+}
+
+export interface QRValidationResponse {
+  error: boolean;
+  msg: {
+    message: string;
+    info: TicketInfo;
+  };
+  status: number;
+}
 
 // User profile data type
 export interface UserProfile {
@@ -656,19 +813,78 @@ export const isAuthenticated = (): boolean => {
 // Logout function
 export const logout = async (): Promise<boolean> => {
   try {
-    // Clear token from memory
+    // Clear the token from both storage methods
     authToken = null;
-    
-    // Clear token from storage
     await removeStorageItem('auth_token');
-    
+    await removeStorageItem('user_profile');
     return true;
   } catch (error) {
-    console.error("Logout error:", error);
+    console.error('Error during logout:', error);
+    return false;
+  }
+};
+
+// QR Code validation functions
+export const validateQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    console.log(`Validating QR code for event ${eventId}, scancode: ${scanCode}`);
     
-    // Still clear memory token on error
-    authToken = null;
-    return true;
+    // Use the proxy server to make the validation request
+    const response = await axios.get(`${PROXY_URL}/validate/${eventId}/${scanCode}`, {
+      headers: {
+        'Auth-Token': authToken || '',
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+    
+    console.log('QR validation response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error validating QR code for event ${eventId}:`, error);
+    return null;
+  }
+};
+
+export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    console.log(`Scanning QR code for event ${eventId}, scancode: ${scanCode}`);
+    
+    // Use the proxy server to make the scan request
+    const response = await axios.get(`${PROXY_URL}/scan/${eventId}/${scanCode}`, {
+      headers: {
+        'Auth-Token': authToken || '',
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+    
+    console.log('QR scan response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error scanning QR code for event ${eventId}:`, error);
+    return null;
+  }
+};
+
+export const unscanQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+  try {
+    console.log(`Unscanning QR code for event ${eventId}, scancode: ${scanCode}`);
+    
+    // Use the proxy server to make the unscan request
+    const response = await axios.get(`${PROXY_URL}/scan/${eventId}/${scanCode}?unscan=1`, {
+      headers: {
+        'Auth-Token': authToken || '',
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+    
+    console.log('QR unscan response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error unscanning QR code for event ${eventId}:`, error);
+    return null;
   }
 };
 

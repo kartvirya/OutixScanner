@@ -27,9 +27,9 @@ export default {
   },
   plugins: [
     [
-      "expo-barcode-scanner",
+      "expo-camera",
       {
-        "cameraPermission": "Allow OutixScanner to access your camera to scan QR codes."
+        "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan QR codes."
       }
     ],
     "expo-font"
