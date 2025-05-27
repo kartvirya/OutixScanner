@@ -16,11 +16,19 @@ import {
   Image,
   StatusBar,
 } from 'react-native';
-import { Search, QrCode, List, UserPlus, CheckCircle, Calendar, Clock, MapPin, User, Check, Lock } from 'lucide-react-native';
+import { Search, QrCode, List, UserPlus, CheckCircle, Calendar, Clock, MapPin, User, Check, Lock, UserCheck, LogIn, LogOut } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import QRScanner from '../../components/QRScanner';
 import { router } from 'expo-router';
 import axios from 'axios';
+import { 
+  validateQRCode, 
+  scanQRCode, 
+  unscanQRCode,
+  QRValidationResponse,
+  QRScanResponse,
+  TicketInfo 
+} from '../../services/api';
 
 // Define types
 interface Attendee {
@@ -165,6 +173,9 @@ export default function ScannerScreen() {
   const [filteredAttendees, setFilteredAttendees] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate');
+  const [currentEventId, setCurrentEventId] = useState('77809'); // Default event ID
 
   // Fetch attendees
   useEffect(() => {
@@ -201,30 +212,260 @@ export default function ScannerScreen() {
   }, [searchQuery]);
 
   const handleScanSuccess = (data: any) => {
-    const attendee = mockAttendees.find(a => a.ticketNumber === data.ticketNumber);
-    if (attendee) {
-      if (attendee.scanned) {
-        Alert.alert(
-          'Already Scanned',
-          `This ticket was already scanned at ${attendee.scanTime}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        attendee.scanned = true;
-        attendee.scanTime = new Date().toLocaleTimeString();
-        Alert.alert(
-          'Success',
-          'Ticket validated successfully!',
-          [{ text: 'OK', onPress: () => setActiveView('dashboard') }]
-        );
+    // Handle successful scan
+    console.log('Scan successful:', data);
+    setActiveView('dashboard');
+  };
+
+  // New scanner functions for API integration
+  const handleOpenScanner = (mode: 'validate' | 'scanIn' | 'scanOut') => {
+    setScanMode(mode);
+    setShowScanner(true);
+  };
+
+  const handleCloseScanner = () => {
+    setShowScanner(false);
+    setScanMode('validate');
+  };
+
+  const handleScanResult = async (data: string) => {
+    // Close scanner
+    setShowScanner(false);
+    
+    try {
+      console.log('QR Code scanned:', data, 'Mode:', scanMode);
+      
+      // For scan out, we need different validation logic
+      if (scanMode === 'scanOut') {
+        // For scan out, try to validate first but allow already-checked-in tickets
+        const validationResult = await validateQRCode(currentEventId, data);
+        
+        console.log('Scan Out - Validation Result:', JSON.stringify(validationResult, null, 2));
+        
+        if (!validationResult) {
+          Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.');
+          return;
+        }
+        
+        // For scan out, we accept both valid tickets and already-checked-in tickets (403)
+        if (validationResult.error && validationResult.status !== 403) {
+          // Only reject if it's not a 403 (already checked in) error
+          let errorMessage = 'This QR code is not valid for this event.';
+          if (typeof validationResult.msg === 'string') {
+            errorMessage = validationResult.msg;
+          } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
+            errorMessage = validationResult.msg.message;
+          }
+          
+          console.log('Scan Out - Rejecting ticket. Status:', validationResult.status, 'Error:', errorMessage);
+          Alert.alert('Invalid QR Code', errorMessage);
+          return;
+        }
+        
+        console.log('Scan Out - Proceeding with scan out. Status:', validationResult.status);
+        // Proceed with scan out (even for 403 status because that means ticket is checked in)
+        await performScanOut(data, validationResult);
+        return;
       }
+      
+      // For scan in and validate, use normal validation logic
+      const validationResult = await validateQRCode(currentEventId, data);
+      
+      if (!validationResult) {
+        Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.');
+        return;
+      }
+      
+      if (validationResult.error) {
+        let errorMessage = 'This QR code is not valid for this event.';
+        if (typeof validationResult.msg === 'string') {
+          errorMessage = validationResult.msg;
+        } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
+          errorMessage = validationResult.msg.message;
+        }
+        
+        Alert.alert('Invalid QR Code', errorMessage);
+        return;
+      }
+      
+      // QR code is valid - handle scan in or validation
+      if (scanMode === 'scanIn') {
+        await performScanIn(data, validationResult);
       } else {
-        Alert.alert(
-        'Invalid Ticket',
-        'This ticket number was not found in the system.',
-        [{ text: 'OK' }]
-      );
+        // Default validation mode - show ticket info and options
+        await showValidationResult(data, validationResult);
+      }
+      
+    } catch (error) {
+      console.error('QR scan error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while processing the QR code.');
     }
+  };
+
+  const performScanIn = async (scanCode: string, validationResult: QRValidationResponse) => {
+    try {
+      const scanResult = await scanQRCode(currentEventId, scanCode);
+      
+      if (!scanResult || scanResult.error) {
+        let errorMessage = 'Failed to scan in guest';
+        if (scanResult?.msg) {
+          errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
+        }
+        
+        Alert.alert('Scan In Failed', errorMessage);
+        return;
+      }
+      
+      // Success - get ticket info for display
+      let ticketInfo = null;
+      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+        ticketInfo = validationResult.msg.info;
+      }
+      
+      let successMessage = 'Guest admitted successfully';
+      if (typeof scanResult.msg === 'string') {
+        successMessage = scanResult.msg;
+      } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
+        successMessage = scanResult.msg.message;
+      }
+      
+        Alert.alert(
+        'Scan In Successful ✅',
+        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}`,
+        [{ text: 'OK', onPress: () => console.log('Scan in completed') }]
+      );
+      
+    } catch (error) {
+      console.error('Scan in error:', error);
+      Alert.alert('Scan In Error', 'Failed to scan in guest. Please try again.');
+    }
+  };
+
+  const performScanOut = async (scanCode: string, validationResult: QRValidationResponse) => {
+    try {
+      // Get ticket info from validation result (even if it's a 403 status)
+      let ticketInfo = null;
+      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+        ticketInfo = validationResult.msg.info;
+      }
+      
+      // Proceed with the unscan API call
+      const unscanResult = await unscanQRCode(currentEventId, scanCode);
+      
+      if (!unscanResult || unscanResult.error) {
+        let errorMessage = 'Failed to scan out guest';
+        if (unscanResult?.msg) {
+          errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
+        }
+        
+        Alert.alert('Scan Out Failed', errorMessage);
+        return;
+      }
+      
+      // Success - get success message from unscan result
+      let successMessage = 'Guest scanned out successfully';
+      if (typeof unscanResult.msg === 'string') {
+        successMessage = unscanResult.msg;
+      } else if (unscanResult.msg && typeof unscanResult.msg === 'object' && 'message' in unscanResult.msg) {
+        successMessage = unscanResult.msg.message;
+      }
+      
+        Alert.alert(
+        'Scan Out Successful ✅',
+        `${ticketInfo?.fullname || 'Guest'} has been scanned out.\n\n${successMessage}`,
+        [{ text: 'OK', onPress: () => console.log('Scan out completed') }]
+      );
+      
+    } catch (error) {
+      console.error('Scan out error:', error);
+      Alert.alert('Scan Out Error', 'Failed to scan out guest. Please try again.');
+    }
+  };
+
+  const showValidationResult = async (scanCode: string, validationResult: QRValidationResponse) => {
+    let ticketInfo = null;
+    if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+      ticketInfo = validationResult.msg.info;
+    }
+    
+    const message = typeof validationResult.msg === 'string' ? validationResult.msg : validationResult.msg.message;
+    
+    Alert.alert(
+      'Valid Ticket Found ✅',
+      ticketInfo 
+        ? `${ticketInfo.fullname}\n${ticketInfo.ticket_title}\nAvailable admits: ${ticketInfo.available}/${ticketInfo.admits}\nPrice: $${ticketInfo.price}\nStatus: ${ticketInfo.checkedin ? 'Already checked in' : 'Ready to check in'}`
+        : message,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Admit Guest',
+          onPress: async () => await performScanIn(scanCode, validationResult)
+        }
+      ]
+    );
+  };
+
+  // Helper function to extract ticket information from QR code text
+  const parseTicketQR = (qrData: string) => {
+    const lines = qrData.split('\n').filter(line => line.trim());
+    const ticketInfo: any = {
+      rawData: qrData,
+      eventTitle: '',
+      date: '',
+      transactionNumber: '',
+      transactionDate: '',
+      ticketId: '',
+      ticketType: '',
+      venue: ''
+    };
+
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      
+      // Extract event title (usually the first few lines in caps)
+      if (trimmedLine.includes('CHAMPIONSHIP') || trimmedLine.includes('EVENT') || 
+          (trimmedLine === trimmedLine.toUpperCase() && trimmedLine.length > 10 && !ticketInfo.eventTitle)) {
+        if (!ticketInfo.eventTitle) {
+          ticketInfo.eventTitle = trimmedLine;
+        } else {
+          ticketInfo.eventTitle += ' ' + trimmedLine;
+        }
+      }
+      
+      // Extract date information
+      if (trimmedLine.includes('FRIDAY') || trimmedLine.includes('SATURDAY') || 
+          trimmedLine.includes('SUNDAY') || trimmedLine.includes('MONDAY') ||
+          trimmedLine.includes('TUESDAY') || trimmedLine.includes('WEDNESDAY') ||
+          trimmedLine.includes('THURSDAY')) {
+        ticketInfo.date = trimmedLine;
+      }
+      
+      // Extract transaction number
+      if (trimmedLine.startsWith('Tran. No:') || trimmedLine.startsWith('Transaction:')) {
+        ticketInfo.transactionNumber = trimmedLine.split(':')[1]?.trim();
+      }
+      
+      // Extract transaction date
+      if (trimmedLine.startsWith('Tran. Date:') || trimmedLine.startsWith('Date:')) {
+        ticketInfo.transactionDate = trimmedLine.split(':')[1]?.trim();
+      }
+      
+      // Extract ticket ID
+      if (trimmedLine.startsWith('TID:') || trimmedLine.includes('TID:')) {
+        ticketInfo.ticketId = trimmedLine.split(':')[1]?.trim();
+      }
+      
+      // Extract ticket type
+      if (trimmedLine.includes('COMPLIMENTARY') || trimmedLine.includes('GA') || 
+          trimmedLine.includes('GENERAL ADMISSION') || trimmedLine.includes('VIP')) {
+        ticketInfo.ticketType = trimmedLine;
+    }
+    });
+
+    return ticketInfo;
   };
 
   const renderDashboard = () => (
@@ -246,13 +487,43 @@ export default function ScannerScreen() {
         </View>
       </View>
       
+      {/* Main scan actions */}
+      <View style={styles.mainActionsContainer}>
         <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: colors.primary }]}
-          onPress={() => setActiveView('scan')}
+          style={[styles.primaryActionButton, { backgroundColor: '#34C759' }]}
+          onPress={() => handleOpenScanner('scanIn')}
+        >
+          <LogIn color="#FFFFFF" size={24} />
+          <Text style={[styles.primaryActionButtonText, { color: '#FFFFFF' }]}>
+            Scan In Guest
+          </Text>
+          <Text style={[styles.primaryActionButtonSubtext, { color: 'rgba(255,255,255,0.8)' }]}>
+            Admit attendees to the event
+          </Text>
+        </TouchableOpacity>
+      
+        <TouchableOpacity 
+          style={[styles.primaryActionButton, { backgroundColor: '#FF6B35' }]}
+          onPress={() => handleOpenScanner('scanOut')}
+        >
+          <LogOut color="#FFFFFF" size={24} />
+          <Text style={[styles.primaryActionButtonText, { color: '#FFFFFF' }]}>
+            Scan Out Guest
+          </Text>
+          <Text style={[styles.primaryActionButtonSubtext, { color: 'rgba(255,255,255,0.8)' }]}>
+            Check out attendees from the event
+          </Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Secondary actions */}
+      <TouchableOpacity 
+        style={[styles.actionButton, { backgroundColor: colors.primary }]}
+        onPress={() => handleOpenScanner('validate')}
         >
         <QrCode color="#FFFFFF" size={24} />
         <Text style={[styles.actionButtonText, { color: '#FFFFFF' }]}>
-          Scan QR Code
+          Validate Ticket
         </Text>
         </TouchableOpacity>
         
@@ -279,22 +550,39 @@ export default function ScannerScreen() {
   );
 
   const renderScanner = () => {
+    const getScannerTitle = () => {
+      switch (scanMode) {
+        case 'scanIn':
+          return 'Scan In Guest';
+        case 'scanOut':
+          return 'Scan Out Guest';
+        default:
+          return 'Validate Ticket';
+      }
+    };
+
+    const getScannerSubtitle = () => {
+      switch (scanMode) {
+        case 'scanIn':
+          return 'Scan QR code to admit guest to the event';
+        case 'scanOut':
+          return 'Scan QR code to check out guest from the event';
+        default:
+          return 'Scan QR code to validate ticket';
+      }
+    };
+
     return (
+      <View style={[styles.scannerContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.scannerHeader, { backgroundColor: colors.card }]}>
+          <Text style={[styles.scannerTitle, { color: colors.text }]}>{getScannerTitle()}</Text>
+          <Text style={[styles.scannerSubtitle, { color: colors.secondary }]}>{getScannerSubtitle()}</Text>
+        </View>
       <QRScanner
-        onScan={(data) => {
-          try {
-            const parsedData = JSON.parse(data);
-            handleScanSuccess(parsedData);
-          } catch (error) {
-            Alert.alert(
-              'Invalid QR Code',
-              'The scanned QR code is not in the correct format.',
-              [{ text: 'OK' }]
-            );
-          }
-        }}
-        onClose={() => setActiveView('dashboard')}
+          onScan={handleScanResult}
+          onClose={handleCloseScanner}
       />
+      </View>
     );
   };
 
@@ -368,9 +656,18 @@ export default function ScannerScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {activeView === 'dashboard' && renderDashboard()}
-      {activeView === 'scan' && renderScanner()}
       {activeView === 'search' && renderSearchScreen()}
       {activeView === 'log' && renderDataLogScreen()}
+      
+      <Modal
+        visible={showScanner}
+        animationType="slide"
+        onRequestClose={handleCloseScanner}
+        statusBarTranslucent
+        style={{ backgroundColor: colors.background }}
+      >
+        {renderScanner()}
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -461,6 +758,40 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
+  mainActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  primaryActionButton: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 20,
+    marginHorizontal: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  primaryActionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  primaryActionButtonSubtext: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,10 +799,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 12,
+  },
+  scannerContainer: {
+    flex: 1,
+  },
+  scannerHeader: {
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scannerTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  scannerSubtitle: {
+    fontSize: 14,
+    color: '#666',
   },
 }); 

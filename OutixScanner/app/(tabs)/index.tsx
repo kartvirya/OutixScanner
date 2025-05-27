@@ -146,7 +146,7 @@ export default function Index() {
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity 
       style={styles.eventCard}
-      onPress={() => router.push(`/${item.id}`)}
+      onPress={() => router.push(`/(tabs)/${item.id}`)}
       activeOpacity={0.8}
     >
       <Image 
