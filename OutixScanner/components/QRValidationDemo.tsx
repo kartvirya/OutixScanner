@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { validateQRCode, scanQRCode, unscanQRCode, QRValidationResponse } from '../services/api';
+import { feedback } from '../services/feedback';
 
 interface QRValidationDemoProps {
   eventId: string;
@@ -24,10 +25,12 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
 
   const handleValidate = async () => {
     if (!scanCode.trim()) {
+      feedback.warning();
       Alert.alert('Error', 'Please enter a scan code');
       return;
     }
 
+    feedback.buttonPress();
     setLoading(true);
     try {
       const result = await validateQRCode(eventId, scanCode.trim());
@@ -35,15 +38,19 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
       
       if (result) {
         if (result.error) {
+          feedback.error();
           Alert.alert('Validation Failed', result.msg?.message || 'Invalid QR code');
         } else {
+          feedback.success();
           Alert.alert('Validation Success', `Valid ticket for ${result.msg.info.fullname}`);
         }
       } else {
+        feedback.error();
         Alert.alert('Error', 'Failed to validate QR code');
       }
     } catch (error) {
       console.error('Validation error:', error);
+      feedback.error();
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -52,10 +59,12 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
 
   const handleScan = async () => {
     if (!scanCode.trim()) {
+      feedback.warning();
       Alert.alert('Error', 'Please enter a scan code');
       return;
     }
 
+    feedback.buttonPressHeavy();
     setLoading(true);
     try {
       const result = await scanQRCode(eventId, scanCode.trim());
@@ -63,15 +72,19 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
       
       if (result) {
         if (result.error) {
+          feedback.error();
           Alert.alert('Scan Failed', result.msg?.message || 'Failed to scan QR code');
         } else {
+          feedback.checkIn();
           Alert.alert('Scan Success', `${result.msg.info.fullname} has been admitted`);
         }
       } else {
+        feedback.error();
         Alert.alert('Error', 'Failed to scan QR code');
       }
     } catch (error) {
       console.error('Scan error:', error);
+      feedback.error();
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -80,10 +93,12 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
 
   const handleUnscan = async () => {
     if (!scanCode.trim()) {
+      feedback.warning();
       Alert.alert('Error', 'Please enter a scan code');
       return;
     }
 
+    feedback.buttonPressHeavy();
     setLoading(true);
     try {
       const result = await unscanQRCode(eventId, scanCode.trim());
@@ -91,15 +106,19 @@ export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
       
       if (result) {
         if (result.error) {
+          feedback.error();
           Alert.alert('Unscan Failed', result.msg?.message || 'Failed to unscan QR code');
         } else {
+          feedback.success();
           Alert.alert('Unscan Success', `${result.msg.info.fullname} has been un-admitted`);
         }
       } else {
+        feedback.error();
         Alert.alert('Error', 'Failed to unscan QR code');
       }
     } catch (error) {
       console.error('Unscan error:', error);
+      feedback.error();
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);

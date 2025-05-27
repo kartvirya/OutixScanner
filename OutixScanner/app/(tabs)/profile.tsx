@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Switch, SafeAreaView } from "react-native";
-import { Bell, Paintbrush, Lock, HelpCircle, Info, ChevronRight, LogOut } from "lucide-react-native";
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Switch, SafeAreaView, Modal } from "react-native";
+import { Bell, Paintbrush, Lock, HelpCircle, Info, ChevronRight, LogOut, Settings } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 import { getUserProfile, logout, UserProfile } from "../../services/api";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import UserProfileTest from "../../components/UserProfileTest";
 
 interface SettingsOption {
   id: number;
@@ -20,6 +21,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [showProfileTest, setShowProfileTest] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -128,6 +130,13 @@ export default function Profile() {
       label: "About", 
       badge: "v1.0.0",
       action: handleAbout
+    },
+    { 
+      id: 6, 
+      icon: <Settings size={16} color={colors.primary} />, 
+      label: "Test Profile API", 
+      badge: null,
+      action: () => setShowProfileTest(true)
     },
   ];
 
@@ -247,6 +256,24 @@ export default function Profile() {
         <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
       </TouchableOpacity>
     </ScrollView>
+    
+    {/* Profile Test Modal */}
+    <Modal
+      visible={showProfileTest}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowProfileTest(false)}
+    >
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Profile API Test</Text>
+          <TouchableOpacity onPress={() => setShowProfileTest(false)}>
+            <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <UserProfileTest />
+      </SafeAreaView>
+    </Modal>
     </SafeAreaView>
   );
 }

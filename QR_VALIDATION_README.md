@@ -9,6 +9,32 @@ The QR validation system implements three main API endpoints:
 2. **Scan QR Code** - Admits the guest (performs the actual check-in)
 3. **Unscan QR Code** - Removes the admission (undo check-in)
 
+## New Features
+
+### Haptic and Sound Feedback
+The application now includes comprehensive haptic and sound feedback for enhanced user experience:
+
+- **Haptic Feedback**: Tactile feedback using device vibration motors
+- **Sound Feedback**: Audio feedback using programmatically generated beep sounds
+- **Combined Feedback**: Coordinated haptic and sound feedback for specific actions
+
+#### Feedback Types:
+- **Button Press**: Light haptic + click sound for normal button interactions
+- **Heavy Button Press**: Medium haptic + click sound for important actions
+- **Success**: Success haptic + success sound for successful operations
+- **Error**: Error haptic + error sound for failed operations
+- **QR Scan Success**: Success haptic + scan sound for successful QR scans
+- **QR Scan Error**: Error haptic + error sound for failed QR scans
+- **Check-in**: Heavy haptic + success sound for guest check-ins
+- **Tab Switch**: Selection haptic for navigation changes
+- **Warning**: Warning haptic + error sound for validation warnings
+
+#### Settings Management:
+- Haptics can be enabled/disabled independently
+- Sounds can be enabled/disabled independently
+- Volume control for sound feedback
+- Cross-platform support (iOS and Android)
+
 ## API Endpoints
 
 ### Base URL

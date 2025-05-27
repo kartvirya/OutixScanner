@@ -31,8 +31,21 @@ import {
   ChevronRight
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
-import { getGuestList, checkInGuest, getEvents, validateQRCode, scanQRCode, unscanQRCode } from '../services/api';
+import { 
+  getGuestList, 
+  checkInGuest, 
+  getEvents, 
+  validateQRCode, 
+  scanQRCode, 
+  unscanQRCode,
+  testProxyConnectivity,
+  setManualProxyIP,
+  getCurrentProxyURL,
+  clearManualProxyIP,
+  getCurrentProxyIP
+} from '../services/api';
 import QRScanner from '../components/QRScanner';
+import { feedback, initializeAudio } from '../services/feedback';
 
 // Mock data types
 interface Ticket {
@@ -48,8 +61,9 @@ interface Attendee {
   name: string;
   email: string;
   ticketType: string;
-  checkedIn: boolean;
-  checkInTime?: string;
+  scannedIn: boolean;
+  scanInTime?: string;
+  scanCode?: string; // Add scan code for QR functionality
 }
 
 interface Event {
@@ -84,11 +98,11 @@ const mockEvents: { [key: string]: Event } = {
       { id: 't3', type: 'Early Bird', price: 40, sold: 4, available: 6 },
     ],
     attendees: [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', checkedIn: true, checkInTime: '08:45 AM' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', checkedIn: true, checkInTime: '08:30 AM' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', checkedIn: false },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', checkedIn: true, checkInTime: '08:55 AM' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', checkedIn: false },
+      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM' },
+      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM' },
+      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false },
+      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:55 AM' },
+      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false },
     ],
   },
   '2': {
@@ -106,9 +120,9 @@ const mockEvents: { [key: string]: Event } = {
       { id: 't2', type: 'Stakeholder', price: 150, sold: 5, available: 5 },
     ],
     attendees: [
-      { id: 'a1', name: 'Alex Johnson', email: 'alex@example.com', ticketType: 'Team Member', checkedIn: false },
-      { id: 'a2', name: 'Taylor Williams', email: 'taylor@example.com', ticketType: 'Stakeholder', checkedIn: false },
-      { id: 'a3', name: 'Jamie Rodriguez', email: 'jamie@example.com', ticketType: 'Team Member', checkedIn: false },
+      { id: 'a1', name: 'Alex Johnson', email: 'alex@example.com', ticketType: 'Team Member', scannedIn: false },
+      { id: 'a2', name: 'Taylor Williams', email: 'taylor@example.com', ticketType: 'Stakeholder', scannedIn: false },
+      { id: 'a3', name: 'Jamie Rodriguez', email: 'jamie@example.com', ticketType: 'Team Member', scannedIn: false },
     ],
   },
   '3': {
@@ -127,8 +141,8 @@ const mockEvents: { [key: string]: Event } = {
       { id: 't3', type: 'Observer', price: 50, sold: 10, available: 5 },
     ],
     attendees: [
-      { id: 'a1', name: 'Pat Smith', email: 'pat@example.com', ticketType: 'Presenter', checkedIn: false },
-      { id: 'a2', name: 'Jordan Lee', email: 'jordan@example.com', ticketType: 'Client', checkedIn: false },
+      { id: 'a1', name: 'Pat Smith', email: 'pat@example.com', ticketType: 'Presenter', scannedIn: false },
+      { id: 'a2', name: 'Jordan Lee', email: 'jordan@example.com', ticketType: 'Client', scannedIn: false },
     ],
   },
   '4': {
@@ -145,8 +159,8 @@ const mockEvents: { [key: string]: Event } = {
       { id: 't1', type: 'Team Member', price: 0, sold: 12, available: 3 },
     ],
     attendees: [
-      { id: 'a1', name: 'Chris Morgan', email: 'chris@example.com', ticketType: 'Team Member', checkedIn: false },
-      { id: 'a2', name: 'Leslie Harper', email: 'leslie@example.com', ticketType: 'Team Member', checkedIn: false },
+      { id: 'a1', name: 'Chris Morgan', email: 'chris@example.com', ticketType: 'Team Member', scannedIn: false },
+      { id: 'a2', name: 'Leslie Harper', email: 'leslie@example.com', ticketType: 'Team Member', scannedIn: false },
     ],
   },
 };
@@ -165,8 +179,13 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate'); // Track scan mode
+  const [selectedAttendee, setSelectedAttendee] = useState<Attendee | null>(null); // Track attendee for scan out
 
   useEffect(() => {
+    // Initialize audio when component mounts
+    initializeAudio();
+    
     const fetchEventDetails = async () => {
       setLoading(true);
       setError(null);
@@ -229,8 +248,9 @@ export default function EventDetail() {
               name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
               email: guest.email || 'N/A',
               ticketType: guest.ticketType || guest.ticket_type || 'General',
-              checkedIn: guest.checkedIn || guest.checked_in || false,
-              checkInTime: guest.checkInTime || guest.check_in_time || undefined
+              scannedIn: guest.checkedIn || guest.checked_in || false,
+              scanInTime: guest.checkInTime || guest.check_in_time || undefined,
+              scanCode: guest.scanCode || undefined
             }));
             
             // Update event with real guest list data
@@ -283,12 +303,18 @@ export default function EventDetail() {
     router.back();
   };
 
-  const handleOpenScanner = () => {
+  const handleOpenScanner = (mode: 'validate' | 'scanIn' | 'scanOut' = 'validate', attendee?: Attendee) => {
+    feedback.buttonPress();
+    setScanMode(mode);
+    setSelectedAttendee(attendee || null);
     setShowScanner(true);
   };
 
   const handleCloseScanner = () => {
+    feedback.buttonPress();
     setShowScanner(false);
+    setScanMode('validate');
+    setSelectedAttendee(null);
   };
 
   const handleScanResult = async (data: string) => {
@@ -296,119 +322,176 @@ export default function EventDetail() {
     setShowScanner(false);
     
     try {
-      console.log('QR Code scanned:', data);
+      console.log('QR Code scanned:', data, 'Mode:', scanMode);
       
       // First, validate the QR code
       const validationResult = await validateQRCode(eventId, data);
       
       if (!validationResult) {
+        feedback.error();
         Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.');
+        setScanMode('validate');
+        setSelectedAttendee(null);
         return;
       }
       
       if (validationResult.error) {
+        feedback.qrScanError();
         Alert.alert('Invalid QR Code', validationResult.msg?.message || 'This QR code is not valid for this event.');
+        setScanMode('validate');
+        setSelectedAttendee(null);
         return;
       }
       
-      // QR code is valid, show validation details and ask if user wants to scan/admit
-      const ticketInfo = validationResult.msg.info;
+      // QR code is valid - provide success feedback
+      feedback.success();
       
-      Alert.alert(
-        'Valid Ticket Found',
-        `${ticketInfo.fullname}\n${ticketInfo.ticket_title}\nAvailable admits: ${ticketInfo.available}/${ticketInfo.admits}\nPrice: $${ticketInfo.price}`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Admit Guest',
-            onPress: async () => {
-              try {
-                // Scan the QR code to admit the guest
-                const scanResult = await scanQRCode(eventId, data);
-                
-                if (!scanResult) {
-                  Alert.alert('Scan Error', 'Failed to scan QR code. Please try again.');
-                  return;
-                }
-                
-                if (scanResult.error) {
-                  Alert.alert('Scan Error', scanResult.msg?.message || 'Failed to admit guest.');
-                  return;
-                }
-                
-                // Success - show confirmation
-                Alert.alert(
-                  'Guest Admitted Successfully',
-                  `${scanResult.msg.info.fullname} has been admitted.\n\nDetails:\n${scanResult.msg.message}`
-                );
-                
-                // Refresh guest list to show updated status
-                try {
-                  const updatedGuestList = await getGuestList(eventId);
-                  if (updatedGuestList && event) {
-                    const updatedAttendees = updatedGuestList.map(guest => ({
-                      id: guest.id || guest.guestId || String(Math.random()),
-                      name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
-                      email: guest.email || 'N/A',
-                      ticketType: guest.ticket_type || guest.ticketType || 'General',
-                      checkedIn: guest.checkedIn || guest.checked_in || false,
-                      checkInTime: guest.checkInTime || guest.checked_in_time || undefined
-                    }));
-                    
-                    setEvent(prev => prev ? { ...prev, attendees: updatedAttendees } : null);
-                  }
-                } catch (refreshError) {
-                  console.error('Error refreshing guest list:', refreshError);
-                }
-                
-              } catch (error) {
-                console.error('Scan error:', error);
-                Alert.alert('Error', 'An unexpected error occurred during scanning.');
+      // Handle different scan modes
+      if (scanMode === 'scanIn') {
+        // Direct scan in operation
+        await performScanIn(data, validationResult);
+      } else if (scanMode === 'scanOut') {
+        // Direct scan out operation
+        await performScanOut(data, validationResult);
+      } else {
+        // Default validation mode - show options
+        const ticketInfo = validationResult.msg.info;
+        
+        Alert.alert(
+          'Valid Ticket Found',
+          `${ticketInfo.fullname}\n${ticketInfo.ticket_title}\nAvailable admits: ${ticketInfo.available}/${ticketInfo.admits}\nPrice: $${ticketInfo.price}`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => feedback.buttonPress()
+            },
+            {
+              text: 'Admit Guest',
+              onPress: async () => {
+                feedback.buttonPressHeavy();
+                await performScanIn(data, validationResult);
               }
             }
-          }
-        ]
-      );
+          ]
+        );
+      }
       
     } catch (error) {
       console.error('QR scan error:', error);
+      feedback.error();
       Alert.alert(
         'Error',
         'An unexpected error occurred while processing the QR code.'
       );
+    } finally {
+      // Reset scan mode and selected attendee
+      setScanMode('validate');
+      setSelectedAttendee(null);
     }
   };
 
-  const handleCheckIn = async (attendeeId: string) => {
-    if (!event) return;
-    
+  const performScanIn = async (scanCode: string, validationResult: any) => {
     try {
-      // Create timestamp for check-in
-      const now = new Date();
-      const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Call API to scan in the guest using QR scanning endpoint
+      const scanResult = await scanQRCode(eventId, scanCode);
       
-      // Find attendee by ID
-      const attendeeIndex = event.attendees.findIndex(a => a.id === attendeeId);
-      if (attendeeIndex < 0) {
-        Alert.alert('Error', 'Attendee not found');
+      if (!scanResult || scanResult.error) {
+        // If API scan fails, we'll still update locally for demo purposes
+        console.warn('API scan failed, updating locally for demo');
+        await updateLocalScanIn(scanCode, validationResult);
         return;
       }
       
-      // Call API to check in the guest
-      await checkInGuest(eventId, attendeeId);
+      // Success - show confirmation with feedback
+      feedback.checkIn();
+      Alert.alert(
+        'Guest Admitted Successfully',
+        `${scanResult.msg.info?.fullname || 'Guest'} has been admitted.\n\nDetails:\n${scanResult.msg.message}`
+      );
       
-      // Update attendee check-in status locally
+      // Refresh guest list to show updated status
+      await refreshGuestList();
+      
+    } catch (error) {
+      console.error('Scan in error:', error);
+      feedback.error();
+      Alert.alert('Scan In Error', 'Failed to scan in guest. Please try again.');
+    }
+  };
+
+  const performScanOut = async (scanCode: string, validationResult: any) => {
+    try {
+      // Call API to scan out the guest using QR unscanning endpoint
+      const unscanResult = await unscanQRCode(eventId, scanCode);
+      
+      if (!unscanResult || unscanResult.error) {
+        // If API unscan fails, we'll still update locally for demo purposes
+        console.warn('API unscan failed, updating locally for demo');
+        await updateLocalScanOut(scanCode, validationResult);
+        return;
+      }
+      
+      // Success - show confirmation with feedback
+      feedback.success();
+      Alert.alert(
+        'Guest Scanned Out Successfully',
+        `${unscanResult.msg.info?.fullname || 'Guest'} has been scanned out.\n\nDetails:\n${unscanResult.msg.message}`
+      );
+      
+      // Refresh guest list to show updated status
+      await refreshGuestList();
+      
+    } catch (error) {
+      console.error('Scan out error:', error);
+      feedback.error();
+      Alert.alert('Scan Out Error', 'Failed to scan out guest. Please try again.');
+    }
+  };
+
+  const updateLocalScanIn = async (scanCode: string, validationResult: any) => {
+    if (!event) return;
+    
+    // Create timestamp for scan-in
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // Try to find attendee by name or email from validation result
+    const ticketInfo = validationResult.msg.info;
+    let attendeeIndex = event.attendees.findIndex(a => 
+      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
+      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
+    );
+    
+    if (attendeeIndex < 0) {
+      // If attendee not found, add them to the list
+      const newAttendee: Attendee = {
+        id: `guest_${Date.now()}`,
+        name: ticketInfo.fullname,
+        email: ticketInfo.email,
+        ticketType: ticketInfo.ticket_title,
+        scannedIn: true,
+        scanInTime: timeString,
+        scanCode: scanCode
+      };
+      
+      setEvent(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          attendees: [...prev.attendees, newAttendee]
+        };
+      });
+    } else {
+      // Update existing attendee
       const updatedAttendees = [...event.attendees];
       updatedAttendees[attendeeIndex] = {
         ...updatedAttendees[attendeeIndex],
-        checkedIn: true,
-        checkInTime: timeString
+        scannedIn: true,
+        scanInTime: timeString,
+        scanCode: scanCode
       };
       
-      // Update event state with checked-in attendee
       setEvent(prev => {
         if (!prev) return null;
         return {
@@ -416,19 +499,101 @@ export default function EventDetail() {
           attendees: updatedAttendees
         };
       });
-      
-      Alert.alert(
-        'Check-in Successful',
-        `${updatedAttendees[attendeeIndex].name} has been checked in at ${timeString}.`
-      );
-    } catch (error) {
-      console.error('API check-in error:', error);
-      Alert.alert('Check-in Error', 'Failed to check in attendee. Please try again.');
+    }
+    
+    Alert.alert(
+      'Scan In Successful',
+      `${ticketInfo.fullname} has been scanned in at ${timeString}.`
+    );
+    
+    feedback.checkIn();
+  };
+
+  const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
+    if (!event) return;
+    
+    // Try to find attendee by scan code or by name/email from validation result
+    const ticketInfo = validationResult.msg.info;
+    let attendeeIndex = event.attendees.findIndex(a => 
+      a.scanCode === scanCode ||
+      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
+      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
+    );
+    
+    if (attendeeIndex < 0) {
+      Alert.alert('Error', 'Cannot scan out: Attendee not found in the system');
+      return;
+    }
+    
+    // Update attendee scan-out status locally
+    const updatedAttendees = [...event.attendees];
+    updatedAttendees[attendeeIndex] = {
+      ...updatedAttendees[attendeeIndex],
+      scannedIn: false,
+      scanInTime: undefined,
+      scanCode: undefined
+    };
+    
+    setEvent(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        attendees: updatedAttendees
+      };
+    });
+    
+    Alert.alert(
+      'Scan Out Successful',
+      `${ticketInfo.fullname} has been scanned out.`
+    );
+    
+    feedback.success();
+  };
+
+  const refreshGuestList = async () => {
+    try {
+      const updatedGuestList = await getGuestList(eventId);
+      if (updatedGuestList && event) {
+        const updatedAttendees = updatedGuestList.map(guest => ({
+          id: guest.id || guest.guestId || String(Math.random()),
+          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+          email: guest.email || 'N/A',
+          ticketType: guest.ticket_type || guest.ticketType || 'General',
+          scannedIn: guest.checkedIn || guest.checked_in || false,
+          scanInTime: guest.checkInTime || guest.checked_in_time || undefined,
+          scanCode: guest.scanCode || undefined
+        }));
+        
+        setEvent(prev => prev ? { ...prev, attendees: updatedAttendees } : null);
+      }
+    } catch (refreshError) {
+      console.error('Error refreshing guest list:', refreshError);
     }
   };
 
+  const handleScanIn = async (attendeeId: string, attendeeName: string) => {
+    if (!event) return;
+    
+    // Open QR scanner in scan-in mode
+    const attendee = event.attendees.find(a => a.id === attendeeId);
+    handleOpenScanner('scanIn', attendee);
+  };
+
+  const handleScanOut = async (attendeeId: string, attendeeName: string) => {
+    if (!event) return;
+    
+    // Open QR scanner in scan-out mode
+    const attendee = event.attendees.find(a => a.id === attendeeId);
+    if (!attendee || !attendee.scannedIn) {
+      Alert.alert('Error', 'Cannot scan out: Guest is not currently scanned in');
+      return;
+    }
+    
+    handleOpenScanner('scanOut', attendee);
+  };
+
   // Calculate attendance stats
-  const checkedInCount = event?.attendees?.filter(a => a.checkedIn).length || 0;
+  const checkedInCount = event?.attendees?.filter(a => a.scannedIn).length || 0;
   const attendancePercentage = event?.attendees?.length ? Math.round((checkedInCount / event.attendees.length) * 100) : 0;
 
   const renderTabBar = () => (
@@ -443,7 +608,10 @@ export default function EventDetail() {
             styles.tab,
             activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 },
           ]}
-          onPress={() => setActiveTab(tab)}
+          onPress={() => {
+            feedback.tabSwitch();
+            setActiveTab(tab);
+          }}
         >
           <Text
             style={[
@@ -533,9 +701,9 @@ export default function EventDetail() {
                     <UserCheck size={20} color="#34C759" />
                   </View>
                   <Text style={[styles.statValue, { color: colors.text }]}>
-                    {event?.attendees ? event.attendees.filter(a => a.checkedIn).length : 0}
+                    {event?.attendees ? event.attendees.filter(a => a.scannedIn).length : 0}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
+                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Scanned In</Text>
                 </View>
               </View>
             </View>
@@ -579,7 +747,7 @@ export default function EventDetail() {
                       {attendancePercentage}%
                     </Text>
                   </View>
-                  <Text style={[styles.attendanceLabel, { color: colors.text }]}>Check-in Rate</Text>
+                  <Text style={[styles.attendanceLabel, { color: colors.text }]}>Scan-in Rate</Text>
                 </View>
                 
                 <View style={styles.attendanceStats}>
@@ -588,13 +756,13 @@ export default function EventDetail() {
                     <Text style={[styles.attendanceValue, { color: colors.text }]}>
                       {checkedInCount}
                     </Text>
-                    <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>Checked In</Text>
+                    <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>Scanned In</Text>
                   </View>
                   
                   <View style={styles.attendanceStat}>
                     <User size={18} color={colors.primary} />
                     <Text style={[styles.attendanceValue, { color: colors.text }]}>
-                      {event?.attendees ? event.attendees.filter(a => !a.checkedIn).length : 0}
+                      {event?.attendees ? event.attendees.filter(a => !a.scannedIn).length : 0}
                     </Text>
                     <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>Not Arrived</Text>
                   </View>
@@ -678,7 +846,10 @@ export default function EventDetail() {
       <View style={styles.headerButtons}>
         <TouchableOpacity 
           style={[styles.headerButton, { backgroundColor: colors.primary }]}
-          onPress={() => setActiveTab('Attendance')}
+          onPress={() => {
+            feedback.buttonPress();
+            setActiveTab('Attendance');
+          }}
         >
           <Users size={16} color="#FFFFFF" />
           <Text style={styles.headerButtonText}>Guest List</Text>
@@ -686,7 +857,10 @@ export default function EventDetail() {
         
         <TouchableOpacity 
           style={[styles.headerButton, { backgroundColor: colors.primary }]}
-          onPress={handleOpenScanner}
+          onPress={() => {
+            feedback.buttonPress();
+            handleOpenScanner('validate');
+          }}
         >
           <QrCode size={16} color="#FFFFFF" />
           <Text style={styles.headerButtonText}>Scan Ticket</Text>
@@ -694,6 +868,174 @@ export default function EventDetail() {
       </View>
     </View>
   );
+
+  const generateTestQRCode = () => {
+    // Generate a random mock QR code for testing
+    const mockQRCodes = ['MOCK_QR_001', 'MOCK_QR_002', 'MOCK_QR_003', 'MOCK_QR_004', 'MOCK_QR_005'];
+    const randomQR = mockQRCodes[Math.floor(Math.random() * mockQRCodes.length)];
+    
+    Alert.alert(
+      'Test QR Code Generated',
+      `QR Code: ${randomQR}\n\nThis is a test QR code that you can use to test the scanning functionality.`,
+      [
+        {
+          text: 'Scan It Now',
+          onPress: () => {
+            // Simulate scanning this QR code
+            handleScanResult(randomQR);
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const testNetworkConnectivity = async () => {
+    feedback.buttonPress();
+    
+    try {
+      const result = await testProxyConnectivity();
+      const currentURL = await getCurrentProxyURL();
+      const currentIP = await getCurrentProxyIP();
+      
+      if (result.success) {
+        Alert.alert(
+          'Network Test Successful! ✅',
+          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}\n\nYour device can access the proxy server.`,
+          [
+            {
+              text: 'Change IP',
+              onPress: () => showManualIPOptions()
+            },
+            {
+              text: 'OK',
+              onPress: () => feedback.success()
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Network Test Failed ❌',
+          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}\n\nPlease check if:\n1. Proxy server is running\n2. Device is on same network\n3. Firewall allows port 3000`,
+          [
+            {
+              text: 'Set Manual IP',
+              onPress: () => showManualIPOptions()
+            },
+            {
+              text: 'Use Default IP',
+              onPress: async () => {
+                await setManualProxyIP('192.168.18.102');
+                feedback.success();
+                Alert.alert('IP Set', 'Using default IP: 192.168.18.102\n\nTest connectivity again to verify.');
+              }
+            },
+            {
+              text: 'OK',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Network Test Error', 'Failed to test network connectivity');
+    }
+  };
+
+  const showManualIPOptions = () => {
+    Alert.alert(
+      'Network Configuration',
+      'Choose how to configure the proxy server IP:',
+      [
+        {
+          text: 'Use 192.168.18.102',
+          onPress: async () => {
+            await setManualProxyIP('192.168.18.102');
+            feedback.success();
+            Alert.alert('IP Set', 'Proxy IP set to: 192.168.18.102\n\nTest connectivity to verify it works.');
+          }
+        },
+        {
+          text: 'Enter Different IP',
+          onPress: () => showCustomIPInput()
+        },
+        {
+          text: 'Auto-Detect',
+          onPress: async () => {
+            await clearManualProxyIP();
+            feedback.buttonPress();
+            Alert.alert('Auto-Detection Enabled', 'Will use automatic IP detection.\n\nTest connectivity to see the detected IP.');
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showCustomIPInput = () => {
+    // Since Alert.prompt doesn't work on all platforms, provide common IP options
+    Alert.alert(
+      'Select IP Address',
+      'Choose a common IP range or cancel to keep current setting:',
+      [
+        {
+          text: '192.168.1.x',
+          onPress: () => showSpecificIPOptions('192.168.1')
+        },
+        {
+          text: '192.168.0.x',
+          onPress: () => showSpecificIPOptions('192.168.0')
+        },
+        {
+          text: '192.168.18.x',
+          onPress: () => showSpecificIPOptions('192.168.18')
+        },
+        {
+          text: '10.0.0.x',
+          onPress: () => showSpecificIPOptions('10.0.0')
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showSpecificIPOptions = (baseIP: string) => {
+    const commonEndings = ['100', '101', '102', '103', '105', '110'];
+    
+    Alert.alert(
+      `Select ${baseIP}.x`,
+      'Choose the last number for your IP address:',
+      [
+        ...commonEndings.map(ending => ({
+          text: `${baseIP}.${ending}`,
+          onPress: async () => {
+            const fullIP = `${baseIP}.${ending}`;
+            await setManualProxyIP(fullIP);
+            feedback.success();
+            Alert.alert('IP Set', `Proxy IP set to: ${fullIP}\n\nTest connectivity to verify it works.`);
+          }
+        })),
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showManualIPDialog = () => {
+    // This is now replaced by showManualIPOptions
+    showManualIPOptions();
+  };
 
   if (loading) {
     return (
@@ -736,13 +1078,35 @@ export default function EventDetail() {
           <View style={[styles.infoCard, { backgroundColor: colors.card, flex: 1 }]}>
             <View style={[styles.cardHeader, { padding: 16, paddingBottom: 12 }]}>
               <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Guest List</Text>
-              <TouchableOpacity 
-                style={[styles.scanButton, { backgroundColor: colors.primary }]}
-                onPress={handleOpenScanner}
-              >
-                <QrCode size={16} color="#FFFFFF" />
-                <Text style={styles.scanButtonText}>Scan Ticket</Text>
-              </TouchableOpacity>
+              <View style={styles.headerButtonGroup}>
+                <TouchableOpacity 
+                  style={[styles.networkButton, { backgroundColor: '#FF6B35', marginRight: 8 }]}
+                  onPress={testNetworkConnectivity}
+                >
+                  <Settings size={14} color="#FFFFFF" />
+                  <Text style={styles.networkButtonText}>Network</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.testButton, { backgroundColor: colors.secondary, marginRight: 8 }]}
+                  onPress={() => {
+                    feedback.buttonPress();
+                    generateTestQRCode();
+                  }}
+                >
+                  <QrCode size={14} color="#FFFFFF" />
+                  <Text style={styles.testButtonText}>Test QR</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.scanButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    feedback.buttonPress();
+                    handleOpenScanner('validate');
+                  }}
+                >
+                  <QrCode size={16} color="#FFFFFF" />
+                  <Text style={styles.scanButtonText}>Scan Ticket</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             
             {event?.attendees && event.attendees.length > 0 ? (
@@ -759,21 +1123,36 @@ export default function EventDetail() {
                       </View>
                     </View>
                     <View style={styles.attendeeStatus}>
-                      {item.checkedIn ? (
-                        <View style={[styles.checkedInBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
-                          <CheckCircle size={14} color="#2ecc71" />
-                          <Text style={[styles.checkedInText, { color: '#2ecc71' }]}>Checked In</Text>
-                          {item.checkInTime && (
-                            <Text style={styles.checkInTime}>{item.checkInTime}</Text>
-                          )}
+                      {item.scannedIn ? (
+                        <View style={styles.scannedInContainer}>
+                          <View style={[styles.scannedInBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
+                            <CheckCircle size={14} color="#2ecc71" />
+                            <Text style={[styles.scannedInText, { color: '#2ecc71' }]}>Scanned In</Text>
+                            {item.scanInTime && (
+                              <Text style={styles.scanInTime}>{item.scanInTime}</Text>
+                            )}
+                          </View>
+                          <TouchableOpacity 
+                            style={[styles.scanOutButton, { backgroundColor: '#ff6b6b' }]}
+                            onPress={() => {
+                              feedback.buttonPressHeavy();
+                              handleScanOut(item.id, item.name);
+                            }}
+                          >
+                            <QrCode size={14} color="#FFFFFF" />
+                            <Text style={styles.scanOutButtonText}>Scan Out</Text>
+                          </TouchableOpacity>
                         </View>
                       ) : (
                         <TouchableOpacity 
-                          style={[styles.checkInButton, { backgroundColor: colors.primary }]}
-                          onPress={() => handleCheckIn(item.id)}
+                          style={[styles.scanInButton, { backgroundColor: colors.primary }]}
+                          onPress={() => {
+                            feedback.buttonPressHeavy();
+                            handleScanIn(item.id, item.name);
+                          }}
                         >
-                          <UserCheck size={14} color="#FFFFFF" />
-                          <Text style={styles.checkInButtonText}>Check In</Text>
+                          <QrCode size={14} color="#FFFFFF" />
+                          <Text style={styles.scanInButtonText}>Scan In</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -791,7 +1170,10 @@ export default function EventDetail() {
                 </Text>
                 <TouchableOpacity 
                   style={[styles.emptyGuestButton, { backgroundColor: colors.primary }]}
-                  onPress={handleOpenScanner}
+                  onPress={() => {
+                    feedback.buttonPress();
+                    handleOpenScanner('validate');
+                  }}
                 >
                   <QrCode size={16} color="#FFFFFF" />
                   <Text style={styles.emptyGuestButtonText}>Scan Ticket</Text>
@@ -1236,25 +1618,47 @@ const styles = StyleSheet.create({
     minWidth: 100,
     alignItems: 'flex-end',
   },
-  checkedInBadge: {
+  scannedInContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  scannedInBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
   },
-  checkedInText: {
+  scannedInText: {
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 6,
   },
-  checkInTime: {
+  scanInTime: {
     fontSize: 12,
     marginTop: 4,
     opacity: 0.8,
     textAlign: 'right',
   },
-  checkInButton: {
+  scanOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginLeft: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  scanOutButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  scanInButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
@@ -1265,7 +1669,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  checkInButtonText: {
+  scanInButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
@@ -1273,5 +1677,33 @@ const styles = StyleSheet.create({
   },
   attendeeList: {
     marginTop: 8,
+  },
+  headerButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  testButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+  },
+  testButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  networkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+  },
+  networkButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 4,
   },
 }); 

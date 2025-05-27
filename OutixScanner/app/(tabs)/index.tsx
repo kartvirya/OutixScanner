@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   eventHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   eventTitle: {
     fontSize: 20,
@@ -288,9 +288,12 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    flex: 1,
+    marginBottom: 12,
   },
   eventDetails: {
     gap: 10,
+    marginBottom: 12,
   },
   detailRow: {
     flexDirection: "row",
@@ -327,16 +330,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   viewDetailsContainer: {
-    marginTop: 16,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    position: 'absolute',
+    bottom: 18,
+    right: 18,
   },
   viewDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 20,
   },
   viewDetailsText: {

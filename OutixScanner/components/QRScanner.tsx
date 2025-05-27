@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions } from 'rea
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { X, QrCode } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { feedback } from '../services/feedback';
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -48,6 +49,9 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     console.log('QR Code scanned:', { type, data });
     setScanned(true);
     
+    // Provide immediate feedback for successful scan
+    feedback.qrScanSuccess();
+    
     // Vibrate or provide feedback here if needed
     onScan(data);
     
@@ -60,6 +64,9 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const handleCameraReady = () => {
     console.log('Camera is ready');
     setCameraReady(true);
+    
+    // Light haptic feedback when camera is ready
+    feedback.buttonPress();
   };
 
   // Loading state
@@ -93,7 +100,10 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             </Text>
             <TouchableOpacity 
               style={[styles.permissionButton, { backgroundColor: colors.primary }]} 
-              onPress={requestPermission}
+              onPress={() => {
+                feedback.buttonPress();
+                requestPermission();
+              }}
             >
               <Text style={styles.buttonText}>Grant Permission</Text>
             </TouchableOpacity>
@@ -118,7 +128,10 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         <View style={styles.overlay}>
           {/* Header */}
           <View style={styles.headerBar}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity onPress={() => {
+              feedback.buttonPress();
+              onClose();
+            }} style={styles.closeButton}>
               <X size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.headerText}>Scan QR Code</Text>
@@ -154,7 +167,10 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             
             <TouchableOpacity 
               style={[styles.cancelButton, { backgroundColor: colors.primary }]} 
-              onPress={onClose}
+              onPress={() => {
+                feedback.buttonPress();
+                onClose();
+              }}
             >
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>

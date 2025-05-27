@@ -2,11 +2,38 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const FormData = require('form-data');
+const os = require('os');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for all routes
-app.use(cors());
+// Function to get the local IP address
+function getLocalIPAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip over internal (i.e. 127.0.0.1) and non-IPv4 addresses
+      if ('IPv4' !== iface.family || iface.internal !== false) {
+        continue;
+      }
+      return iface.address;
+    }
+  }
+  return 'localhost';
+}
+
+const localIP = getLocalIPAddress();
+console.log(`Server will be accessible at:`);
+console.log(`- Local: http://localhost:${PORT}`);
+console.log(`- Network: http://${localIP}:${PORT}`);
+console.log(`- For mobile devices use: http://${localIP}:${PORT}`);
+
+// Enable CORS for all routes with more permissive settings for development
+app.use(cors({
+  origin: '*', // Allow all origins for development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'auth-token', 'Auth-Token'],
+  credentials: true
+}));
 
 // Middleware to parse JSON bodies
 app.use(express.json());
@@ -285,6 +312,63 @@ app.get('/api/scan/:eventid/:scancode', async (req, res) => {
   }
 });
 
+// Proxy endpoint for user profile
+app.get('/api/user/profile', async (req, res) => {
+  try {
+    const authToken = req.headers['auth-token'] || '';
+    
+    console.log(`Fetching user profile with token: ${authToken ? 'Token exists' : 'No token'}`);
+    
+    // Make the request to the actual API
+    const url = `${BASE_URL}/user/profile`;
+    console.log(`Making user profile request to: ${url}`);
+    
+    const response = await axios.get(url, {
+      headers: {
+        'Auth-Token': authToken,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000 // 10 second timeout
+    });
+    
+    console.log(`User profile API response status: ${response.status}`);
+    
+    // Return the response data
+    res.json(response.data);
+  } catch (error) {
+    console.error('Proxy error fetching user profile:', error.message);
+    
+    // Forward error status if available
+    if (error.response) {
+      console.error(`Response status: ${error.response.status}`);
+      console.error(`Response data: ${JSON.stringify(error.response.data || {})}`);
+      
+      return res.status(error.response.status).json({
+        error: true,
+        message: error.message,
+        details: error.response.data
+      });
+    }
+    
+    // Generic error
+    res.status(500).json({ 
+      error: true, 
+      message: 'Failed to fetch user profile' 
+    });
+  }
+});
+
+// Endpoint to get server information for mobile apps
+app.get('/api/server-info', (req, res) => {
+  res.json({
+    ip: localIP,
+    port: PORT,
+    url: `http://${localIP}:${PORT}`,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Generic proxy for other endpoints
 app.all('/api/*', async (req, res) => {
   try {
@@ -382,7 +466,9 @@ app.get('/api/guestlist/:eventId', async (req, res) => {
   }
 });
 
-// Start the server
-app.listen(PORT, () => {
+// Start the server - bind to all interfaces so it's accessible from other devices
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy server running on port ${PORT}`);
+  console.log(`Accessible from any device on the network at: http://${localIP}:${PORT}`);
+  console.log(`Use this URL in your mobile app API configuration.`);
 }); 

@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "proxy": "node server.js",
-    "dev": "concurrently \"npm run proxy\" \"npm run start\""
+    "dev": "concurrently \"npm run proxy\" \"npx expo start\""
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -21,6 +21,7 @@
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "expo": "~53.0.9",
+    "expo-av": "^15.1.4",
     "expo-blur": "~14.1.4",
     "expo-camera": "~16.1.6",
     "expo-constants": "~17.1.6",
