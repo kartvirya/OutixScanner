@@ -18,14 +18,16 @@ import {
   CheckCircle,
   User,
   Search,
-  ArrowLeft
+  ArrowLeft,
+  UserCheck
 } from 'lucide-react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { 
   getGuestList, 
   getEvents, 
   validateQRCode, 
-  scanQRCode
+  scanQRCode,
+  generateSampleQRData
 } from '../../../services/api';
 import QRScanner from '../../../components/QRScanner';
 import { feedback, initializeAudio } from '../../../services/feedback';
@@ -38,6 +40,17 @@ interface Attendee {
   scannedIn: boolean;
   scanInTime?: string;
   scanCode?: string;
+  // Additional fields from API
+  purchased_date?: string;
+  reference_num?: string;
+  booking_id?: string;
+  ticket_identifier?: string;
+  price?: string;
+  mobile?: string;
+  address?: string;
+  notes?: string;
+  // Raw guest data for details page
+  rawData?: any;
 }
 
 export default function GuestListPage() {
@@ -68,18 +81,24 @@ export default function GuestListPage() {
     
     try {
       // Fetch event details for title
-      const eventsData = await getEvents();
-      if (Array.isArray(eventsData) && eventsData.length > 0) {
-        const apiEvent = eventsData.find(e => 
-          e.id === eventId || 
-          e.eventId === eventId || 
-          e.EventId === eventId || 
-          String(e._id) === eventId
-        );
-        
-        if (apiEvent) {
-          setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
+      try {
+        const eventsData = await getEvents();
+        if (Array.isArray(eventsData) && eventsData.length > 0) {
+          const apiEvent = eventsData.find(e => 
+            e.id === eventId || 
+            e.eventId === eventId || 
+            e.EventId === eventId || 
+            String(e._id) === eventId
+          );
+          
+          if (apiEvent) {
+            setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
+          }
         }
+      } catch (eventError) {
+        console.error("Failed to load event details:", eventError);
+        // Continue with default event title if events API fails
+        setEventTitle('Event');
       }
       
       // Fetch guest list
@@ -87,6 +106,23 @@ export default function GuestListPage() {
       
     } catch (err) {
       console.error("Failed to load guest data:", err);
+      // Show user-friendly error message for timeouts
+      if (err instanceof Error && err.message.includes('timeout')) {
+        Alert.alert(
+          'Connection Timeout',
+          'The request is taking longer than expected. Please check your internet connection and try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: () => fetchEventAndGuestData()
+            },
+            {
+              text: 'Continue Offline',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -101,10 +137,21 @@ export default function GuestListPage() {
           id: guest.id || guest.guestId || String(Math.random()),
           name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
           email: guest.email || 'N/A',
-          ticketType: guest.ticketType || guest.ticket_type || 'General',
+          ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
           scannedIn: guest.checkedIn || guest.checked_in || false,
           scanInTime: guest.checkInTime || guest.check_in_time || undefined,
-          scanCode: guest.scanCode || undefined
+          scanCode: guest.scanCode || undefined,
+          // Additional fields from API
+          purchased_date: guest.purchased_date || undefined,
+          reference_num: guest.booking_reference || guest.reference_num || undefined,
+          booking_id: guest.booking_id || undefined,
+          ticket_identifier: guest.ticket_identifier || undefined,
+          price: guest.price || undefined,
+          mobile: guest.mobile || undefined,
+          address: guest.address || undefined,
+          notes: guest.notes || undefined,
+          // Raw guest data for details page
+          rawData: guest
         }));
         
         setGuestList(attendees);
@@ -115,6 +162,18 @@ export default function GuestListPage() {
       }
     } catch (err) {
       console.error("Failed to fetch guest list:", err);
+      
+      // Handle timeout errors specifically
+      if (err instanceof Error && err.message.includes('timeout')) {
+        console.log("Guest list API timed out, using fallback");
+        // Set empty list but don't show error to user since we already handle it in parent
+        setGuestList([]);
+        setTotalGuestsFromAPI(0);
+      } else {
+        // For other errors, still set empty list
+        setGuestList([]);
+        setTotalGuestsFromAPI(0);
+      }
     }
   };
 
@@ -273,7 +332,18 @@ export default function GuestListPage() {
         ticketType: ticketInfo.ticket_title,
         scannedIn: true,
         scanInTime: timeString,
-        scanCode: scanCode
+        scanCode: scanCode,
+        // Additional fields from API
+        purchased_date: ticketInfo.purchased_date || undefined,
+        reference_num: ticketInfo.booking_reference || ticketInfo.reference_num || undefined,
+        booking_id: ticketInfo.booking_id || undefined,
+        ticket_identifier: ticketInfo.ticket_identifier || undefined,
+        price: ticketInfo.price || undefined,
+        mobile: ticketInfo.mobile || undefined,
+        address: ticketInfo.address || undefined,
+        notes: ticketInfo.notes || undefined,
+        // Raw guest data for details page
+        rawData: ticketInfo
       };
       
       setGuestList(prev => [...prev, newAttendee]);
@@ -284,12 +354,124 @@ export default function GuestListPage() {
         ...updatedGuestList[guestIndex],
         scannedIn: true,
         scanInTime: timeString,
-        scanCode: scanCode
+        scanCode: scanCode,
+        // Additional fields from API
+        purchased_date: ticketInfo.purchased_date || undefined,
+        reference_num: ticketInfo.booking_reference || ticketInfo.reference_num || undefined,
+        booking_id: ticketInfo.booking_id || undefined,
+        ticket_identifier: ticketInfo.ticket_identifier || undefined,
+        price: ticketInfo.price || undefined,
+        mobile: ticketInfo.mobile || undefined,
+        address: ticketInfo.address || undefined,
+        notes: ticketInfo.notes || undefined,
+        // Raw guest data for details page
+        rawData: ticketInfo
       };
       setGuestList(updatedGuestList);
     }
     
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
+    feedback.checkIn();
+  };
+
+  const handleManualScanIn = async (guest: Attendee) => {
+    try {
+      feedback.buttonPress();
+      
+      Alert.alert(
+        'Manual Check-In',
+        `Check in ${guest.name}?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => feedback.buttonPress()
+          },
+          {
+            text: 'Check In',
+            onPress: async () => {
+              feedback.buttonPressHeavy();
+              await performManualScanIn(guest);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Manual scan in error:', error);
+      feedback.error();
+      Alert.alert('Error', 'Failed to check in guest manually.');
+    }
+  };
+
+  const performManualScanIn = async (guest: Attendee) => {
+    try {
+      // Generate a mock scan code for manual check-in
+      const mockScanCode = generateSampleQRData(guest.id);
+      
+      // Update local state first
+      await updateLocalManualScanIn(guest);
+      
+      // Try to call the API with the mock scan code
+      const scanResult = await scanQRCode(eventId, mockScanCode);
+      
+      if (!scanResult || scanResult.error) {
+        let errorMessage = 'Failed to check in guest via API';
+        if (scanResult?.msg) {
+          errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
+        }
+        
+        feedback.success(); // Still show success since local update worked
+        Alert.alert(
+          'Guest Checked In Locally',
+          `${guest.name} has been checked in locally.\n\nAPI sync: ${errorMessage}`
+        );
+        return;
+      }
+      
+      feedback.checkIn();
+      
+      let successMessage = 'Manual check-in successful';
+      if (typeof scanResult.msg === 'string') {
+        successMessage = scanResult.msg;
+      } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
+        successMessage = scanResult.msg.message;
+      }
+      
+      Alert.alert(
+        'Guest Checked In Successfully',
+        `${guest.name} has been checked in manually.\n\n${successMessage}`
+      );
+      
+    } catch (error) {
+      console.error('Manual scan in error:', error);
+      // Still update locally even if API fails
+      await updateLocalManualScanIn(guest);
+      feedback.success();
+      Alert.alert(
+        'Guest Checked In Locally',
+        `${guest.name} has been checked in locally.\n\nAPI sync failed but local update successful.`
+      );
+    }
+  };
+
+  const updateLocalManualScanIn = async (guest: Attendee) => {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    const guestIndex = guestList.findIndex(g => g.id === guest.id);
+    
+    if (guestIndex >= 0) {
+      const updatedGuestList = [...guestList];
+      updatedGuestList[guestIndex] = {
+        ...updatedGuestList[guestIndex],
+        scannedIn: true,
+        scanInTime: timeString,
+        scanCode: `MANUAL_${Date.now()}`
+      };
+      setGuestList(updatedGuestList);
+    }
+    
+    console.log(`Manual check-in for ${guest.name} at ${timeString}`);
     feedback.checkIn();
   };
 
@@ -439,21 +621,42 @@ export default function GuestListPage() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={[styles.guestItem, { backgroundColor: colors.card }]}>
-              <View style={styles.guestInfo}>
+              <TouchableOpacity 
+                style={styles.guestInfo}
+                onPress={() => {
+                  feedback.buttonPress();
+                  router.push({
+                    pathname: '/guest-list/guest-details',
+                    params: {
+                      guestData: JSON.stringify(item),
+                      eventTitle: eventTitle
+                    }
+                  });
+                }}
+              >
                 <Text style={[styles.guestName, { color: colors.text }]}>{item.name}</Text>
                 <Text style={[styles.guestEmail, { color: colors.secondary }]}>{item.email}</Text>
                 <Text style={[styles.guestTicketType, { color: colors.primary }]}>{item.ticketType}</Text>
-              </View>
-              <View style={styles.guestStatus}>
+              </TouchableOpacity>
+              <View style={styles.guestActions}>
                 {item.scannedIn ? (
                   <View style={[styles.statusBadge, styles.checkedInBadge]}>
                     <CheckCircle size={14} color="#34C759" />
                     <Text style={[styles.statusText, { color: '#34C759' }]}>Present</Text>
                   </View>
                 ) : (
-                  <View style={[styles.statusBadge, styles.notArrivedBadge]}>
-                    <User size={14} color="#FF6B35" />
-                    <Text style={[styles.statusText, { color: '#FF6B35' }]}>Absent</Text>
+                  <View style={styles.actionContainer}>
+                    <TouchableOpacity
+                      style={[styles.checkInButton, { backgroundColor: colors.primary }]}
+                      onPress={() => handleManualScanIn(item)}
+                    >
+                      <UserCheck size={16} color="#FFFFFF" />
+                      <Text style={styles.checkInButtonText}>Check In</Text>
+                    </TouchableOpacity>
+                    <View style={[styles.statusBadge, styles.notArrivedBadge]}>
+                      <User size={14} color="#FF6B35" />
+                      <Text style={[styles.statusText, { color: '#FF6B35' }]}>Absent</Text>
+                    </View>
                   </View>
                 )}
               </View>
@@ -630,9 +833,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  guestStatus: {
+  guestActions: {
     justifyContent: 'center',
     alignItems: 'flex-end',
+    minWidth: 120,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -651,6 +855,24 @@ const styles = StyleSheet.create({
   },
   notArrivedBadge: {
     backgroundColor: 'rgba(255, 107, 53, 0.2)',
+  },
+  actionContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  checkInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    marginBottom: 8,
+  },
+  checkInButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
+    marginLeft: 4,
   },
   emptyContainer: {
     flex: 1,

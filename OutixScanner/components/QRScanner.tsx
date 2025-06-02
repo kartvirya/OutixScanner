@@ -20,6 +20,14 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0); // Add key to force camera remount
+
+  useEffect(() => {
+    // Reset camera state when component mounts
+    setScanned(false);
+    setCameraReady(false);
+    setCameraKey(prev => prev + 1); // Force camera remount
+  }, []);
 
   useEffect(() => {
     const requestCameraPermission = async () => {
@@ -58,10 +66,10 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
     // Vibrate or provide feedback here if needed
     onScan(data);
     
-    // Reset after 3 seconds
+    // Reset after 2 seconds to allow scanning again
     setTimeout(() => {
       setScanned(false);
-    }, 3000);
+    }, 2000);
   };
 
   const handleCameraReady = () => {
@@ -120,6 +128,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   return (
     <View style={styles.container}>
       <CameraView
+        key={cameraKey}
         style={styles.camera}
         facing="back"
         onCameraReady={handleCameraReady}
@@ -133,18 +142,18 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
           {customHeader ? (
             customHeader
           ) : (
-            <View style={styles.headerBar}>
+          <View style={styles.headerBar}>
               {showCloseButton && (
-                <TouchableOpacity onPress={() => {
-                  feedback.buttonPress();
-                  onClose();
-                }} style={styles.closeButton}>
-                  <X size={24} color="#FFFFFF" />
-                </TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              feedback.buttonPress();
+              onClose();
+            }} style={styles.closeButton}>
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
               )}
               <Text style={styles.headerText}>{headerTitle || 'Scan QR Code'}</Text>
-              <View style={styles.placeholderRight} />
-            </View>
+            <View style={styles.placeholderRight} />
+          </View>
           )}
           
           {/* Scanner Area */}
@@ -297,8 +306,9 @@ const styles = StyleSheet.create({
   },
   instructionsContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 50,
+    paddingBottom: 80,
     alignItems: 'center',
+    minHeight: 120,
   },
   instructions: {
     color: '#FFFFFF',

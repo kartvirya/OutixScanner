@@ -54,7 +54,7 @@ const mockEvents: Event[] = [
 ];
 
 export default function Index() {
-  const { colors } = useTheme();
+  const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +146,13 @@ export default function Index() {
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity 
       style={styles.eventCard}
-      onPress={() => router.push(`/(tabs)/${item.id}`)}
+      onPress={() => {
+        // Set selected event in context
+        setSelectedEventId(item.id);
+        setSelectedEventName(item.title);
+        // Navigate to event detail
+        router.push(`/(tabs)/${item.id}`);
+      }}
       activeOpacity={0.8}
     >
       <Image 

@@ -1,61 +1,63 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+type ThemeType = 'light' | 'dark';
+
 // Define theme colors
 export interface ThemeColors {
-  background: string;
-  text: string;
   primary: string;
   secondary: string;
+  background: string;
+  surface: string;
   card: string;
+  text: string;
   border: string;
+  notification: string;
+  success: string;
+  warning: string;
   error: string;
-  inputBackground: string;
-  inputText: string;
-  tabBar: string;
-  tabBarBorder: string;
-  tabBarActive: string;
-  tabBarInactive: string;
 }
 
 // Define light and dark theme color palettes
-const lightTheme: ThemeColors = {
-  background: '#FFFFFF',
-  text: '#000000',
+const lightColors: ThemeColors = {
   primary: '#FF6B00',
-  secondary: '#777777',
+  secondary: '#8E8E93',
+  background: '#F2F2F7',
+  surface: '#FFFFFF',
   card: '#FFFFFF',
-  border: '#E0E0E0',
+  text: '#000000',
+  border: '#C6C6C8',
+  notification: '#FF3B30',
+  success: '#34C759',
+  warning: '#FF9500',
   error: '#FF3B30',
-  inputBackground: '#FFFFFF',
-  inputText: '#000000',
-  tabBar: '#FFFFFF',
-  tabBarBorder: '#E0E0E0',
-  tabBarActive: '#FF6B00',
-  tabBarInactive: '#777777',
 };
 
-const darkTheme: ThemeColors = {
-  background: '#121212',
-  text: '#FFFFFF',
+const darkColors: ThemeColors = {
   primary: '#FF6B00',
-  secondary: '#A0A0A0',
-  card: '#1E1E1E',
-  border: '#333333',
+  secondary: '#8E8E93',
+  background: '#000000',
+  surface: '#1C1C1E',
+  card: '#2C2C2E',
+  text: '#FFFFFF',
+  border: '#38383A',
+  notification: '#FF453A',
+  success: '#30D158',
+  warning: '#FF9F0A',
   error: '#FF453A',
-  inputBackground: '#2C2C2E',
-  inputText: '#FFFFFF',
-  tabBar: '#1C1C1E',
-  tabBarBorder: '#333333',
-  tabBarActive: '#FF6B00',
-  tabBarInactive: '#8E8E93',
 };
 
 // Define theme context interface
 interface ThemeContextType {
+  theme: ThemeType;
+  colors: ThemeColors;
   isDarkMode: boolean;
   toggleTheme: () => void;
-  colors: ThemeColors;
+  // Event context
+  selectedEventId: string | null;
+  setSelectedEventId: (eventId: string) => void;
+  selectedEventName: string | null;
+  setSelectedEventName: (eventName: string) => void;
 }
 
 // Create the context
@@ -67,9 +69,9 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [isThemeLoaded, setIsThemeLoaded] = useState(false);
-  const colors = isDarkMode ? darkTheme : lightTheme;
+  const [theme, setTheme] = useState<ThemeType>('light');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>('77809'); // Default to event 77809
+  const [selectedEventName, setSelectedEventName] = useState<string | null>(null);
 
   // In-memory storage as AsyncStorage fallback
   const memoryStorage = React.useRef(new Map<string, string>()).current;
@@ -107,43 +109,72 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
 
   // Load theme preference from storage on initial render
   useEffect(() => {
-    const loadThemePreference = async () => {
+    const loadTheme = async () => {
       try {
-        const storedTheme = await getStorageValue('theme_mode', 'light');
-        setIsDarkMode(storedTheme === 'dark');
+        const savedTheme = await getStorageValue('theme', 'light');
+        setTheme(savedTheme as ThemeType);
       } catch (error) {
-        console.error('Error loading theme preference:', error);
-        // Default to light theme on error
-        setIsDarkMode(false);
-      } finally {
-        setIsThemeLoaded(true);
+        console.error('Error loading theme:', error);
       }
     };
 
-    loadThemePreference();
+    const loadSelectedEvent = async () => {
+      try {
+        const savedEventId = await getStorageValue('selectedEventId', '77809');
+        const savedEventName = await getStorageValue('selectedEventName', '');
+        setSelectedEventId(savedEventId);
+        if (savedEventName) {
+          setSelectedEventName(savedEventName);
+        }
+      } catch (error) {
+        console.error('Error loading selected event:', error);
+      }
+    };
+
+    loadTheme();
+    loadSelectedEvent();
   }, []);
 
   const toggleTheme = async () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
     
     // Save theme preference to storage
-    setStorageValue('theme_mode', newMode ? 'dark' : 'light')
-      .catch(error => console.error('Error saving theme preference:', error));
+    setStorageValue('theme', newTheme);
   };
 
-  // Show a minimal loading placeholder until theme is loaded
-  if (!isThemeLoaded) {
-    return (
-      <>
-        {/* Empty fragment as placeholder while loading */}
-        {null}
-      </>
-    );
-  }
+  const updateSelectedEventId = async (eventId: string) => {
+    setSelectedEventId(eventId);
+    try {
+      await setStorageValue('selectedEventId', eventId);
+    } catch (error) {
+      console.error('Error saving selected event ID:', error);
+    }
+  };
+
+  const updateSelectedEventName = async (eventName: string) => {
+    setSelectedEventName(eventName);
+    try {
+      await setStorageValue('selectedEventName', eventName);
+    } catch (error) {
+      console.error('Error saving selected event name:', error);
+    }
+  };
+
+  const colors = theme === 'light' ? lightColors : darkColors;
+  const isDarkMode = theme === 'dark';
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, colors }}>
+    <ThemeContext.Provider value={{
+      theme,
+      colors,
+      isDarkMode,
+      toggleTheme,
+      selectedEventId,
+      setSelectedEventId: updateSelectedEventId,
+      selectedEventName,
+      setSelectedEventName: updateSelectedEventName,
+    }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -169,7 +169,7 @@ type TabName = 'Overview' | 'Analytics' | 'Tickets';
 const tabs: TabName[] = ['Overview', 'Analytics', 'Tickets'];
 
 export default function EventDetail() {
-  const { colors, isDarkMode } = useTheme();
+  const { colors, isDarkMode, setSelectedEventId, setSelectedEventName } = useTheme();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -222,6 +222,10 @@ export default function EventDetail() {
           };
           
           setEvent(formattedEvent);
+          
+          // Update selected event in context
+          setSelectedEventId(formattedEvent.id);
+          setSelectedEventName(formattedEvent.title);
         } else {
           // If not found in API, try mock data as fallback
           const mockEvent = mockEvents[eventId];
@@ -234,6 +238,10 @@ export default function EventDetail() {
           
           // Use mock event data
           setEvent(mockEvent);
+          
+          // Update selected event in context
+          setSelectedEventId(mockEvent.id);
+          setSelectedEventName(mockEvent.title);
         }
         
         // Fetch guest list from API
@@ -389,8 +397,8 @@ export default function EventDetail() {
     } catch (err) {
       console.error("Failed to fetch checked-in guests:", err);
       // Keep existing data on error
-    }
-  };
+      }
+    };
 
   // Helper function to format date from API 
   const formatDateFromAPI = (dateString: string): string => {
@@ -727,21 +735,21 @@ export default function EventDetail() {
     
     // Update attendee scan-out status locally
     if (attendeeIndex >= 0) {
-      const updatedAttendees = [...event.attendees];
-      updatedAttendees[attendeeIndex] = {
-        ...updatedAttendees[attendeeIndex],
-        scannedIn: false,
-        scanInTime: undefined,
-        scanCode: undefined
+    const updatedAttendees = [...event.attendees];
+    updatedAttendees[attendeeIndex] = {
+      ...updatedAttendees[attendeeIndex],
+      scannedIn: false,
+      scanInTime: undefined,
+      scanCode: undefined
+    };
+    
+    setEvent(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        attendees: updatedAttendees
       };
-      
-      setEvent(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          attendees: updatedAttendees
-        };
-      });
+    });
     }
     
     // Update guest list if attendee exists there
@@ -810,7 +818,7 @@ export default function EventDetail() {
           }}
         >
           <Text style={[
-            styles.tabText,
+              styles.tabText,
             { color: activeTab === tab ? '#FFFFFF' : colors.text }
           ]}>
             {tab}
@@ -886,7 +894,7 @@ export default function EventDetail() {
                   <Text style={styles.actionCardText}>Guest List</Text>
                 </TouchableOpacity>
               </View>
-              
+                
               <View style={styles.actionGrid}>
                 <TouchableOpacity 
                   style={[styles.actionCard, { backgroundColor: '#FF6B35' }]}
@@ -963,19 +971,19 @@ export default function EventDetail() {
                     <UserCheck color="#34C759" size={20} />
                     <View style={styles.attendanceStatText}>
                       <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
-                        {checkedInCount}
-                      </Text>
+                      {checkedInCount}
+                    </Text>
                       <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
                         Present
                       </Text>
-                    </View>
+                  </View>
                   </View>
                   <View style={styles.attendanceStatItem}>
                     <User color="#FF6B35" size={20} />
                     <View style={styles.attendanceStatText}>
                       <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
                         {totalGuestsCount - checkedInCount}
-                      </Text>
+                    </Text>
                       <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
                         Not Arrived
                       </Text>
@@ -1087,7 +1095,7 @@ export default function EventDetail() {
       `Use this QR code for testing:\n\n${randomQR}`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
+        {
           text: 'Test Scan In', 
           onPress: () => {
             // Simulate scanning this QR code
@@ -1274,10 +1282,10 @@ export default function EventDetail() {
   // Render the appropriate content based on the active tab
   const renderContent = () => {
     // All remaining tabs use ScrollView as they don't contain FlatLists
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderEventHeader()}
-        {renderTabBar()}
+      return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          {renderEventHeader()}
+          {renderTabBar()}
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           {renderTabContent()}
         </ScrollView>

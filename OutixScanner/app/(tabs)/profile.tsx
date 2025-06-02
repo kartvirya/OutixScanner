@@ -69,9 +69,9 @@ export default function Profile() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
-        </View>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
+      </View>
       </SafeAreaView>
     );
   }
@@ -80,7 +80,7 @@ export default function Profile() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
         {/* Profile Section */}
-        <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
+      <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
           <View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
             <User size={48} color="#FFFFFF" />
           </View>
@@ -121,7 +121,7 @@ export default function Profile() {
             </View>
           </View>
         </View>
-
+        
         {/* Logout Button */}
         <TouchableOpacity 
           style={[styles.logoutButton, { backgroundColor: colors.card, borderColor: colors.error }]}

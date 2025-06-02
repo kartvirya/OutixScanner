@@ -98,9 +98,9 @@ export const testProxyConnectivity = async (): Promise<{ success: boolean; url: 
   try {
     console.log(`Testing connectivity to: ${proxyURL}`);
     
-    // Test the server-info endpoint
+    // Test the server-info endpoint with a very short timeout for quick testing
     const response = await axios.get(`${proxyURL.replace('/api', '')}/api/server-info`, {
-      timeout: 5000 // 5 second timeout
+      timeout: 3000 // 3 second timeout for quick connectivity test
     });
     
     console.log('Proxy connectivity test successful:', response.data);
@@ -255,15 +255,109 @@ const safeAsyncStorageSave = async (key: string, value: string): Promise<boolean
 // Mock JWT token for development since the real endpoint is returning 400
 const MOCK_JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6Ik91dGl4U2Nhbm5lciIsImlhdCI6MTUxNjIzOTAyMn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
 
-export const login = async (): Promise<string | null> => {
+export const login = async (username?: string, password?: string): Promise<string | null> => {
   try {
-    // If user has explicitly logged out, don't auto-restore token
+    // If we have explicit credentials, try to authenticate with them regardless of logout state
+    if (username && password) {
+      console.log("Attempting login with provided credentials");
+      
+      try {
+        const proxyURL = await getCurrentProxyURL();
+        const response = await axios.post(`${proxyURL}/auth`, {
+          username: username,
+          password: password
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000
+        });
+        
+        console.log("Login response status:", response.status);
+        
+        // Success path - extract token from response
+        if (response.data && response.data.msg && response.data.msg.Auth_Token) {
+          const token = response.data.msg.Auth_Token;
+          console.log("Got auth token from API");
+          authToken = token;
+          isLoggedOut = false; // Reset logout flag on successful login
+          
+          // Store token in storage
+          await setStorageItem('auth_token', token);
+          
+          // Store user profile data if available in the response
+          if (response.data.msg) {
+            console.log("Storing user profile data from login response");
+            await setStorageItem('user_profile', JSON.stringify(response.data.msg));
+          }
+          
+          return token;
+        }
+        
+        // Try to extract token from response if structure is different
+        if (response.data && response.status === 200) {
+          const token = extractTokenFromResponse(response.data);
+          if (token) {
+            console.log("Extracted token from API response");
+            authToken = token;
+            isLoggedOut = false; // Reset logout flag on successful login
+            await setStorageItem('auth_token', token);
+            
+            // Store user profile data from response
+            if (response.data) {
+              console.log("Storing user profile data from extracted response");
+              await setStorageItem('user_profile', JSON.stringify(response.data));
+            }
+            
+            return token;
+          }
+        }
+        
+        // If we reached here, API returned success but no token
+        console.warn("API successful but no token found in response");
+        return null;
+      } catch (apiError: any) {
+        console.error("API login failed:", apiError.message || apiError);
+        
+        // Check for authentication errors
+        if (apiError.response) {
+          const status = apiError.response.status;
+          const data = apiError.response.data;
+          
+          console.log("Response status:", status);
+          console.log("Response data:", data);
+          
+          // Handle authentication failures (401, 403, etc.)
+          if (status === 401 || status === 403) {
+            console.log("Authentication failed - invalid credentials");
+            return null;
+          }
+          
+          // Handle other specific errors that indicate credential issues
+          if (data && (
+            data.message?.toLowerCase().includes('invalid') ||
+            data.message?.toLowerCase().includes('unauthorized') ||
+            data.message?.toLowerCase().includes('forbidden') ||
+            data.error?.toLowerCase().includes('credential')
+          )) {
+            console.log("Authentication failed - credential error");
+            return null;
+          }
+        }
+        
+        // For network errors or server issues, we still fail
+        console.log("Network or server error during login");
+        return null;
+      }
+    }
+    
+    // If user has explicitly logged out, don't auto-restore token (only for auto-login)
     if (isLoggedOut) {
       console.log("User has logged out, not auto-restoring token");
       return null;
     }
     
-    // Check if token already exists in storage
+    // Auto-login flow - check if token already exists in storage
     const storedToken = await getStorageItem('auth_token');
     if (storedToken) {
       console.log("Using existing token from storage");
@@ -276,16 +370,11 @@ export const login = async (): Promise<string | null> => {
       return authToken;
     }
     
-    // Show we're attempting login
-    console.log("No token found, attempting login with API");
+    // Show we're attempting automatic login
+    console.log("No token found, attempting automatic login with default credentials");
 
     try {
-      // Create form data for authentication
-      const formData = new FormData();
-      formData.append('username', 'Outix@thebend.co');
-      formData.append('password', 'Scan$9841');
-      
-      // Configure axios to send form-data through our proxy server
+      // Try automatic login with default credentials
       const proxyURL = await getCurrentProxyURL();
       const response = await axios.post(`${proxyURL}/auth`, {
         username: 'Outix@thebend.co',
@@ -294,25 +383,24 @@ export const login = async (): Promise<string | null> => {
         headers: {
           'Content-Type': 'application/json',
         },
-        // Adding a timeout to prevent long hangs
-        timeout: 10000
+        timeout: 30000
       });
       
-      console.log("Login response status:", response.status);
+      console.log("Auto-login response status:", response.status);
       
       // Success path - extract token from response
       if (response.data && response.data.msg && response.data.msg.Auth_Token) {
         const token = response.data.msg.Auth_Token;
-        console.log("Got auth token from API");
+        console.log("Got auth token from auto-login API");
         authToken = token;
-        isLoggedOut = false; // Reset logout flag on successful login
+        isLoggedOut = false;
         
         // Store token in storage
         await setStorageItem('auth_token', token);
         
         // Store user profile data if available in the response
         if (response.data.msg) {
-          console.log("Storing user profile data from login response:", JSON.stringify(response.data.msg, null, 2));
+          console.log("Storing user profile data from auto-login response");
           await setStorageItem('user_profile', JSON.stringify(response.data.msg));
         }
         
@@ -323,14 +411,14 @@ export const login = async (): Promise<string | null> => {
       if (response.data && response.status === 200) {
         const token = extractTokenFromResponse(response.data);
         if (token) {
-          console.log("Extracted token from API response");
+          console.log("Extracted token from auto-login API response");
           authToken = token;
-          isLoggedOut = false; // Reset logout flag on successful login
+          isLoggedOut = false;
           await setStorageItem('auth_token', token);
           
           // Store user profile data from response
           if (response.data) {
-            console.log("Storing user profile data from extracted response:", JSON.stringify(response.data, null, 2));
+            console.log("Storing user profile data from auto-login extracted response");
             await setStorageItem('user_profile', JSON.stringify(response.data));
           }
           
@@ -339,25 +427,25 @@ export const login = async (): Promise<string | null> => {
       }
       
       // If we reached here, API returned success but no token
-      console.warn("API successful but no token found in response");
+      console.warn("Auto-login API successful but no token found in response");
     } catch (apiError: any) {
-      console.error("API login failed:", apiError.message || apiError);
+      console.error("Auto-login API failed:", apiError.message || apiError);
       
       // Check specific error types
       if (apiError.response) {
-        console.log("Response status:", apiError.response.status);
-        console.log("Response data:", apiError.response.data);
+        console.log("Auto-login response status:", apiError.response.status);
+        console.log("Auto-login response data:", apiError.response.data);
       } else if (apiError.request) {
-        console.log("No response received");
+        console.log("No response received from auto-login");
       }
     }
     
-    // If we get here, API failed or didn't return a token
-    // Use mock token as fallback
+    // If we get here, both stored token check and API failed
+    // Use mock token as fallback ONLY for auto-login (not manual login)
     const mockToken = "8934796HSnvLiZIs4087116";
-    console.log("Using mock token as fallback");
+    console.log("Using mock token as fallback for auto-login");
     authToken = mockToken;
-    isLoggedOut = false; // Reset logout flag on successful login
+    isLoggedOut = false;
     await setStorageItem('auth_token', mockToken);
     
     // Store mock user profile data as well
@@ -373,31 +461,11 @@ export const login = async (): Promise<string | null> => {
     };
     console.log("Storing mock user profile data");
     await setStorageItem('user_profile', JSON.stringify(mockUserProfile));
-    console.log("Mock user profile stored successfully");
     
     return mockToken;
   } catch (error) {
     console.error('Unexpected login error:', error);
-    
-    // Last resort fallback
-    const fallbackToken = "8934796HSnvLiZIs4087116";
-    authToken = fallbackToken;
-    isLoggedOut = false; // Reset logout flag on successful login
-    
-    // Store fallback user profile data as well
-    const fallbackUserProfile = {
-      UserID: 'fallback_user_456',
-      LoggedName: 'Outix Scanner User',
-      ClientName: 'Outix Scanner',
-      email: 'Outix@thebend.co',
-      role: 'Event Manager',
-      eventsCreated: 0,
-      eventsAttended: 0,
-      Auth_Token: fallbackToken
-    };
-    await setStorageItem('user_profile', JSON.stringify(fallbackUserProfile));
-    
-    return fallbackToken;
+    return null;
   }
 };
 
@@ -452,15 +520,25 @@ export const getEvents = async (): Promise<any[]> => {
     console.log("Sending request with token:", authToken ? "token-exists" : "no-token");
     
     try {
-      // Use the dynamic proxy server to bypass CORS
+      // First test if proxy server is accessible
       const proxyURL = await getCurrentProxyURL();
+      console.log("Testing proxy connectivity before making events request...");
+      
+      // Quick connectivity test with shorter timeout
+      const connectivityTest = await testProxyConnectivity();
+      if (!connectivityTest.success) {
+        console.log("Proxy server not accessible, using mock data immediately");
+        throw new Error("Proxy server not accessible");
+      }
+      
+      console.log("Proxy server accessible, making events request...");
       const response = await axios.get(`${proxyURL}/events`, {
         headers: {
           'auth-token': authToken || '',
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 15000 // Reduced to 15 second timeout since we pre-tested connectivity
       });
       
       console.log("Events API response status:", response.status);
@@ -652,7 +730,7 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        timeout: 10000
+        timeout: 30000
       });
       
       console.log("Guest list API response status:", response.status);
@@ -713,7 +791,7 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
           },
-          timeout: 10000
+          timeout: 30000
         });
         
         console.log("Alternative guest list API response status:", response.status);
@@ -883,7 +961,7 @@ export const checkInGuest = async (eventId: string, guestId: string): Promise<an
         'Content-Type': 'application/json',
         'auth-token': authToken || ''
       },
-      timeout: 10000
+      timeout: 30000
     });
     
     console.log("Check-in API response status:", response.status);
@@ -1026,7 +1104,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         headers: {
           'Auth-Token': authToken || ''
         },
-        timeout: 5000
+        timeout: 30000
       });
       
       if (response.data && response.data.msg) {
@@ -1232,7 +1310,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
         'Auth-Token': authToken || '',
         'Content-Type': 'application/json'
       },
-      timeout: 10000
+      timeout: 30000
     });
     
     console.log('QR validation response:', response.data);
@@ -1287,7 +1365,7 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
         'Auth-Token': authToken || '',
         'Content-Type': 'application/json'
       },
-      timeout: 10000
+      timeout: 30000
     });
     
     console.log('QR scan response:', response.data);
@@ -1331,14 +1409,14 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       };
     }
     
-    // Use the proxy server to make the unscan request
+    // Use the proxy server to make the unscan request with the correct parameter
     const proxyURL = await getCurrentProxyURL();
     const response = await axios.get(`${proxyURL}/scan/${eventId}/${scanCode}?unscan=1`, {
       headers: {
         'Auth-Token': authToken || '',
         'Content-Type': 'application/json'
       },
-      timeout: 10000
+      timeout: 30000
     });
     
     console.log('QR unscan response:', response.data);
@@ -1351,6 +1429,9 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       const status = error.response.status;
       const data = error.response.data;
       
+      console.log('Unscan error response status:', status);
+      console.log('Unscan error response data:', JSON.stringify(data, null, 2));
+      
       // Check if data is nested in a 'details' object
       const responseData = data.details || data;
       
@@ -1362,11 +1443,255 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       };
     }
     
-    return null;
+    return {
+      error: true,
+      msg: error.message || 'Failed to unscan ticket',
+      status: 500
+    };
   }
 };
 
 // Export storage functions for testing
 export { getStorageItem, setStorageItem, removeStorageItem };
+
+export const getGroupTickets = async (eventId: string, qrData: string): Promise<any> => {
+  try {
+    // First validate the ticket to get purchaser info
+    const validation = await validateQRCode(eventId, qrData);
+    
+    if (!validation) {
+      return {
+        error: true,
+        msg: 'Failed to validate ticket'
+      };
+    }
+    
+    // Extract purchaser information - even from error responses
+    let purchaserEmail = null;
+    let purchaserName = null;
+    let purchaserBookingId = null;
+    
+    // Check if we have ticket info (can be present even in error responses)
+    if (validation.msg && typeof validation.msg === 'object' && 'info' in validation.msg) {
+      const info = validation.msg.info;
+      purchaserEmail = info?.email;
+      purchaserName = info?.fullname;
+      purchaserBookingId = info?.booking_id;
+    }
+    
+    // If validation failed but we don't have purchaser info, it's a real error
+    if (validation.error && !purchaserEmail && !purchaserName && !purchaserBookingId) {
+      return {
+        error: true,
+        msg: typeof validation.msg === 'string' 
+          ? validation.msg 
+          : validation.msg?.message || 'Invalid ticket for group scan'
+      };
+    }
+    
+    // If we don't have purchaser info by now, we can't proceed
+    if (!purchaserEmail && !purchaserName && !purchaserBookingId) {
+      return {
+        error: true,
+        msg: 'Cannot identify purchaser for group scan'
+      };
+    }
+    
+    console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId });
+    
+    // Get all attendees for this event
+    const proxyURL = await getCurrentProxyURL();
+    const response = await axios.get(`${proxyURL}/events/${eventId}/guests`, {
+      headers: {
+        'Auth-Token': authToken || '',
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+    
+    if (!response.data) {
+      throw new Error('No response data from guest list API');
+    }
+    
+    // Extract guests from response
+    let allGuests = [];
+    if (response.data.msg && Array.isArray(response.data.msg)) {
+      allGuests = response.data.msg;
+    } else if (Array.isArray(response.data)) {
+      allGuests = response.data;
+    } else {
+      throw new Error('Unexpected guest list response format');
+    }
+    
+    console.log('Total guests found:', allGuests.length);
+    
+    // Filter attendees by same purchaser email, name, or booking ID
+    const groupTickets = allGuests.filter((attendee: any) => {
+      if (purchaserBookingId && attendee.booking_id === purchaserBookingId) {
+        return true;
+      }
+      if (purchaserEmail && attendee.email === purchaserEmail) {
+        return true;
+      }
+      if (purchaserName && attendee.fullname === purchaserName) {
+        return true;
+      }
+      return false;
+    });
+    
+    console.log('Group tickets found:', groupTickets.length);
+    
+    // Map to consistent format
+    const formattedTickets = groupTickets.map((ticket: any) => ({
+      id: ticket.id || ticket.ticket_id || ticket.reference_num,
+      name: ticket.fullname || ticket.name || 'Guest',
+      email: ticket.email || 'No email',
+      ticketType: ticket.ticket_title || ticket.ticketType || 'General Admission',
+      isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || ticket.scannedIn || false,
+      qrCode: ticket.qrCode || ticket.ticket_identifier || ticket.reference_num || ticket.id
+    }));
+    
+    console.log('Formatted tickets:', formattedTickets);
+    
+    return {
+      success: true,
+      tickets: formattedTickets,
+      purchaser: {
+        email: purchaserEmail,
+        name: purchaserName,
+        bookingId: purchaserBookingId
+      }
+    };
+    
+  } catch (error) {
+    console.error('Group tickets error:', error);
+    
+    // Return mock data for testing if API fails
+    if (qrData.startsWith('MOCK_QR_')) {
+      return {
+        success: true,
+        tickets: [
+          { id: 'mock1', name: 'John Smith', email: 'john@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_001' },
+          { id: 'mock2', name: 'Jane Smith', email: 'jane@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_002' },
+          { id: 'mock3', name: 'Bob Smith', email: 'bob@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_003' }
+        ],
+        purchaser: {
+          email: 'john@example.com',
+          name: 'John Smith',
+          bookingId: 'MOCK_BOOKING_123'
+        }
+      };
+    }
+    
+    return {
+      error: true,
+      msg: error instanceof Error ? error.message : 'Failed to get group tickets'
+    };
+  }
+};
+
+export const scanGroupTickets = async (eventId: string, ticketIds: string[]): Promise<any> => {
+  try {
+    const scanPromises = ticketIds.map(ticketId => 
+      scanQRCode(eventId, ticketId)
+    );
+    
+    const results = await Promise.allSettled(scanPromises);
+    
+    const successful = results.filter(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        // Handle both string and object message types
+        if (typeof result.value.msg === 'string') {
+          return !result.value.error;
+        } else if (result.value.msg && typeof result.value.msg === 'object') {
+          return !result.value.error && result.value.msg.message !== undefined;
+        }
+      }
+      return false;
+    }).length;
+    
+    const failed = results.length - successful;
+    
+    return {
+      success: true,
+      total: results.length,
+      successful,
+      failed,
+      msg: successful > 0 ? 'Group scan processed successfully' : 'Failed to process group scan',
+      results: results.map(r => {
+        if (r.status === 'fulfilled' && r.value) {
+          return {
+            ...r.value,
+            msg: typeof r.value.msg === 'string' ? r.value.msg : r.value.msg?.message
+          };
+        }
+        return {
+          error: true,
+          msg: 'Failed to process ticket',
+          status: 500
+        };
+      })
+    };
+    
+  } catch (error) {
+    console.error('Group scan error:', error);
+    return {
+      error: true,
+      msg: error instanceof Error ? error.message : 'Failed to scan group tickets'
+    };
+  }
+};
+
+export const unscanGroupTickets = async (eventId: string, ticketIds: string[]): Promise<any> => {
+  try {
+    const unscanPromises = ticketIds.map(ticketId => 
+      unscanQRCode(eventId, ticketId)
+    );
+    
+    const results = await Promise.allSettled(unscanPromises);
+    
+    const successful = results.filter(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        // Handle both string and object message types
+        if (typeof result.value.msg === 'string') {
+          return !result.value.error;
+        } else if (result.value.msg && typeof result.value.msg === 'object') {
+          return !result.value.error && result.value.msg.message !== undefined;
+        }
+      }
+      return false;
+    }).length;
+    
+    const failed = results.length - successful;
+    
+    return {
+      success: true,
+      total: results.length,
+      successful,
+      failed,
+      msg: successful > 0 ? 'Group unscan processed successfully' : 'Failed to process group unscan',
+      results: results.map(r => {
+        if (r.status === 'fulfilled' && r.value) {
+          return {
+            ...r.value,
+            msg: typeof r.value.msg === 'string' ? r.value.msg : r.value.msg?.message
+          };
+        }
+        return {
+          error: true,
+          msg: 'Failed to process ticket unscan',
+          status: 500
+        };
+      })
+    };
+    
+  } catch (error) {
+    console.error('Group unscan error:', error);
+    return {
+      error: true,
+      msg: error instanceof Error ? error.message : 'Failed to unscan group tickets'
+    };
+  }
+};
 
 export default api; 
