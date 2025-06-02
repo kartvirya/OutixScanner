@@ -1,27 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Switch, SafeAreaView, Modal } from "react-native";
-import { Bell, Paintbrush, Lock, HelpCircle, Info, ChevronRight, LogOut, Settings } from "lucide-react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, SafeAreaView, Switch } from "react-native";
+import { Paintbrush, LogOut, User } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
 import { getUserProfile, logout, UserProfile } from "../../services/api";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import UserProfileTest from "../../components/UserProfileTest";
-
-interface SettingsOption {
-  id: number;
-  icon: React.ReactNode;
-  label: string;
-  badge: string | null;
-  action: () => void;
-}
 
 export default function Profile() {
   const { colors, isDarkMode, toggleTheme } = useTheme();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showProfileTest, setShowProfileTest] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -31,7 +18,6 @@ export default function Profile() {
         setUser(userData);
       } catch (err) {
         console.error("Error fetching user profile:", err);
-        setError("Failed to load profile data");
       } finally {
         setLoading(false);
       }
@@ -55,8 +41,18 @@ export default function Profile() {
           onPress: async () => {
             setLoading(true);
             try {
+              console.log('Starting logout process...');
               await logout();
+              console.log('Logout completed, redirecting...');
+              
+              // Force redirect to index which will check auth and redirect to login
               router.replace("/");
+              
+              // Also try to force a complete navigation reset
+              setTimeout(() => {
+                router.replace("/auth/login");
+              }, 100);
+              
             } catch (err) {
               console.error("Logout error:", err);
               Alert.alert("Error", "Failed to log out. Please try again.");
@@ -69,211 +65,72 @@ export default function Profile() {
     );
   };
 
-  const handleThemeChange = () => {
-    toggleTheme();
-  };
-
-  const handleNotificationsToggle = () => {
-    setNotificationsEnabled(!notificationsEnabled);
-    AsyncStorage.setItem('notifications_enabled', (!notificationsEnabled).toString())
-      .catch(err => console.error("Error saving notification preference:", err));
-  };
-
-  const handleEditProfile = () => {
-    Alert.alert("Coming Soon", "Profile editing will be available in the next update.");
-  };
-
-  const handlePrivacySettings = () => {
-    Alert.alert("Privacy Settings", "Manage your privacy settings and data sharing preferences.");
-  };
-
-  const handleHelp = () => {
-    Alert.alert("Help & Support", "Contact support at support@outix.co or call us at 1-800-OUTIX.");
-  };
-
-  const handleAbout = () => {
-    Alert.alert("About OutixScanner", "Version 1.0.0\n\nOutixScanner is a powerful tool for event management and ticket scanning.");
-  };
-
-  const settingsOptions: SettingsOption[] = [
-    { 
-      id: 1, 
-      icon: <Bell size={16} color={colors.primary} />, 
-      label: "Notifications", 
-      badge: notificationsEnabled ? "On" : "Off",
-      action: handleNotificationsToggle
-    },
-    { 
-      id: 2, 
-      icon: <Paintbrush size={16} color={colors.primary} />, 
-      label: "Appearance", 
-      badge: isDarkMode ? "Dark" : "Light",
-      action: handleThemeChange
-    },
-    { 
-      id: 3, 
-      icon: <Lock size={16} color={colors.primary} />, 
-      label: "Privacy", 
-      badge: null,
-      action: handlePrivacySettings
-    },
-    { 
-      id: 4, 
-      icon: <HelpCircle size={16} color={colors.primary} />, 
-      label: "Help & Support", 
-      badge: null,
-      action: handleHelp
-    },
-    { 
-      id: 5, 
-      icon: <Info size={16} color={colors.primary} />, 
-      label: "About", 
-      badge: "v1.0.0",
-      action: handleAbout
-    },
-    { 
-      id: 6, 
-      icon: <Settings size={16} color={colors.primary} />, 
-      label: "Test Profile API", 
-      badge: null,
-      action: () => setShowProfileTest(true)
-    },
-  ];
-
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
-      </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
-  const renderSettingsItem = (item: SettingsOption) => (
-    <TouchableOpacity 
-      key={item.id} 
-      style={[styles.settingsItem, { borderBottomColor: colors.border }]}
-      onPress={item.action}
-    >
-      <View style={styles.settingsItemLeft}>
-        <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(255,107,0,0.2)' : 'rgba(255,107,0,0.1)' }]}>
-          {item.icon}
-        </View>
-        <Text style={[styles.settingsLabel, { color: colors.text }]}>{item.label}</Text>
-      </View>
-      
-      <View style={styles.settingsItemRight}>
-        {item.id === 1 ? (
-          <Switch 
-            value={notificationsEnabled}
-            onValueChange={handleNotificationsToggle}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.card}
-          />
-        ) : (
-          <>
-            {item.badge && <Text style={[styles.badge, { color: colors.secondary }]}>{item.badge}</Text>}
-            <ChevronRight size={16} color={colors.secondary} />
-          </>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={[styles.scrollView, { backgroundColor: colors.background }]} contentContainerStyle={styles.scrollContent}>
-      <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
-        <View style={styles.profileImageContainer}>
-          {user?.profileImage ? (
-            <Image source={{ uri: user.profileImage }} style={styles.profileImage} />
-          ) : (
-            <View style={[
-              styles.profileImagePlaceholder, 
-              { 
-                backgroundColor: colors.primary,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.2,
-                shadowRadius: 4,
-                elevation: 3,
-              }
-            ]}>
-              <Text style={styles.profileImagePlaceholderText}>
-                {user?.name ? user.name.split(" ").map(name => name[0]).join("") : "OS"}
-              </Text>
+      <View style={styles.content}>
+        {/* Profile Section */}
+        <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
+          <View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
+            <User size={48} color="#FFFFFF" />
+          </View>
+          
+          <Text style={[styles.userName, { color: colors.text }]}>
+            {user?.name || "Outix Scanner"}
+          </Text>
+          <Text style={[styles.userEmail, { color: colors.secondary }]}>
+            {user?.email || "scanner@outix.co"}
+          </Text>
+          <Text style={[styles.userRole, { color: colors.primary }]}>
+            {user?.role || "Event Manager"}
+          </Text>
+        </View>
+
+        {/* Settings Section */}
+        <View style={[styles.settingsSection, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
+          
+          {/* Theme Toggle */}
+          <View style={[styles.settingsItem, { borderBottomColor: colors.border }]}>
+            <View style={styles.settingsItemLeft}>
+              <View style={[styles.iconContainer, { backgroundColor: colors.primary + '20' }]}>
+                <Paintbrush size={20} color={colors.primary} />
+              </View>
+              <Text style={[styles.settingsLabel, { color: colors.text }]}>Appearance</Text>
             </View>
-          )}
-        </View>
-        
-          <Text style={[styles.userName, { color: colors.text }]}>{user?.name || "Outix Scanner"}</Text>
-          <Text style={[styles.userEmail, { color: colors.secondary }]}>{user?.email || "Outix@thebend.co"}</Text>
-          <Text style={[styles.userRole, { color: colors.primary }]}>{user?.role || "Event Manager"}</Text>
-        
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsCreated || 12}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Created</Text>
-          </View>
-          
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          
-          <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>{user?.eventsAttended || 8}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Attended</Text>
+            <View style={styles.settingsItemRight}>
+              <Text style={[styles.themeLabel, { color: colors.secondary }]}>
+                {isDarkMode ? "Dark" : "Light"}
+              </Text>
+              <Switch 
+                value={isDarkMode}
+                onValueChange={toggleTheme}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.card}
+              />
+            </View>
           </View>
         </View>
-        
+
+        {/* Logout Button */}
         <TouchableOpacity 
-          style={[styles.editButton, { backgroundColor: colors.background }]}
-          onPress={handleEditProfile}
+          style={[styles.logoutButton, { backgroundColor: colors.card, borderColor: colors.error }]}
+          onPress={handleLogout}
         >
-          <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit Profile</Text>
+          <LogOut size={20} color={colors.error} />
+          <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
         </TouchableOpacity>
       </View>
-      
-      <View style={styles.settingsSection}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
-        <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
-            {settingsOptions.map(renderSettingsItem)}
-        </View>
-      </View>
-      
-      <TouchableOpacity 
-        style={[
-          styles.logoutButton, 
-          { 
-            backgroundColor: colors.card,
-            borderWidth: isDarkMode ? 1 : 0,
-            borderColor: colors.error
-          }
-        ]}
-        onPress={handleLogout}
-      >
-          <LogOut size={16} color={colors.error} style={styles.logoutIcon} />
-        <Text style={[styles.logoutText, { color: colors.error }]}>Log Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
-    
-    {/* Profile Test Modal */}
-    <Modal
-      visible={showProfileTest}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowProfileTest(false)}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-          <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Profile API Test</Text>
-          <TouchableOpacity onPress={() => setShowProfileTest(false)}>
-            <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '600' }}>Done</Text>
-          </TouchableOpacity>
-        </View>
-        <UserProfileTest />
-      </SafeAreaView>
-    </Modal>
     </SafeAreaView>
   );
 }
@@ -282,11 +139,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 16,
+    padding: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -294,156 +149,116 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
   },
   profileSection: {
-    borderRadius: 12,
-    marginHorizontal: 16,
-    padding: 20,
+    borderRadius: 16,
+    padding: 32,
     alignItems: "center",
+    marginBottom: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  profileImageContainer: {
-    marginBottom: 16,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  profileImagePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  profileAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
-  },
-  profileImagePlaceholderText: {
-    color: "#FFFFFF",
-    fontSize: 36,
-    fontWeight: "bold",
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   userName: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 4,
+    marginBottom: 8,
     textAlign: "center",
+    letterSpacing: 0.5,
   },
   userEmail: {
     fontSize: 16,
-    marginBottom: 4,
+    marginBottom: 8,
     textAlign: "center",
+    fontWeight: "500",
   },
   userRole: {
     fontSize: 14,
-    marginBottom: 16,
     textAlign: "center",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    marginBottom: 20,
-    width: "80%",
-    justifyContent: "center",
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    marginHorizontal: 20,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-  },
-  editButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-  editButtonText: {
     fontWeight: "600",
   },
   settingsSection: {
-    marginTop: 24,
-    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  settingsContainer: {
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    letterSpacing: 0.5,
   },
   settingsItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
   },
   settingsItemLeft: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   settingsItemRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
   settingsLabel: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: "600",
   },
-  badge: {
-    fontSize: 14,
-    marginRight: 8,
+  themeLabel: {
+    fontSize: 16,
+    marginRight: 12,
+    fontWeight: "500",
   },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 24,
-    marginBottom: 40,
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 12,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  logoutIcon: {
-    marginRight: 8,
+    shadowRadius: 8,
+    elevation: 4,
   },
   logoutText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginLeft: 12,
+    letterSpacing: 0.5,
   },
 }); 

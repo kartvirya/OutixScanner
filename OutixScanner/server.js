@@ -87,8 +87,15 @@ app.get('/api/events/:eventId/guests', async (req, res) => {
     
     console.log(`Fetching guest list for event ${eventId} with token: ${authToken ? 'Token exists' : 'No token'}`);
     
-    // Make the request to the actual API - corrected URL pattern
-    const url = `${BASE_URL}/guestlist/${eventId}`;
+    // Build URL with query parameters
+    let url = `${BASE_URL}/guestlist/${eventId}`;
+    
+    // Add query parameters if they exist
+    const queryString = new URLSearchParams(req.query).toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+    
     console.log(`Making request to: ${url}`);
     
     const response = await axios.get(url, {
@@ -425,8 +432,15 @@ app.get('/api/guestlist/:eventId', async (req, res) => {
     
     console.log(`Using alternative endpoint to fetch guest list for event ${eventId}`);
     
-    // Try with alternative URL pattern
-    const url = `${BASE_URL}/guestlist/${eventId}`;
+    // Build URL with query parameters
+    let url = `${BASE_URL}/guestlist/${eventId}`;
+    
+    // Add query parameters if they exist
+    const queryString = new URLSearchParams(req.query).toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+    
     console.log(`Making request to: ${url}`);
     
     const response = await axios.get(url, {

@@ -25,7 +25,8 @@ import {
   CheckCircle,
   UserCheck,
   User,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { 
@@ -163,9 +164,9 @@ const mockEvents: { [key: string]: Event } = {
   },
 };
 
-// Tab names
-type TabName = 'Overview' | 'Analytics' | 'Tickets' | 'Guest List' | 'Attendance';
-const tabs: TabName[] = ['Overview', 'Analytics', 'Tickets', 'Guest List', 'Attendance'];
+// Tab names - removing Guest List and Attendance
+type TabName = 'Overview' | 'Analytics' | 'Tickets';
+const tabs: TabName[] = ['Overview', 'Analytics', 'Tickets'];
 
 export default function EventDetail() {
   const { colors, isDarkMode } = useTheme();
@@ -795,14 +796,13 @@ export default function EventDetail() {
   const attendancePercentage = totalGuestsCount ? Math.round((checkedInCount / totalGuestsCount) * 100) : 0;
 
   const renderTabBar = () => (
-    <View style={[styles.tabBar, { backgroundColor: colors.card }]}>
+    <View style={[styles.tabBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
       {tabs.map((tab) => (
         <TouchableOpacity
           key={tab}
           style={[
             styles.tab,
-            activeTab === tab && styles.activeTab,
-            activeTab === tab && { backgroundColor: colors.primary }
+            activeTab === tab && [styles.activeTab, { backgroundColor: colors.primary }]
           ]}
           onPress={() => {
             feedback.buttonPress();
@@ -810,7 +810,7 @@ export default function EventDetail() {
           }}
         >
           <Text style={[
-              styles.tabText,
+            styles.tabText,
             { color: activeTab === tab ? '#FFFFFF' : colors.text }
           ]}>
             {tab}
@@ -825,74 +825,29 @@ export default function EventDetail() {
       case 'Overview':
         return (
           <View style={styles.tabContent}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Details</Text>
-              
-              <View style={{ padding: 16 }}>
-                <View style={styles.detailRow}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(255,149,0,0.2)' : 'rgba(255,149,0,0.1)' }]}>
-                    <Calendar size={18} color="#FF9500" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={[styles.detailLabel, { color: colors.secondary }]}>Date</Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]}>{event?.date}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.detailRow}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(0,122,255,0.2)' : 'rgba(0,122,255,0.1)' }]}>
-                    <Clock size={18} color="#007AFF" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={[styles.detailLabel, { color: colors.secondary }]}>Time</Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]}>{event?.time}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.detailRow}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(88,86,214,0.2)' : 'rgba(88,86,214,0.1)' }]}>
-                    <MapPin size={18} color="#5856D6" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={[styles.detailLabel, { color: colors.secondary }]}>Location</Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]}>{event?.location}</Text>
-                  </View>
-                </View>
-              </View>
-              
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              
-              <View style={{ padding: 16 }}>
-                <Text style={[styles.subSectionTitle, { color: colors.text }]}>Description</Text>
-                <Text style={[styles.description, { color: colors.text }]}>
-                  {event?.description || 'No description available.'}
-                </Text>
-              </View>
-            </View>
-            
             <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Stats</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Overview</Text>
               
-              <View style={styles.statRow}>
-                <View style={styles.statItem}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(255,149,0,0.2)' : 'rgba(255,149,0,0.1)' }]}>
-                    <Users size={20} color="#FF9500" />
+              <View style={styles.statsContainer}>
+                <View style={[styles.statCard, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.2)' }]}>
+                    <Users size={24} color="#FF9500" />
                   </View>
                   <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Guests</Text>
                 </View>
                 
-                <View style={styles.statItem}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(52,199,89,0.2)' : 'rgba(52,199,89,0.1)' }]}>
-                    <UserCheck size={20} color="#34C759" />
+                <View style={[styles.statCard, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
+                    <UserCheck size={24} color="#34C759" />
                   </View>
                   <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
                 </View>
                 
-                <View style={styles.statItem}>
-                  <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(0,122,255,0.2)' : 'rgba(0,122,255,0.1)' }]}>
-                    <BarChart size={20} color="#007AFF" />
+                <View style={[styles.statCard, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.2)' }]}>
+                    <BarChart size={24} color="#007AFF" />
                   </View>
                   <Text style={[styles.statValue, { color: colors.text }]}>{attendancePercentage}%</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Attendance</Text>
@@ -900,42 +855,63 @@ export default function EventDetail() {
               </View>
             </View>
 
-            {/* Scanner Actions */}
-            <View style={[styles.scannerActionsCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Scanner Actions</Text>
+            {/* Quick Actions */}
+            <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
               
-              <View style={styles.scannerButtonsRow}>
+              <View style={styles.actionGrid}>
                 <TouchableOpacity 
-                  style={[styles.scannerActionButton, { backgroundColor: colors.primary }]}
+                  style={[styles.actionCard, { backgroundColor: colors.primary }]}
                   onPress={() => {
                     feedback.buttonPress();
                     handleOpenScanner('validate');
                   }}
                 >
-                  <QrCode size={20} color="#FFFFFF" />
-                  <Text style={styles.scannerActionButtonText}>Validate Ticket</Text>
+                  <View style={styles.actionIconContainer}>
+                    <QrCode size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.actionCardText}>Scan Ticket</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={[styles.scannerActionButton, { backgroundColor: '#34C759' }]}
+                  style={[styles.actionCard, { backgroundColor: '#34C759' }]}
                   onPress={() => {
                     feedback.buttonPress();
-                    handleOpenScanner('scanIn');
+                    router.push(`/(tabs)/guest-list/${eventId}`);
                   }}
                 >
-                  <UserCheck size={20} color="#FFFFFF" />
-                  <Text style={styles.scannerActionButtonText}>Quick Check In</Text>
+                  <View style={styles.actionIconContainer}>
+                    <Users size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.actionCardText}>Guest List</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.actionGrid}>
+                <TouchableOpacity 
+                  style={[styles.actionCard, { backgroundColor: '#FF6B35' }]}
+                  onPress={() => {
+                    feedback.buttonPress();
+                    router.push(`/(tabs)/attendance/${eventId}`);
+                  }}
+                >
+                  <View style={styles.actionIconContainer}>
+                    <UserCheck size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.actionCardText}>Attendance</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={[styles.scannerActionButton, { backgroundColor: '#FF6B35' }]}
+                  style={[styles.actionCard, { backgroundColor: '#9C27B0' }]}
                   onPress={() => {
                     feedback.buttonPress();
-                    handleOpenScanner('scanOut');
+                    setActiveTab('Analytics');
                   }}
                 >
-                  <User size={20} color="#FFFFFF" />
-                  <Text style={styles.scannerActionButtonText}>Quick Check Out</Text>
+                  <View style={styles.actionIconContainer}>
+                    <BarChart size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.actionCardText}>Analytics</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -948,20 +924,20 @@ export default function EventDetail() {
             <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Analytics</Text>
               
-              <View style={[styles.statRow, { padding: 16 }]}>
-                <View style={styles.statItem}>
+              <View style={[styles.statsContainer, { padding: 16 }]}>
+                <View style={styles.statCard}>
                   <Users size={24} color={colors.primary} />
                   <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Registered</Text>
                 </View>
                 
-                <View style={styles.statItem}>
+                <View style={styles.statCard}>
                   <UserCheck size={24} color="#34C759" />
                   <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
                 </View>
                 
-                <View style={styles.statItem}>
+                <View style={styles.statCard}>
                   <DollarSign size={24} color={colors.primary} />
                   <Text style={[styles.statValue, { color: colors.text }]}>${event?.revenue || 0}</Text>
                   <Text style={[styles.statLabel, { color: colors.secondary }]}>Revenue</Text>
@@ -987,19 +963,19 @@ export default function EventDetail() {
                     <UserCheck color="#34C759" size={20} />
                     <View style={styles.attendanceStatText}>
                       <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
-                      {checkedInCount}
-                    </Text>
+                        {checkedInCount}
+                      </Text>
                       <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
                         Present
                       </Text>
-                  </View>
+                    </View>
                   </View>
                   <View style={styles.attendanceStatItem}>
                     <User color="#FF6B35" size={20} />
                     <View style={styles.attendanceStatText}>
                       <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
                         {totalGuestsCount - checkedInCount}
-                    </Text>
+                      </Text>
                       <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
                         Not Arrived
                       </Text>
@@ -1062,215 +1038,6 @@ export default function EventDetail() {
           </View>
         );
         
-      case 'Guest List':
-        return (
-          <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {renderEventHeader()}
-            {renderTabBar()}
-            
-            <View style={[styles.infoCard, { backgroundColor: colors.card, flex: 1 }]}>
-              <View style={[styles.cardHeader, { padding: 16, paddingBottom: 12 }]}>
-                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>All Registered Guests</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.secondary }]}>
-                  {totalGuestsCount} guests registered
-                </Text>
-                <View style={styles.headerButtonGroup}>
-                  <TouchableOpacity 
-                    style={[styles.networkButton, { backgroundColor: '#FF6B35', marginRight: 8 }]}
-                    onPress={testNetworkConnectivity}
-                  >
-                    <Settings size={14} color="#FFFFFF" />
-                    <Text style={styles.networkButtonText}>Network</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.testButton, { backgroundColor: colors.secondary, marginRight: 8 }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      generateTestQRCode();
-                    }}
-                  >
-                    <QrCode size={14} color="#FFFFFF" />
-                    <Text style={styles.testButtonText}>Test QR</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.scanButton, { backgroundColor: colors.primary }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      handleOpenScanner('validate');
-                    }}
-                  >
-                    <QrCode size={16} color="#FFFFFF" />
-                    <Text style={styles.scanButtonText}>Scan Ticket</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {guestList && guestList.length > 0 ? (
-                <FlatList
-                  data={guestList}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <View style={[styles.guestItem, { backgroundColor: colors.card, marginHorizontal: 16 }]}>
-                      <View style={styles.guestAvatar}>
-                        <User size={20} color={colors.primary} />
-                      </View>
-                      <View style={styles.guestDetails}>
-                        <Text style={[styles.guestName, { color: colors.text }]}>{item.name}</Text>
-                        <Text style={[styles.guestEmail, { color: colors.secondary }]}>{item.email}</Text>
-                        <View style={styles.guestTypeRow}>
-                          <Text style={[styles.guestTicketType, { backgroundColor: colors.primary, color: '#FFFFFF' }]}>
-                            {item.ticketType}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.guestStatus}>
-                        {item.scannedIn ? (
-                          <View style={[styles.statusBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
-                            <CheckCircle size={16} color="#2ecc71" />
-                            <Text style={[styles.statusText, { color: '#2ecc71' }]}>Checked In</Text>
-                            {item.scanInTime && (
-                              <Text style={[styles.statusTime, { color: '#2ecc71' }]}>{item.scanInTime}</Text>
-                            )}
-                          </View>
-                        ) : (
-                          <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 107, 53, 0.2)' }]}>
-                            <User size={16} color="#FF6B35" />
-                            <Text style={[styles.statusText, { color: '#FF6B35' }]}>Not Arrived</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  )}
-                  style={[styles.guestList, { backgroundColor: colors.background }]}
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                />
-              ) : (
-                <View style={[styles.emptyGuestContainer, { padding: 30 }]}>
-                  <Users size={40} color={colors.secondary} opacity={0.5} />
-                  <Text style={[styles.emptyGuestText, { color: colors.text }]}>No guests registered</Text>
-                  <Text style={[styles.emptyGuestSubtext, { color: colors.secondary }]}>
-                    No one has registered for this event yet.
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.emptyGuestButton, { backgroundColor: colors.primary }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      refreshGuestList();
-                    }}
-                  >
-                    <Users size={16} color="#FFFFFF" />
-                    <Text style={styles.emptyGuestButtonText}>Refresh List</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-        
-      case 'Attendance':
-        const checkedInGuestsForTab = checkedInGuests; // Use the dedicated checked-in guests state
-        return (
-          <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {renderEventHeader()}
-            {renderTabBar()}
-            
-            <View style={[styles.infoCard, { backgroundColor: colors.card, flex: 1 }]}>
-              <View style={[styles.cardHeader, { padding: 16, paddingBottom: 12 }]}>
-                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Current Attendance</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.secondary }]}>
-                  {checkedInGuestsForTab.length} of {totalGuestsCount} guests checked in ({attendancePercentage}%)
-                </Text>
-                <View style={styles.headerButtonGroup}>
-                  <TouchableOpacity 
-                    style={[styles.refreshButton, { backgroundColor: colors.secondary, marginRight: 8 }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      fetchCheckedInGuests(); // Fetch checked-in guests specifically
-                    }}
-                  >
-                    <Settings size={14} color="#FFFFFF" />
-                    <Text style={styles.refreshButtonText}>Refresh</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.scanButton, { backgroundColor: '#34C759' }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      handleOpenScanner('scanIn');
-                    }}
-                  >
-                    <UserCheck size={16} color="#FFFFFF" />
-                    <Text style={styles.scanButtonText}>Check In</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.scanButton, { backgroundColor: '#FF6B35', marginLeft: 8 }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      handleOpenScanner('scanOut');
-                    }}
-                  >
-                    <User size={16} color="#FFFFFF" />
-                    <Text style={styles.scanButtonText}>Check Out</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {checkedInGuestsForTab.length > 0 ? (
-                <FlatList
-                  data={checkedInGuestsForTab}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <View style={[styles.attendeeItem, { backgroundColor: colors.card, marginHorizontal: 16 }]}>
-                      <View style={styles.attendeeAvatar}>
-                        <UserCheck size={20} color="#34C759" />
-                      </View>
-                      <View style={styles.attendeeDetails}>
-                        <Text style={[styles.attendeeName, { color: colors.text }]}>{item.name}</Text>
-                        <Text style={[styles.attendeeEmail, { color: colors.secondary }]}>{item.email}</Text>
-                        <View style={styles.attendeeTypeRow}>
-                          <Text style={[styles.attendeeTicketType, { backgroundColor: colors.primary, color: '#FFFFFF' }]}>
-                            {item.ticketType}
-                          </Text>
-                          {item.scanInTime && (
-                            <Text style={[styles.checkInTime, { color: '#34C759' }]}>
-                              Checked in at {item.scanInTime}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <View style={styles.attendeeStatus}>
-                        <View style={[styles.statusBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
-                          <CheckCircle size={16} color="#2ecc71" />
-                          <Text style={[styles.statusText, { color: '#2ecc71' }]}>Present</Text>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                  style={[styles.attendeeList, { backgroundColor: colors.background }]}
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                />
-              ) : (
-                <View style={[styles.emptyAttendanceContainer, { padding: 30 }]}>
-                  <UserCheck size={40} color={colors.secondary} opacity={0.5} />
-                  <Text style={[styles.emptyAttendanceText, { color: colors.text }]}>No one checked in yet</Text>
-                  <Text style={[styles.emptyAttendanceSubtext, { color: colors.secondary }]}>
-                    Start scanning tickets to see who's attending the event.
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.emptyAttendanceButton, { backgroundColor: '#34C759' }]}
-                    onPress={() => {
-                      feedback.buttonPress();
-                      handleOpenScanner('scanIn');
-                    }}
-                  >
-                    <QrCode size={16} color="#FFFFFF" />
-                    <Text style={styles.emptyAttendanceButtonText}>Start Checking In</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-        
       default:
         return null;
     }
@@ -1279,46 +1046,27 @@ export default function EventDetail() {
   // Content for each tab is now rendered separately
   const renderEventHeader = () => (
     <View style={[styles.header, { backgroundColor: colors.card }]}>
-      <Text style={[styles.eventTitle, { color: colors.text }]}>{event!.title}</Text>
       <View style={styles.eventMeta}>
         <View style={styles.metaItem}>
-          <Calendar size={14} color={colors.primary} />
+          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+            <Calendar size={16} color="#FF9500" />
+          </View>
           <Text style={[styles.metaText, { color: colors.text }]}>{event!.date}</Text>
         </View>
         <View style={styles.metaItem}>
-          <Clock size={14} color={colors.primary} />
+          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+            <Clock size={16} color="#007AFF" />
+          </View>
           <Text style={[styles.metaText, { color: colors.text }]}>{event!.time}</Text>
         </View>
         <View style={styles.metaItem}>
-          <MapPin size={14} color={colors.primary} />
+          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(255, 45, 85, 0.1)' }]}>
+            <MapPin size={16} color="#FF2D55" />
+          </View>
           <Text style={[styles.metaText, { color: colors.text, flex: 1 }]}>
             {event!.location}
           </Text>
         </View>
-      </View>
-      
-      <View style={styles.headerButtons}>
-        <TouchableOpacity 
-          style={[styles.headerButton, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            feedback.buttonPress();
-            setActiveTab('Attendance');
-          }}
-        >
-          <Users size={16} color="#FFFFFF" />
-          <Text style={styles.headerButtonText}>Guest List</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.headerButton, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            feedback.buttonPress();
-            handleOpenScanner('validate');
-          }}
-        >
-          <QrCode size={16} color="#FFFFFF" />
-          <Text style={styles.headerButtonText}>Scan Ticket</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1525,119 +1273,12 @@ export default function EventDetail() {
 
   // Render the appropriate content based on the active tab
   const renderContent = () => {
-    if (activeTab === 'Guest List') {
-      // For Guest List tab, we return a FlatList directly to avoid nesting
-      return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {renderEventHeader()}
-          {renderTabBar()}
-          
-          <View style={[styles.infoCard, { backgroundColor: colors.card, flex: 1 }]}>
-            <View style={[styles.cardHeader, { padding: 16, paddingBottom: 12 }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>All Registered Guests</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.secondary }]}>
-                {totalGuestsCount} guests registered
-              </Text>
-              <View style={styles.headerButtonGroup}>
-                <TouchableOpacity 
-                  style={[styles.networkButton, { backgroundColor: '#FF6B35', marginRight: 8 }]}
-                  onPress={testNetworkConnectivity}
-                >
-                  <Settings size={14} color="#FFFFFF" />
-                  <Text style={styles.networkButtonText}>Network</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.testButton, { backgroundColor: colors.secondary, marginRight: 8 }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    generateTestQRCode();
-                  }}
-                >
-                  <QrCode size={14} color="#FFFFFF" />
-                  <Text style={styles.testButtonText}>Test QR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.scanButton, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    handleOpenScanner('validate');
-                  }}
-                >
-                  <QrCode size={16} color="#FFFFFF" />
-                  <Text style={styles.scanButtonText}>Scan Ticket</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            {guestList && guestList.length > 0 ? (
-              <FlatList
-                data={guestList}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={[styles.guestItem, { backgroundColor: colors.card, marginHorizontal: 16 }]}>
-                    <View style={styles.guestAvatar}>
-                      <User size={20} color={colors.primary} />
-                      </View>
-                    <View style={styles.guestDetails}>
-                      <Text style={[styles.guestName, { color: colors.text }]}>{item.name}</Text>
-                      <Text style={[styles.guestEmail, { color: colors.secondary }]}>{item.email}</Text>
-                      <View style={styles.guestTypeRow}>
-                        <Text style={[styles.guestTicketType, { backgroundColor: colors.primary, color: '#FFFFFF' }]}>
-                          {item.ticketType}
-                        </Text>
-                    </View>
-                    </View>
-                    <View style={styles.guestStatus}>
-                      {item.scannedIn ? (
-                        <View style={[styles.statusBadge, { backgroundColor: 'rgba(46, 204, 113, 0.2)' }]}>
-                          <CheckCircle size={16} color="#2ecc71" />
-                          <Text style={[styles.statusText, { color: '#2ecc71' }]}>Checked In</Text>
-                            {item.scanInTime && (
-                            <Text style={[styles.statusTime, { color: '#2ecc71' }]}>{item.scanInTime}</Text>
-                            )}
-                        </View>
-                      ) : (
-                        <View style={[styles.statusBadge, { backgroundColor: 'rgba(255, 107, 53, 0.2)' }]}>
-                          <User size={16} color="#FF6B35" />
-                          <Text style={[styles.statusText, { color: '#FF6B35' }]}>Not Arrived</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                )}
-                style={[styles.guestList, { backgroundColor: colors.background }]}
-                contentContainerStyle={{ paddingBottom: 20 }}
-              />
-            ) : (
-              <View style={[styles.emptyGuestContainer, { padding: 30 }]}>
-                <Users size={40} color={colors.secondary} opacity={0.5} />
-                <Text style={[styles.emptyGuestText, { color: colors.text }]}>No guests registered</Text>
-                <Text style={[styles.emptyGuestSubtext, { color: colors.secondary }]}>
-                  No one has registered for this event yet.
-                </Text>
-                <TouchableOpacity 
-                  style={[styles.emptyGuestButton, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    refreshGuestList();
-                  }}
-                >
-                  <Users size={16} color="#FFFFFF" />
-                  <Text style={styles.emptyGuestButtonText}>Refresh List</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    }
-    
-    // For other tabs, we use ScrollView as they don't contain FlatLists
+    // All remaining tabs use ScrollView as they don't contain FlatLists
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {renderEventHeader()}
         {renderTabBar()}
-        <ScrollView style={styles.scrollContainer}>
+        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           {renderTabContent()}
         </ScrollView>
       </View>
@@ -1651,6 +1292,7 @@ export default function EventDetail() {
         options={{ 
           title: event?.title || "Event Details",
           headerShown: true,
+          headerRight: () => null,
         }}
       />
       
@@ -1701,32 +1343,40 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: 16,
-    marginBottom: 8,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  eventTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    padding: 20,
     marginBottom: 12,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   eventMeta: {
-    marginBottom: 16,
+    gap: 16,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   metaText: {
-    marginLeft: 8,
-    fontSize: 14,
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  metaIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1737,20 +1387,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 2,
+    borderRadius: 8,
+  },
+  activeTab: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tabText: {
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 13,
+    textAlign: 'center',
   },
   tabContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
   infoCard: {
     borderRadius: 12,
@@ -1764,124 +1427,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  detailContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  detailLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-  },
-  subSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  statsCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  statLabel: {
-    fontSize: 14,
-  },
-  attendanceContainer: {
-    marginBottom: 24,
-  },
-  attendanceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 20,
+    letterSpacing: 0.5,
   },
-  attendanceCircle: {
-    width: 60,
-    height: 60,
-    borderWidth: 3,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  attendancePercentage: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  attendanceLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  attendanceStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-  },
-  attendanceStatItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  attendanceStatText: {
-    alignItems: 'center',
-  },
-  attendanceStatValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  attendanceStatLabel: {
+  sectionSubtitle: {
     fontSize: 14,
+    marginBottom: 12,
+    opacity: 0.8,
   },
   cardHeader: {
+    flexDirection: 'column',
+    marginBottom: 8,
+  },
+  headerButtonGroup: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: 12,
   },
   addButton: {
     flexDirection: 'row',
@@ -2101,9 +1664,9 @@ const styles = StyleSheet.create({
   },
   emptyGuestButtonText: {
     color: '#FFFFFF',
-    fontWeight: '500',
-    marginLeft: 8,
-    fontSize: 16,
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 4,
   },
   scannerActionsCard: {
     borderRadius: 12,
@@ -2136,20 +1699,19 @@ const styles = StyleSheet.create({
   },
   emptyAttendanceContainer: {
     alignItems: 'center',
-    padding: 30,
+    justifyContent: 'center',
   },
   emptyAttendanceText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
     marginTop: 16,
-    marginBottom: 8,
     textAlign: 'center',
   },
   emptyAttendanceSubtext: {
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 24,
-    maxWidth: '80%',
+    marginTop: 8,
+    opacity: 0.7,
   },
   emptyAttendanceButton: {
     flexDirection: 'row',
@@ -2213,27 +1775,11 @@ const styles = StyleSheet.create({
     minWidth: 100,
     alignItems: 'flex-end',
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  headerButtonGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   networkButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
     borderRadius: 8,
-  },
-  networkButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
   },
   testButton: {
     flexDirection: 'row',
@@ -2257,9 +1803,6 @@ const styles = StyleSheet.create({
   attendeeList: {
     marginTop: 8,
   },
-  activeTab: {
-    borderRadius: 8,
-  },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2271,5 +1814,175 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginLeft: 4,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+  },
+  syncButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: '45%',
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  statsCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 16,
+    gap: 12,
+  },
+  statCard: {
+    alignItems: 'center',
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  statLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  attendanceContainer: {
+    marginBottom: 24,
+  },
+  attendanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  attendanceCircle: {
+    width: 60,
+    height: 60,
+    borderWidth: 3,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  attendancePercentage: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  attendanceLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  attendanceStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 8,
+  },
+  attendanceStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  attendanceStatText: {
+    alignItems: 'center',
+  },
+  attendanceStatValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  attendanceStatLabel: {
+    fontSize: 14,
+  },
+  actionsCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 12,
+  },
+  actionCard: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  actionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionCardText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+    textAlign: 'center',
   },
 }); 

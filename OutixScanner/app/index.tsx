@@ -15,22 +15,31 @@ export default function Index() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // First check if we already have a token in memory
-        if (isAuthenticated()) {
+        console.log('Checking authentication status...');
+        
+        // Check if user is already authenticated
+        const authenticated = await isAuthenticated();
+        
+        if (authenticated) {
+          console.log('User is already authenticated');
           setIsAuthed(true);
           setIsLoading(false);
           return;
         }
         
-        // If not, attempt to login
+        console.log('User not authenticated, attempting login...');
+        
+        // If not authenticated, attempt to login
         const token = await login();
         
         // If we have a token now, user is authenticated
         if (token) {
+          console.log('Login successful, user authenticated');
           // Store token securely
           await setItem('auth_token', token);
           setIsAuthed(true);
         } else {
+          console.log('Login failed, redirecting to login page');
           // No token, redirect to login
           setIsAuthed(false);
         }

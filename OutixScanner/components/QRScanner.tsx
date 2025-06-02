@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { X, QrCode } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { feedback } from '../services/feedback';
@@ -8,11 +8,14 @@ import { feedback } from '../services/feedback';
 interface QRScannerProps {
   onScan: (data: string) => void;
   onClose: () => void;
+  customHeader?: React.ReactNode;
+  showCloseButton?: boolean;
+  headerTitle?: string;
 }
 
 const { width, height } = Dimensions.get('window');
 
-export default function QRScanner({ onScan, onClose }: QRScannerProps) {
+export default function QRScanner({ onScan, onClose, customHeader, showCloseButton, headerTitle }: QRScannerProps) {
   const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -127,16 +130,22 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       >
         <View style={styles.overlay}>
           {/* Header */}
-          <View style={styles.headerBar}>
-            <TouchableOpacity onPress={() => {
-              feedback.buttonPress();
-              onClose();
-            }} style={styles.closeButton}>
-              <X size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerText}>Scan QR Code</Text>
-            <View style={styles.placeholderRight} />
-          </View>
+          {customHeader ? (
+            customHeader
+          ) : (
+            <View style={styles.headerBar}>
+              {showCloseButton && (
+                <TouchableOpacity onPress={() => {
+                  feedback.buttonPress();
+                  onClose();
+                }} style={styles.closeButton}>
+                  <X size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.headerText}>{headerTitle || 'Scan QR Code'}</Text>
+              <View style={styles.placeholderRight} />
+            </View>
+          )}
           
           {/* Scanner Area */}
           <View style={styles.scannerContainer}>

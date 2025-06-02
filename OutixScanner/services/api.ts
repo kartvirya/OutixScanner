@@ -124,6 +124,9 @@ export const testProxyConnectivity = async (): Promise<{ success: boolean; url: 
 // In-memory token storage (no AsyncStorage dependency)
 let authToken: string | null = null;
 
+// Flag to prevent auto-login after logout
+let isLoggedOut: boolean = false;
+
 // Flag to indicate if AsyncStorage is working
 let isAsyncStorageWorking = true;
 
@@ -254,6 +257,12 @@ const MOCK_JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY
 
 export const login = async (): Promise<string | null> => {
   try {
+    // If user has explicitly logged out, don't auto-restore token
+    if (isLoggedOut) {
+      console.log("User has logged out, not auto-restoring token");
+      return null;
+    }
+    
     // Check if token already exists in storage
     const storedToken = await getStorageItem('auth_token');
     if (storedToken) {
@@ -296,6 +305,7 @@ export const login = async (): Promise<string | null> => {
         const token = response.data.msg.Auth_Token;
         console.log("Got auth token from API");
         authToken = token;
+        isLoggedOut = false; // Reset logout flag on successful login
         
         // Store token in storage
         await setStorageItem('auth_token', token);
@@ -315,6 +325,7 @@ export const login = async (): Promise<string | null> => {
         if (token) {
           console.log("Extracted token from API response");
           authToken = token;
+          isLoggedOut = false; // Reset logout flag on successful login
           await setStorageItem('auth_token', token);
           
           // Store user profile data from response
@@ -346,6 +357,7 @@ export const login = async (): Promise<string | null> => {
     const mockToken = "8934796HSnvLiZIs4087116";
     console.log("Using mock token as fallback");
     authToken = mockToken;
+    isLoggedOut = false; // Reset logout flag on successful login
     await setStorageItem('auth_token', mockToken);
     
     // Store mock user profile data as well
@@ -370,6 +382,7 @@ export const login = async (): Promise<string | null> => {
     // Last resort fallback
     const fallbackToken = "8934796HSnvLiZIs4087116";
     authToken = fallbackToken;
+    isLoggedOut = false; // Reset logout flag on successful login
     
     // Store fallback user profile data as well
     const fallbackUserProfile = {
@@ -791,93 +804,57 @@ export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => 
       }
     }
     
-    console.log("Sending checked-in guest list request with token:", authToken);
+    console.log("Fetching checked-in guests for event:", eventId);
     
-    try {
-      console.log(`Fetching checked-in guests from: /guestlist/${eventId}?checkedin=1`);
-      const proxyURL = await getCurrentProxyURL();
-      const response = await axios.get(`${proxyURL}/guestlist/${eventId}?checkedin=1`, {
-        headers: {
-          'auth-token': authToken,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-      
-      console.log("Checked-in guest list API response status:", response.status);
-      
-      // Log full response data for debugging
-      console.log("Sample checked-in response data:", JSON.stringify(response.data).substring(0, 500));
-      
-      // Check for different response formats
-      if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
-        // Log sample guest data
-        if (response.data.msg.length > 0) {
-          console.log("Sample checked-in guest fields:", Object.keys(response.data.msg[0]));
-        }
-        // Map and add QR codes to guests, ensure they're marked as checked in
-        return response.data.msg.map((guest: any) => ({
-          ...guest,
-          scannedIn: true, // Ensure all guests from this endpoint are marked as checked in
-          checkedIn: true, // Alternative field name
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }));
-      } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
-        // Log available fields
-        console.log("Checked-in guest data fields:", Object.keys(response.data.msg));
-        // Convert object to array if needed
-        const guest = response.data.msg;
-        return [{
-          ...guest,
-          scannedIn: true,
-          checkedIn: true,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }];
-      } else if (Array.isArray(response.data)) {
-        // Log sample guest data
-        if (response.data.length > 0) {
-          console.log("Sample checked-in guest fields:", Object.keys(response.data[0]));
-        }
-        return response.data.map((guest: any) => ({
-          ...guest,
-          scannedIn: true,
-          checkedIn: true,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }));
-      } else if (response.data && typeof response.data === 'object') {
-        // Log available fields
-        console.log("Checked-in response data fields:", Object.keys(response.data));
-        // Handle case where response might be a single object
-        const guest = response.data;
-        return [{
-          ...guest,
-          scannedIn: true,
-          checkedIn: true,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }];
-      }
-      
-      return [];
-    } catch (error) {
-      console.error("Checked-in guest list endpoint failed:", error);
-      
-      console.log("Using mock checked-in guest list data as fallback");
-      // Return mock checked-in attendees when API endpoint fails
-      return [
-        { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, checkedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-        { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, checkedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-        { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: true, checkedIn: true, scanInTime: '08:55 AM', qrCode: 'MOCK_QR_004' },
-      ];
+    // Note: The API doesn't actually filter by checkedin=1 parameter, so we fetch all guests
+    // and filter them client-side
+    const proxyURL = await getCurrentProxyURL();
+    const url = `${proxyURL}/guestlist/${eventId}`;
+    console.log(`Making request to: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'auth-token': authToken,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log("Checked-in guest list API response:", data);
+
+    if (data.error) {
+      console.error("API returned error:", data);
+      return [];
+    }
+
+    // The API returns all guests, so we need to filter for checked-in guests client-side
+    let allGuests = [];
+    if (data.msg && Array.isArray(data.msg)) {
+      allGuests = data.msg;
+    } else if (Array.isArray(data)) {
+      allGuests = data;
+    } else {
+      console.error("Unexpected API response format for checked-in guests:", data);
+      return [];
+    }
+
+    // Filter for only checked-in guests (checkedin === "1" or checkedin === 1)
+    const checkedInGuests = allGuests.filter((guest: any) => 
+      guest.checkedin === "1" || guest.checkedin === 1
+    );
+
+    console.log(`Found ${checkedInGuests.length} checked-in guests out of ${allGuests.length} total guests`);
+    
+    return checkedInGuests;
   } catch (error) {
-    console.error(`Get checked-in guest list error for event ${eventId}:`, error);
-    // Return mock checked-in attendees on error
-    return [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, checkedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, checkedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: true, checkedIn: true, scanInTime: '08:55 AM', qrCode: 'MOCK_QR_004' },
-    ];
+    console.error("Error fetching checked-in guest list:", error);
+    return [];
   }
 };
 
@@ -1137,22 +1114,72 @@ const extractUserData = (data: any): UserProfile => {
 };
 
 // Utility to check if user is authenticated
-export const isAuthenticated = (): boolean => {
+export const isAuthenticated = async (): Promise<boolean> => {
+  // If user has explicitly logged out, return false
+  if (isLoggedOut) {
+    return false;
+  }
+  
+  // First check in-memory token
+  if (authToken) {
+    return true;
+  }
+  
+  // Then check storage
+  const storedToken = await getStorageItem('auth_token');
+  if (storedToken) {
+    // Restore token to memory
+    authToken = storedToken;
+    return true;
+  }
+  
+  return false;
+};
+
+// Synchronous version for quick checks (only checks memory)
+export const isAuthenticatedSync = (): boolean => {
   return !!authToken;
 };
 
 // Logout function
 export const logout = async (): Promise<boolean> => {
   try {
-    // Clear the token from both storage methods
+    console.log('Logging out user...');
+    
+    // Set logout flag to prevent auto-restoration
+    isLoggedOut = true;
+    
+    // Clear the token from memory
     authToken = null;
+    
+    // Clear all auth-related data from storage
     await removeStorageItem('auth_token');
     await removeStorageItem('user_profile');
+    
+    // Also clear from memory storage fallback
+    memoryStorage.delete('auth_token');
+    memoryStorage.delete('user_profile');
+    
+    console.log('Logout completed - all tokens cleared');
     return true;
   } catch (error) {
     console.error('Error during logout:', error);
     return false;
   }
+};
+
+// Function to start a fresh login session (resets logout state)
+export const startNewLoginSession = async (): Promise<string | null> => {
+  console.log('Starting new login session...');
+  isLoggedOut = false;
+  authToken = null;
+  return await login();
+};
+
+// Function to reset logout state (for explicit login)
+export const resetLogoutState = (): void => {
+  isLoggedOut = false;
+  console.log('Logout state reset - user can login again');
 };
 
 // Enhanced QR Code validation with better error handling
