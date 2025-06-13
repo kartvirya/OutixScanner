@@ -25,6 +25,7 @@ import {
   Users
 } from 'lucide-react-native';
 import { useTheme } from '../../../context/ThemeContext';
+import { useRefresh } from '../../../context/RefreshContext';
 import { 
   getCheckedInGuestList,
   getGuestList, 
@@ -51,6 +52,7 @@ interface Attendee {
 
 export default function AttendancePage() {
   const { colors, isDarkMode } = useTheme();
+  const { onAttendanceRefresh, triggerAttendanceRefresh, triggerGuestListRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -66,7 +68,15 @@ export default function AttendancePage() {
   useEffect(() => {
     initializeAudio();
     fetchEventAndAttendanceData();
-  }, [eventId]);
+    
+    // Register for auto-refresh
+    const unsubscribe = onAttendanceRefresh(eventId, () => {
+      console.log('Attendance auto-refresh triggered for event', eventId);
+      fetchEventAndAttendanceData();
+    });
+    
+    return unsubscribe;
+  }, [eventId, onAttendanceRefresh]);
 
   useEffect(() => {
     filterAttendees();
@@ -379,6 +389,10 @@ export default function AttendancePage() {
     
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
     feedback.checkIn();
+    
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
@@ -398,6 +412,10 @@ export default function AttendancePage() {
     
     console.log(`Updated scan-out status for ${ticketInfo.fullname}`);
     feedback.success();
+    
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const testNetworkConnectivity = async () => {

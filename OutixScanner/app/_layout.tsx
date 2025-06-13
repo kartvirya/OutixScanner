@@ -2,6 +2,7 @@ import React, { useEffect, useCallback } from "react";
 import { Stack } from "expo-router";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { StorageProvider } from "../context/StorageContext";
+import { RefreshProvider } from "../context/RefreshContext";
 import { StatusBar, View } from "react-native";
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
@@ -50,22 +51,24 @@ export default function RootLayout() {
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <StorageProvider>
         <ThemeProvider>
-          <ThemedStatusBar />
-          <Stack
-            screenOptions={{
-              headerStyle: {
-                backgroundColor: '#FFFFFF', 
-              },
-              headerTintColor: '#000000',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-            }}
-          >
-            <Stack.Screen name="auth" options={{ headerShown: false }} />
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          </Stack>
+          <RefreshProvider>
+            <ThemedStatusBar />
+            <Stack
+              screenOptions={{
+                headerStyle: {
+                  backgroundColor: '#FFFFFF', 
+                },
+                headerTintColor: '#000000',
+                headerTitleStyle: {
+                  fontWeight: 'bold',
+                },
+              }}
+            >
+              <Stack.Screen name="auth" options={{ headerShown: false }} />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+          </RefreshProvider>
         </ThemeProvider>
       </StorageProvider>
     </View>

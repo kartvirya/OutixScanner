@@ -29,6 +29,7 @@ import {
   RefreshCw
 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useRefresh } from '../../context/RefreshContext';
 import { 
   getGuestList, 
   getEvents, 
@@ -170,6 +171,7 @@ const tabs: TabName[] = ['Overview', 'Analytics', 'Tickets'];
 
 export default function EventDetail() {
   const { colors, isDarkMode, setSelectedEventId, setSelectedEventName } = useTheme();
+  const { onEventRefresh, triggerEventRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -183,82 +185,88 @@ export default function EventDetail() {
   const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]); // Separate state for checked-in guests
 
   useEffect(() => {
-    // Initialize audio when component mounts
     initializeAudio();
+    loadEventData();
     
-    const fetchEventDetails = async () => {
-      setLoading(true);
+    // Register for auto-refresh
+    const unsubscribe = onEventRefresh(eventId, () => {
+      console.log('Event auto-refresh triggered for event', eventId);
+      loadEventData();
+    });
+    
+    return unsubscribe;
+  }, [eventId, onEventRefresh]);
+
+  const loadEventData = async () => {
+    setLoading(true);
+    
+    try {
+      // First try to get the event from the API
+      const eventsData = await getEvents();
       
-      try {
-        // First try to get the event from the API
-        const eventsData = await getEvents();
-        
-        // Find the event with matching ID from the API response
-        let apiEvent = null;
-        if (Array.isArray(eventsData) && eventsData.length > 0) {
-          apiEvent = eventsData.find(e => 
-            e.id === eventId || 
-            e.eventId === eventId || 
-            e.EventId === eventId || 
-            String(e._id) === eventId
-          );
-        }
-        
-        if (apiEvent) {
-          // If found in API response, format it properly
-          const formattedEvent: Event = {
-            id: apiEvent.id || apiEvent.eventId || apiEvent.EventId || String(apiEvent._id || '0'),
-            title: apiEvent.title || apiEvent.name || apiEvent.EventName || 'Unnamed Event',
-            date: formatDateFromAPI(apiEvent.date || apiEvent.showStart || 'TBD'),
-            time: formatTimeFromAPI(apiEvent.time || apiEvent.showStart || 'TBD'),
-            location: apiEvent.location || apiEvent.venue || apiEvent.VenueName || 'TBD',
-            description: apiEvent.description || apiEvent.desc || 'No description available.',
-            // Set defaults for properties not in API
-            totalTickets: apiEvent.capacity || apiEvent.totalTickets || 100,
-            ticketsSold: 0, // Will be updated from guest list API
-            revenue: apiEvent.revenue || 0,
-            tickets: [],
-            attendees: []
-          };
-          
-          setEvent(formattedEvent);
-          
-          // Update selected event in context
-          setSelectedEventId(formattedEvent.id);
-          setSelectedEventName(formattedEvent.title);
-        } else {
-          // If not found in API, try mock data as fallback
-          const mockEvent = mockEvents[eventId];
-          
-          if (!mockEvent) {
-            console.error("Event not found");
-            setLoading(false);
-            return;
-          }
-          
-          // Use mock event data
-          setEvent(mockEvent);
-          
-          // Update selected event in context
-          setSelectedEventId(mockEvent.id);
-          setSelectedEventName(mockEvent.title);
-        }
-        
-        // Fetch guest list from API
-        await fetchGuestList();
-        
-        // Fetch checked-in guests for attendance tab
-        await fetchCheckedInGuests();
-        
-      } catch (err) {
-        console.error("Failed to load event details:", err);
-      } finally {
-        setLoading(false);
+      // Find the event with matching ID from the API response
+      let apiEvent = null;
+      if (Array.isArray(eventsData) && eventsData.length > 0) {
+        apiEvent = eventsData.find(e => 
+          e.id === eventId || 
+          e.eventId === eventId || 
+          e.EventId === eventId || 
+          String(e._id) === eventId
+        );
       }
-    };
-    
-    fetchEventDetails();
-  }, [eventId]);
+      
+      if (apiEvent) {
+        // If found in API response, format it properly
+        const formattedEvent: Event = {
+          id: apiEvent.id || apiEvent.eventId || apiEvent.EventId || String(apiEvent._id || '0'),
+          title: apiEvent.title || apiEvent.name || apiEvent.EventName || 'Unnamed Event',
+          date: formatDateFromAPI(apiEvent.date || apiEvent.showStart || 'TBD'),
+          time: formatTimeFromAPI(apiEvent.time || apiEvent.showStart || 'TBD'),
+          location: apiEvent.location || apiEvent.venue || apiEvent.VenueName || 'TBD',
+          description: apiEvent.description || apiEvent.desc || 'No description available.',
+          // Set defaults for properties not in API
+          totalTickets: apiEvent.capacity || apiEvent.totalTickets || 100,
+          ticketsSold: 0, // Will be updated from guest list API
+          revenue: apiEvent.revenue || 0,
+          tickets: [],
+          attendees: []
+        };
+        
+        setEvent(formattedEvent);
+        
+        // Update selected event in context
+        setSelectedEventId(formattedEvent.id);
+        setSelectedEventName(formattedEvent.title);
+      } else {
+        // If not found in API, try mock data as fallback
+        const mockEvent = mockEvents[eventId];
+        
+        if (!mockEvent) {
+          console.error("Event not found");
+          setLoading(false);
+          return;
+        }
+        
+        // Use mock event data
+        setEvent(mockEvent);
+        
+        // Update selected event in context
+        setSelectedEventId(mockEvent.id);
+        setSelectedEventName(mockEvent.title);
+      }
+      
+      // Fetch guest list from API
+      await fetchGuestList();
+      
+      // Fetch checked-in guests for attendance tab
+      await fetchCheckedInGuests();
+      
+    } catch (err) {
+      console.error("Failed to load event details:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Separate function to fetch guest list
   const fetchGuestList = async () => {
@@ -708,6 +716,11 @@ export default function EventDetail() {
     
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
     feedback.checkIn();
+    
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAttendanceRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
@@ -735,21 +748,21 @@ export default function EventDetail() {
     
     // Update attendee scan-out status locally
     if (attendeeIndex >= 0) {
-    const updatedAttendees = [...event.attendees];
-    updatedAttendees[attendeeIndex] = {
-      ...updatedAttendees[attendeeIndex],
-      scannedIn: false,
-      scanInTime: undefined,
-      scanCode: undefined
-    };
-    
-    setEvent(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        attendees: updatedAttendees
+      const updatedAttendees = [...event.attendees];
+      updatedAttendees[attendeeIndex] = {
+        ...updatedAttendees[attendeeIndex],
+        scannedIn: false,
+        scanInTime: undefined,
+        scanCode: undefined
       };
-    });
+      
+      setEvent(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          attendees: updatedAttendees
+        };
+      });
     }
     
     // Update guest list if attendee exists there
@@ -766,6 +779,11 @@ export default function EventDetail() {
     
     console.log(`Updated scan-out status for ${ticketInfo.fullname}`);
     feedback.success();
+    
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAttendanceRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const refreshGuestList = async () => {

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LogIn, LogOut, Calendar, Zap, Users } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useRefresh } from '../../context/RefreshContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import QRScanner from '../../components/QRScanner';
 import { 
@@ -33,19 +34,20 @@ type ScanMode = 'scan-in' | 'scan-out';
 
 export default function ScannerScreen() {
   const { colors, selectedEventId, selectedEventName } = useTheme();
-  const { id } = useLocalSearchParams();
-  const eventId = Array.isArray(id) ? id[0] : id || selectedEventId || '77809';
+  const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
+  const { eventId: paramEventId } = useLocalSearchParams();
   
-  const [currentEventId, setCurrentEventId] = useState(eventId);
-  const [currentEventName, setCurrentEventName] = useState(selectedEventName || 'Loading...');
+  const [currentEventId, setCurrentEventId] = useState<string>('');
+  const [currentEventName, setCurrentEventName] = useState<string>('');
   const [scanMode, setScanMode] = useState<ScanMode>('scan-in');
   const [toggleAnimation] = useState(new Animated.Value(0));
   const [pulseAnimation] = useState(new Animated.Value(1));
 
   useEffect(() => {
     // Update current event ID when route parameter changes
+    const eventId = Array.isArray(paramEventId) ? paramEventId[0] : paramEventId || selectedEventId || '77809';
     setCurrentEventId(eventId);
-  }, [eventId]);
+  }, [paramEventId, selectedEventId]);
 
   useEffect(() => {
     initializeAudio();
@@ -207,94 +209,89 @@ export default function ScannerScreen() {
 
   const performScanIn = async (scanCode: string, validationResult: QRValidationResponse) => {
     try {
+      console.log('Scanning QR code for event', currentEventId, ', scancode:', scanCode);
       const scanResult = await scanQRCode(currentEventId, scanCode);
       
       if (!scanResult || scanResult.error) {
-        let errorMessage = 'Failed to scan in guest';
-        if (scanResult?.msg) {
-          errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
+        feedback.error();
+        let errorMessage = 'Failed to check in guest.';
+        if (scanResult?.msg && typeof scanResult.msg === 'string') {
+          errorMessage = scanResult.msg;
+        } else if (scanResult?.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
+          errorMessage = scanResult.msg.message;
         }
         
-        feedback.error();
-        Alert.alert('Scan In Failed', errorMessage);
+        Alert.alert('Check-in Failed', errorMessage);
         return;
       }
       
       feedback.checkIn();
-      
-      let successMessage = 'Scan successful';
+      let successMessage = 'Guest successfully checked in!';
       if (typeof scanResult.msg === 'string') {
         successMessage = scanResult.msg;
       } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
         successMessage = scanResult.msg.message;
       }
       
-      let ticketInfo = null;
-      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-        ticketInfo = validationResult.msg.info;
-      }
-      
-        Alert.alert(
-        '✅ Guest Checked In',
-        `${ticketInfo?.fullname || 'Guest'} has been checked in.\n\n${successMessage}`
+      const ticketInfo = validationResult.msg && typeof validationResult.msg === 'object' ? validationResult.msg.info : undefined;
+      Alert.alert(
+        'Guest Checked In Successfully',
+        `${ticketInfo?.fullname || 'Guest'} has been checked in.\n\n${successMessage}\n\nAttendance count updated across the app.`
       );
+      
+      // Trigger refresh for all related components
+      triggerGuestListRefresh(currentEventId);
+      triggerAttendanceRefresh(currentEventId);
+      triggerAnalyticsRefresh();
       
     } catch (error) {
       console.error('Scan in error:', error);
       feedback.error();
-      Alert.alert('Scan In Error', 'Failed to scan in guest. Please try again.');
+      Alert.alert('Scan In Error', 'Failed to check in guest via API. Please try again.');
     }
   };
 
   const performScanOut = async (scanCode: string, validationResult: QRValidationResponse) => {
     try {
+      console.log('Unscanning QR code for event', currentEventId, ', scancode:', scanCode);
       const unscanResult = await unscanQRCode(currentEventId, scanCode);
       
       if (!unscanResult || unscanResult.error) {
-        let errorMessage = 'Failed to scan out guest';
-        if (unscanResult?.msg) {
-          errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
-        }
-        
-        const isNotUsedError = errorMessage.toLowerCase().includes('not been used') ||
-                              errorMessage.toLowerCase().includes('not used yet') ||
-                              errorMessage.toLowerCase().includes('no scan') ||
-                              errorMessage.toLowerCase().includes('not checked in');
-        
-        if (isNotUsedError) {
-          feedback.warning();
-          Alert.alert('Already Scanned Out', 'This ticket has already been scanned out or was never checked in.');
-          return;
-        }
-        
         feedback.error();
-        Alert.alert('Scan Out Failed', errorMessage);
+        let errorMessage = 'Failed to check out guest.';
+        if (unscanResult?.msg && typeof unscanResult.msg === 'string') {
+          errorMessage = unscanResult.msg;
+        } else if (unscanResult?.msg && typeof unscanResult.msg === 'object' && 'message' in unscanResult.msg) {
+          errorMessage = unscanResult.msg.message;
+        }
+        
+        Alert.alert('Check-out Failed', errorMessage);
         return;
       }
       
       feedback.success();
-      
-      let successMessage = 'Unscan successful';
+      let successMessage = 'Guest successfully checked out!';
       if (typeof unscanResult.msg === 'string') {
         successMessage = unscanResult.msg;
       } else if (unscanResult.msg && typeof unscanResult.msg === 'object' && 'message' in unscanResult.msg) {
         successMessage = unscanResult.msg.message;
       }
       
-      let ticketInfo = null;
-      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-        ticketInfo = validationResult.msg.info;
-      }
-      
-        Alert.alert(
-        '🚪 Guest Checked Out',
-        `${ticketInfo?.fullname || 'Guest'} has been checked out.\n\n${successMessage}`
+      const ticketInfo = validationResult.msg && typeof validationResult.msg === 'object' ? validationResult.msg.info : undefined;
+      Alert.alert(
+        'Guest Checked Out Successfully',
+        `${ticketInfo?.fullname || 'Guest'} has been checked out.\n\n${successMessage}\n\nAttendance count updated across the app.`
       );
+      
+      // Trigger refresh for all related components
+      triggerGuestListRefresh(currentEventId);
+      triggerAttendanceRefresh(currentEventId);
+      triggerAnalyticsRefresh();
       
     } catch (error) {
       console.error('Scan out error:', error);
       feedback.error();
-      Alert.alert('Scan Out Error', 'Failed to scan out guest. Please try again.');
+      Alert.alert('Scan Out Error', 'Failed to check out guest via API. Please try again.');
     }
   };
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Text, View, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
+import { Text, View, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert, RefreshControl } from "react-native";
 import { Calendar, Clock, MapPin, ChevronRight, CalendarX } from "lucide-react-native";
 import { useTheme } from "../../context/ThemeContext";
+import { useRefresh } from "../../context/RefreshContext";
 import { router } from "expo-router";
 import { login, getEvents } from "../../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -55,71 +56,90 @@ const mockEvents: Event[] = [
 
 export default function Index() {
   const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
+  const { setAutoRefreshInterval } = useRefresh();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
+  const fetchEvents = async (isRefresh = false) => {
+    if (!isRefresh) {
       setLoading(true);
-      setError(null);
-      try {
-        let token = null;
-        // Try to get token from storage
-        try {
-          const tokenResult = await login();
-          if (tokenResult) {
-            token = tokenResult;
-          }
-        } catch (loginErr) {
-          console.error("Authentication error:", loginErr);
-          setError("Authentication failed. Using cached data.");
-        }
-
-        // Fetch events from API
-        let eventsData;
-        try {
-          eventsData = await getEvents();
-          
-          // Clear error if we successfully got data
-          if (Array.isArray(eventsData) && eventsData.length > 0) {
-            setError(null);
-          }
-        } catch (eventsErr) {
-          console.error("Error fetching events:", eventsErr);
-          setError("Error loading events. Using cached data.");
-        }
-        
-        if (Array.isArray(eventsData) && eventsData.length > 0) {
-          // Map the API response to our Event interface
-          const formattedEvents = eventsData.map(event => ({
-            id: event.id || event.eventId || event.EventId || String(event._id || '0'),
-            title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
-            date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
-            time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
-            location: event.location || event.venue || event.VenueName || 'TBD',
-            imageUrl: event.imageUrl || event.image || event.EventImage || 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'
-          }));
-          setEvents(formattedEvents);
-        } else {
-          // If for some reason eventsData is empty, use mock data
-          console.log("No events found in response, using default data");
-          setEvents(mockEvents);
-          if (!error) {
-            setError("No events found. Showing sample data.");
-          }
-        }
-      } catch (err: any) {
-        console.error("Unexpected error:", err);
-        setEvents(mockEvents);
-        setError("An unexpected error occurred. Showing sample data.");
-      } finally {
-        setLoading(false);
-      }
-    };
+    }
+    setError(null);
     
+    try {
+      let token = null;
+      // Try to get token from storage
+      try {
+        const tokenResult = await login();
+        if (tokenResult) {
+          token = tokenResult;
+        }
+      } catch (loginErr) {
+        console.error("Authentication error:", loginErr);
+        setError("Authentication failed. Using cached data.");
+      }
+
+      // Fetch events from API
+      let eventsData;
+      try {
+        eventsData = await getEvents();
+        
+        // Clear error if we successfully got data
+        if (Array.isArray(eventsData) && eventsData.length > 0) {
+          setError(null);
+        }
+      } catch (eventsErr) {
+        console.error("Error fetching events:", eventsErr);
+        setError("Error loading events. Using cached data.");
+      }
+      
+      if (Array.isArray(eventsData) && eventsData.length > 0) {
+        // Map the API response to our Event interface
+        const formattedEvents = eventsData.map(event => ({
+          id: event.id || event.eventId || event.EventId || String(event._id || '0'),
+          title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
+          date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
+          time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
+          location: event.location || event.venue || event.VenueName || 'TBD',
+          imageUrl: event.imageUrl || event.image || event.EventImage || 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'
+        }));
+        setEvents(formattedEvents);
+      } else {
+        // If for some reason eventsData is empty, use mock data
+        console.log("No events found in response, using default data");
+        setEvents(mockEvents);
+        if (!error) {
+          setError("No events found. Showing sample data.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Unexpected error:", err);
+      setEvents(mockEvents);
+      setError("An unexpected error occurred. Showing sample data.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     fetchEvents();
-  }, []);
+    
+    // Enable auto-refresh with 60-second interval for events list
+    setAutoRefreshInterval(true, 60000);
+    
+    return () => {
+      // Disable auto-refresh when component unmounts
+      setAutoRefreshInterval(false);
+    };
+  }, [setAutoRefreshInterval]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchEvents(true);
+  };
 
   // Helper function to format date from API 
   const formatDateFromAPI = (dateString: string): string => {
@@ -198,34 +218,41 @@ export default function Index() {
     <View style={[styles.container, { backgroundColor: colors.background }]}> 
       <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
       {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading events...</Text>
+        </View>
       ) : (
         <>
           {error && (
-            <Text style={{ 
-              color: colors.error, 
-              textAlign: 'center', 
-              marginVertical: 8, 
-              fontSize: 14,
-              paddingHorizontal: 16
-            }}>
-              {error}
-            </Text>
-          )}
-          {events.length > 0 ? (
-            <FlatList
-              data={events}
-              renderItem={renderEventItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContainer}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <CalendarX size={50} color={colors.secondary} />
-              <Text style={[styles.emptyStateText, { color: colors.text }]}>No events found</Text>
-              <Text style={[styles.emptyStateSubtext, { color: colors.secondary }]}>Please check your internet connection</Text>
+            <View style={[styles.errorContainer, { backgroundColor: colors.card }]}>
+              <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
             </View>
           )}
+          <FlatList
+            data={events}
+            renderItem={renderEventItem}
+            keyExtractor={(item) => item.id}
+            style={styles.eventList}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
+            ListEmptyComponent={() => (
+              <View style={styles.centerContainer}>
+                <CalendarX size={60} color={colors.secondary} opacity={0.5} />
+                <Text style={[styles.emptyText, { color: colors.text }]}>No events found</Text>
+                <Text style={[styles.emptySubText, { color: colors.secondary }]}>
+                  Pull to refresh or check your internet connection
+                </Text>
+              </View>
+            )}
+          />
         </>
       )}
     </View>
@@ -355,5 +382,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginRight: 4,
     fontSize: 13,
-  }
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FF3B30',
+  },
+  eventList: {
+    paddingBottom: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#3C3C43',
+    marginTop: 12,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 4,
+  },
 }); 

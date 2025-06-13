@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useRefresh } from '../../context/RefreshContext';
 import { BarChart, TrendingUp, Users, DollarSign, Calendar, UserCheck, UserX, Clock } from 'lucide-react-native';
 import { getEvents, getGuestList, getCheckedInGuestList } from '../../services/api';
 
@@ -15,6 +16,7 @@ interface AnalyticsData {
 
 export default function Analytics() {
   const { colors } = useTheme();
+  const { onAnalyticsRefresh, triggerAnalyticsRefresh } = useRefresh();
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,11 +102,21 @@ export default function Analytics() {
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, []);
+    
+    // Register for auto-refresh
+    const unsubscribe = onAnalyticsRefresh(() => {
+      console.log('Analytics auto-refresh triggered');
+      fetchAnalyticsData();
+    });
+    
+    return unsubscribe;
+  }, [onAnalyticsRefresh]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchAnalyticsData();
+    // Also trigger refresh for other components
+    triggerAnalyticsRefresh();
   };
 
   if (loading) {

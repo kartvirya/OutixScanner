@@ -24,6 +24,7 @@ import {
   LogOut
 } from 'lucide-react-native';
 import { useTheme } from '../../../context/ThemeContext';
+import { useRefresh } from '../../../context/RefreshContext';
 import { 
   getGroupTickets,
   scanGroupTickets,
@@ -47,6 +48,7 @@ type ScanMode = 'scan-in' | 'scan-out';
 
 export default function GroupScanPage() {
   const { colors } = useTheme();
+  const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -253,13 +255,18 @@ export default function GroupScanPage() {
       const message = `Successfully ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} ${result.successful} out of ${result.total} tickets`;
       
       if (result.failed > 0) {
-        Alert.alert('Partial Success', `${message}.\n${result.failed} tickets failed to process.`);
+        Alert.alert('Partial Success', `${message}.\n${result.failed} tickets failed to process.\n\nAttendance data has been updated across the app.`);
       } else {
         Alert.alert(
           scanMode === 'scan-in' ? '✅ Group Check-in Complete' : '🚪 Group Check-out Complete',
-          message
+          `${message}\n\nAttendance data has been updated across the app.`
         );
       }
+      
+      // Trigger refresh for all related components
+      triggerGuestListRefresh(eventId);
+      triggerAttendanceRefresh(eventId);
+      triggerAnalyticsRefresh();
       
       setGroupTickets([]);
       setShowScanner(true);

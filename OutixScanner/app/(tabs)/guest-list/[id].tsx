@@ -22,6 +22,7 @@ import {
   UserCheck
 } from 'lucide-react-native';
 import { useTheme } from '../../../context/ThemeContext';
+import { useRefresh } from '../../../context/RefreshContext';
 import { 
   getGuestList, 
   getEvents, 
@@ -55,6 +56,7 @@ interface Attendee {
 
 export default function GuestListPage() {
   const { colors, isDarkMode } = useTheme();
+  const { onGuestListRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -70,7 +72,15 @@ export default function GuestListPage() {
   useEffect(() => {
     initializeAudio();
     fetchEventAndGuestData();
-  }, [eventId]);
+    
+    // Register for auto-refresh
+    const unsubscribe = onGuestListRefresh(eventId, () => {
+      console.log('Guest list auto-refresh triggered for event', eventId);
+      fetchEventAndGuestData();
+    });
+    
+    return unsubscribe;
+  }, [eventId, onGuestListRefresh]);
 
   useEffect(() => {
     filterGuests();
@@ -81,24 +91,18 @@ export default function GuestListPage() {
     
     try {
       // Fetch event details for title
-      try {
-        const eventsData = await getEvents();
-        if (Array.isArray(eventsData) && eventsData.length > 0) {
-          const apiEvent = eventsData.find(e => 
-            e.id === eventId || 
-            e.eventId === eventId || 
-            e.EventId === eventId || 
-            String(e._id) === eventId
-          );
-          
-          if (apiEvent) {
-            setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
-          }
+      const eventsData = await getEvents();
+      if (Array.isArray(eventsData) && eventsData.length > 0) {
+        const apiEvent = eventsData.find(e => 
+          e.id === eventId || 
+          e.eventId === eventId || 
+          e.EventId === eventId || 
+          String(e._id) === eventId
+        );
+        
+        if (apiEvent) {
+          setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
         }
-      } catch (eventError) {
-        console.error("Failed to load event details:", eventError);
-        // Continue with default event title if events API fails
-        setEventTitle('Event');
       }
       
       // Fetch guest list
@@ -106,23 +110,6 @@ export default function GuestListPage() {
       
     } catch (err) {
       console.error("Failed to load guest data:", err);
-      // Show user-friendly error message for timeouts
-      if (err instanceof Error && err.message.includes('timeout')) {
-        Alert.alert(
-          'Connection Timeout',
-          'The request is taking longer than expected. Please check your internet connection and try again.',
-          [
-            {
-              text: 'Retry',
-              onPress: () => fetchEventAndGuestData()
-            },
-            {
-              text: 'Continue Offline',
-              style: 'cancel'
-            }
-          ]
-        );
-      }
     } finally {
       setLoading(false);
     }
@@ -372,6 +359,10 @@ export default function GuestListPage() {
     
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
     feedback.checkIn();
+    
+    // Trigger refresh for other components
+    triggerAttendanceRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const handleManualScanIn = async (guest: Attendee) => {
@@ -473,6 +464,10 @@ export default function GuestListPage() {
     
     console.log(`Manual check-in for ${guest.name} at ${timeString}`);
     feedback.checkIn();
+    
+    // Trigger refresh for other components
+    triggerAttendanceRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const checkedInCount = guestList.filter(guest => guest.scannedIn).length;
