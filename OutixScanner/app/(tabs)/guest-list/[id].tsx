@@ -1,36 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { 
-  QrCode, 
-  Users, 
-  CheckCircle,
-  User,
-  Search,
-  ArrowLeft,
-  UserCheck
+    ArrowLeft,
+    CheckCircle,
+    QrCode,
+    Search,
+    User,
+    UserCheck,
+    Users
 } from 'lucide-react-native';
-import { useTheme } from '../../../context/ThemeContext';
-import { useRefresh } from '../../../context/RefreshContext';
-import { 
-  getGuestList, 
-  getEvents, 
-  validateQRCode, 
-  scanQRCode,
-  generateSampleQRData
-} from '../../../services/api';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import QRScanner from '../../../components/QRScanner';
+import { useRefresh } from '../../../context/RefreshContext';
+import { useTheme } from '../../../context/ThemeContext';
+import {
+    generateSampleQRData,
+    getCheckedInGuestList,
+    getEvents,
+    getGuestList,
+    scanQRCode,
+    validateQRCode
+} from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 
 interface Attendee {
@@ -68,6 +69,11 @@ export default function GuestListPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'checked-in' | 'not-arrived'>('all');
   const [eventTitle, setEventTitle] = useState('');
   const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState<number>(0);
+  const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]);
+  const [mergedGuestList, setMergedGuestList] = useState<Attendee[]>([]);
+  
+  // Track which guests we've already marked as checked in to prevent duplicates
+  const markedAsCheckedInRef = useRef(new Set<string>());
 
   useEffect(() => {
     initializeAudio();
@@ -83,8 +89,12 @@ export default function GuestListPage() {
   }, [eventId, onGuestListRefresh]);
 
   useEffect(() => {
+    mergeGuestLists();
+  }, [guestList, checkedInGuests]);
+
+  useEffect(() => {
     filterGuests();
-  }, [guestList, searchQuery, filterStatus]);
+  }, [mergedGuestList, searchQuery, filterStatus]);
 
   const fetchEventAndGuestData = async () => {
     setLoading(true);
@@ -108,6 +118,9 @@ export default function GuestListPage() {
       // Fetch guest list
       await fetchGuestList();
       
+      // Fetch checked-in guests
+      await fetchCheckedInGuests();
+      
     } catch (err) {
       console.error("Failed to load guest data:", err);
     } finally {
@@ -120,13 +133,15 @@ export default function GuestListPage() {
       const guestListData = await getGuestList(eventId);
       
       if (guestListData && Array.isArray(guestListData)) {
+        console.log('Guest data sample:', JSON.stringify(guestListData[0], null, 2));
+        
         const attendees = guestListData.map(guest => ({
           id: guest.id || guest.guestId || String(Math.random()),
           name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: guest.checkedIn || guest.checked_in || false,
-          scanInTime: guest.checkInTime || guest.check_in_time || undefined,
+          scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
+          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
           scanCode: guest.scanCode || undefined,
           // Additional fields from API
           purchased_date: guest.purchased_date || undefined,
@@ -140,6 +155,12 @@ export default function GuestListPage() {
           // Raw guest data for details page
           rawData: guest
         }));
+        
+        console.log('Processed attendees sample:', {
+          total: attendees.length,
+          checkedIn: attendees.filter(a => a.scannedIn).length,
+          sampleGuest: attendees[0]
+        });
         
         setGuestList(attendees);
         setTotalGuestsFromAPI(attendees.length);
@@ -164,8 +185,114 @@ export default function GuestListPage() {
     }
   };
 
+  const fetchCheckedInGuests = async () => {
+    try {
+      console.log('Fetching checked-in guests for guest list...');
+      const checkedInData = await getCheckedInGuestList(eventId);
+      
+      if (checkedInData && Array.isArray(checkedInData)) {
+        // Map API checked-in guest data to our format
+        const attendees = checkedInData.map(guest => ({
+          id: guest.id || guest.guestId || String(Math.random()),
+          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+          email: guest.email || 'N/A',
+          ticketType: guest.ticketType || guest.ticket_type || 'General',
+          scannedIn: true, // All guests from this endpoint are checked in
+          scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
+          scanCode: guest.scanCode || guest.qrCode || undefined,
+          // Additional fields from API
+          purchased_date: guest.purchased_date || undefined,
+          reference_num: guest.booking_reference || guest.reference_num || undefined,
+          booking_id: guest.booking_id || undefined,
+          ticket_identifier: guest.ticket_identifier || undefined,
+          price: guest.price || undefined,
+          mobile: guest.mobile || undefined,
+          address: guest.address || undefined,
+          notes: guest.notes || undefined,
+          // Raw guest data for details page
+          rawData: guest
+        }));
+        
+        console.log(`Found ${attendees.length} checked-in guests`);
+        setCheckedInGuests(attendees);
+      } else {
+        console.log('No checked-in guests found');
+        setCheckedInGuests([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch checked-in guests:", err);
+      // Keep existing data on error
+      setCheckedInGuests([]);
+    }
+  };
+
+  const mergeGuestLists = () => {
+    // Don't try to merge - just use the original guest list
+    // We'll determine check-in status dynamically when filtering
+    setMergedGuestList([...guestList]);
+  };
+
+  // Helper function to check if a guest is checked in
+  const isGuestCheckedIn = (guest: Attendee) => {
+    // If we've already marked someone as checked in with the same name/email, return false
+    const guestKey = `${guest.name?.toLowerCase()}-${guest.email?.toLowerCase()}`;
+    
+    if (markedAsCheckedInRef.current.has(guestKey)) {
+      return false;
+    }
+    
+    // Check if this guest appears in the checked-in guests list
+    const isMatched = checkedInGuests.some(checkedGuest => {
+      // Try to match by unique identifiers first
+      if (guest.id && checkedGuest.id && guest.id === checkedGuest.id) {
+        return true;
+      }
+      if (guest.ticket_identifier && checkedGuest.ticket_identifier && 
+          guest.ticket_identifier === checkedGuest.ticket_identifier) {
+        return true;
+      }
+      if (guest.booking_id && checkedGuest.booking_id && 
+          guest.booking_id === checkedGuest.booking_id) {
+        return true;
+      }
+      if (guest.reference_num && checkedGuest.reference_num && 
+          guest.reference_num === checkedGuest.reference_num) {
+        return true;
+      }
+      
+      // Fallback to name/email match
+      return guest.name?.toLowerCase() === checkedGuest.name?.toLowerCase() && 
+             guest.email?.toLowerCase() === checkedGuest.email?.toLowerCase();
+    });
+    
+    // If matched, mark this guest key as used to prevent other tickets from matching
+    if (isMatched) {
+      markedAsCheckedInRef.current.add(guestKey);
+    }
+    
+    return isMatched;
+  };
+
   const filterGuests = () => {
-    let filtered = [...guestList];
+    // Clear the tracking set at the start of each filter operation
+    markedAsCheckedInRef.current.clear();
+    
+    let filtered;
+    
+    // For "Present" filter, use the checked-in guests directly (source of truth)
+    if (filterStatus === 'checked-in') {
+      filtered = [...checkedInGuests];
+    } else {
+      // For "All" and "Absent", use the original guest list with dynamic check-in status
+      filtered = mergedGuestList.map(guest => ({
+        ...guest,
+        scannedIn: isGuestCheckedIn(guest) // Dynamically determine check-in status
+      }));
+      
+      if (filterStatus === 'not-arrived') {
+        filtered = filtered.filter(guest => !guest.scannedIn);
+      }
+    }
     
     // Apply search filter
     if (searchQuery.trim()) {
@@ -175,13 +302,6 @@ export default function GuestListPage() {
         guest.email.toLowerCase().includes(query) ||
         guest.ticketType.toLowerCase().includes(query)
       );
-    }
-    
-    // Apply status filter
-    if (filterStatus === 'checked-in') {
-      filtered = filtered.filter(guest => guest.scannedIn);
-    } else if (filterStatus === 'not-arrived') {
-      filtered = filtered.filter(guest => !guest.scannedIn);
     }
     
     setFilteredGuestList(filtered);
@@ -360,6 +480,9 @@ export default function GuestListPage() {
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
     feedback.checkIn();
     
+    // Also update the checked-in guests list to keep counts in sync
+    await fetchCheckedInGuests();
+    
     // Trigger refresh for other components
     triggerAttendanceRefresh(eventId);
     triggerAnalyticsRefresh();
@@ -465,12 +588,16 @@ export default function GuestListPage() {
     console.log(`Manual check-in for ${guest.name} at ${timeString}`);
     feedback.checkIn();
     
+    // Also update the checked-in guests list to keep counts in sync
+    await fetchCheckedInGuests();
+    
     // Trigger refresh for other components
     triggerAttendanceRefresh(eventId);
     triggerAnalyticsRefresh();
   };
 
-  const checkedInCount = guestList.filter(guest => guest.scannedIn).length;
+  // Use the dedicated checked-in guests list for accurate count (same as event details page)
+  const checkedInCount = checkedInGuests.length;
   const attendancePercentage = totalGuestsFromAPI ? Math.round((checkedInCount / totalGuestsFromAPI) * 100) : 0;
 
   if (loading) {
@@ -494,69 +621,65 @@ export default function GuestListPage() {
         }}
       />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <View style={styles.headerTop}>
+      {/* Simple Header */}
+      <View style={[styles.simpleHeader, { backgroundColor: colors.card }]}>
+        <View style={styles.simpleHeaderRow}>
           <TouchableOpacity 
-            style={styles.backButton}
+            style={styles.simpleBackButton}
             onPress={() => {
               feedback.buttonPress();
               router.back();
             }}
           >
-            <ArrowLeft size={24} color={colors.primary} />
+            <ArrowLeft size={20} color="#FF6B00" />
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Guest List</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
+          <View style={styles.simpleHeaderContent}>
+            <Text style={[styles.simpleTitle, { color: colors.text }]}>Guest List</Text>
+            <Text style={[styles.simpleSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
           </View>
           <TouchableOpacity 
-            style={[styles.scanButton, { backgroundColor: colors.primary }]}
+            style={styles.simpleScanButton}
             onPress={handleOpenScanner}
           >
             <QrCode size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
         
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Total</Text>
+        {/* Simple Stats */}
+        <View style={styles.simpleStatsRow}>
+          <View style={styles.simpleStatItem}>
+            <Text style={[styles.simpleStatNumber, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
+            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Total</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: '#34C759' }]}>{checkedInCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
+          <View style={styles.simpleStatItem}>
+            <Text style={[styles.simpleStatNumber, { color: '#22C55E' }]}>{checkedInCount}</Text>
+            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Present</Text>
           </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>{attendancePercentage}%</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Rate</Text>
+          <View style={styles.simpleStatItem}>
+            <Text style={[styles.simpleStatNumber, { color: '#FF6B00' }]}>{attendancePercentage}%</Text>
+            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Rate</Text>
           </View>
         </View>
       </View>
 
-      {/* Search and Filter */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-        <View style={[styles.searchBar, { backgroundColor: colors.background }]}>
-          <Search size={18} color={colors.secondary} />
+      {/* Simple Search and Filter */}
+      <View style={[styles.simpleSearchContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.simpleSearchBar, { backgroundColor: colors.card }]}>
+          <Search size={16} color={colors.secondary} />
           <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
+            style={[styles.simpleSearchInput, { color: colors.text }]}
             placeholder="Search guests..."
             placeholderTextColor={colors.secondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={[styles.clearButton, { color: colors.secondary }]}>Clear</Text>
-            </TouchableOpacity>
-          )}
         </View>
         
-        <View style={styles.filterButtons}>
+        <View style={styles.simpleFilterButtons}>
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              { backgroundColor: filterStatus === 'all' ? colors.primary : 'transparent' }
+              styles.simpleFilterButton,
+              { backgroundColor: filterStatus === 'all' ? '#FF6B00' : colors.card }
             ]}
             onPress={() => {
               feedback.buttonPress();
@@ -564,7 +687,7 @@ export default function GuestListPage() {
             }}
           >
             <Text style={[
-              styles.filterButtonText,
+              styles.simpleFilterText,
               { color: filterStatus === 'all' ? '#FFFFFF' : colors.text }
             ]}>
               All
@@ -573,8 +696,8 @@ export default function GuestListPage() {
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              { backgroundColor: filterStatus === 'checked-in' ? '#34C759' : 'transparent' }
+              styles.simpleFilterButton,
+              { backgroundColor: filterStatus === 'checked-in' ? '#22C55E' : colors.card }
             ]}
             onPress={() => {
               feedback.buttonPress();
@@ -582,7 +705,7 @@ export default function GuestListPage() {
             }}
           >
             <Text style={[
-              styles.filterButtonText,
+              styles.simpleFilterText,
               { color: filterStatus === 'checked-in' ? '#FFFFFF' : colors.text }
             ]}>
               Present
@@ -591,8 +714,8 @@ export default function GuestListPage() {
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              { backgroundColor: filterStatus === 'not-arrived' ? '#FF6B35' : 'transparent' }
+              styles.simpleFilterButton,
+              { backgroundColor: filterStatus === 'not-arrived' ? '#FF6B35' : colors.card }
             ]}
             onPress={() => {
               feedback.buttonPress();
@@ -600,7 +723,7 @@ export default function GuestListPage() {
             }}
           >
             <Text style={[
-              styles.filterButtonText,
+              styles.simpleFilterText,
               { color: filterStatus === 'not-arrived' ? '#FFFFFF' : colors.text }
             ]}>
               Absent
@@ -615,9 +738,9 @@ export default function GuestListPage() {
           data={filteredGuestList}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={[styles.guestItem, { backgroundColor: colors.card }]}>
+            <View style={[styles.modernGuestItem, { backgroundColor: colors.card }]}>
               <TouchableOpacity 
-                style={styles.guestInfo}
+                style={styles.modernGuestInfo}
                 onPress={() => {
                   feedback.buttonPress();
                   router.push({
@@ -629,28 +752,28 @@ export default function GuestListPage() {
                   });
                 }}
               >
-                <Text style={[styles.guestName, { color: colors.text }]}>{item.name}</Text>
-                <Text style={[styles.guestEmail, { color: colors.secondary }]}>{item.email}</Text>
-                <Text style={[styles.guestTicketType, { color: colors.primary }]}>{item.ticketType}</Text>
+                <Text style={[styles.modernGuestName, { color: colors.text }]}>{item.name}</Text>
+                <Text style={[styles.modernGuestEmail, { color: colors.secondary }]}>{item.email}</Text>
+                <Text style={[styles.modernGuestTicket, { color: '#FF6B00' }]}>{item.ticketType}</Text>
               </TouchableOpacity>
-              <View style={styles.guestActions}>
+              <View style={styles.modernGuestActions}>
                 {item.scannedIn ? (
-                  <View style={[styles.statusBadge, styles.checkedInBadge]}>
-                    <CheckCircle size={14} color="#34C759" />
-                    <Text style={[styles.statusText, { color: '#34C759' }]}>Present</Text>
+                  <View style={styles.modernStatusPresent}>
+                    <CheckCircle size={12} color="#22C55E" />
+                    <Text style={styles.modernStatusTextPresent}>Present</Text>
                   </View>
                 ) : (
-                  <View style={styles.actionContainer}>
+                  <View style={styles.modernActionGroup}>
                     <TouchableOpacity
-                      style={[styles.checkInButton, { backgroundColor: colors.primary }]}
+                      style={styles.modernCheckInButton}
                       onPress={() => handleManualScanIn(item)}
                     >
-                      <UserCheck size={16} color="#FFFFFF" />
-                      <Text style={styles.checkInButtonText}>Check In</Text>
+                      <UserCheck size={12} color="#FFFFFF" />
+                      <Text style={styles.modernCheckInText}>Check In</Text>
                     </TouchableOpacity>
-                    <View style={[styles.statusBadge, styles.notArrivedBadge]}>
-                      <User size={14} color="#FF6B35" />
-                      <Text style={[styles.statusText, { color: '#FF6B35' }]}>Absent</Text>
+                    <View style={styles.modernStatusAbsent}>
+                      <User size={12} color="#FF6B35" />
+                      <Text style={styles.modernStatusTextAbsent}>Absent</Text>
                     </View>
                   </View>
                 )}
@@ -658,7 +781,7 @@ export default function GuestListPage() {
             </View>
           )}
           style={styles.guestList}
-          contentContainerStyle={{ paddingVertical: 8 }}
+          contentContainerStyle={{ paddingVertical: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
         />
       ) : (
@@ -907,5 +1030,283 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     padding: 8,
+  },
+  // Modern Compact Design Styles
+  modernHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  backButtonCompact: {
+    padding: 6,
+    marginRight: 8,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  modernHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  modernHeaderSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+  scanButtonCompact: {
+    padding: 8,
+    borderRadius: 20,
+    marginLeft: 8,
+  },
+  compactStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  compactStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  compactStatNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  compactStatLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginHorizontal: 8,
+  },
+  modernSearchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  compactSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  compactSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 15,
+  },
+  compactClearButton: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    padding: 4,
+  },
+  compactFilterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  compactFilterButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  compactFilterText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modernGuestItem: {
+    flexDirection: 'row',
+    padding: 12,
+    borderRadius: 12,
+    marginVertical: 3,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modernGuestInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  modernGuestName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  modernGuestEmail: {
+    fontSize: 12,
+    marginBottom: 3,
+  },
+  modernGuestTicket: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  modernGuestActions: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    minWidth: 100,
+  },
+  modernStatusPresent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  modernStatusTextPresent: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#22C55E',
+    marginLeft: 4,
+  },
+  modernActionGroup: {
+    alignItems: 'flex-end',
+  },
+  modernCheckInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#FF6B00',
+    marginBottom: 6,
+  },
+  modernCheckInText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 11,
+    marginLeft: 3,
+  },
+  modernStatusAbsent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+  },
+  modernStatusTextAbsent: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#FF6B35',
+    marginLeft: 3,
+  },
+  // Simple Design Styles
+  simpleHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  simpleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  simpleBackButton: {
+    padding: 8,
+    marginRight: 12,
+  },
+  simpleHeaderContent: {
+    flex: 1,
+  },
+  simpleTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  simpleSubtitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    opacity: 0.7,
+  },
+  simpleScanButton: {
+    backgroundColor: '#FF6B00',
+    padding: 10,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  simpleStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  simpleStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  simpleStatNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  simpleStatLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  simpleSearchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  simpleSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  simpleSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 16,
+  },
+  simpleFilterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  simpleFilterButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  simpleFilterText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 }); 

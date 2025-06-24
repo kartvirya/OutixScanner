@@ -1,30 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  SafeAreaView,
-  Alert,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  Modal,
-  ScrollView,
-} from 'react-native';
-import { LogIn, LogOut, Calendar, Zap, Users } from 'lucide-react-native';
-import { useTheme } from '../../context/ThemeContext';
-import { useRefresh } from '../../context/RefreshContext';
 import { router, useLocalSearchParams } from 'expo-router';
+import { LogIn, LogOut, Users } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    Alert,
+    Dimensions,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import QRScanner from '../../components/QRScanner';
-import { 
-  validateQRCode, 
-  scanQRCode, 
-  unscanQRCode,
-  QRValidationResponse,
-  getEvents,
-  getGroupTickets,
-  scanGroupTickets,
+import { useRefresh } from '../../context/RefreshContext';
+import { useTheme } from '../../context/ThemeContext';
+import {
+    QRValidationResponse,
+    getEvents,
+    scanQRCode,
+    unscanQRCode,
+    validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -40,8 +35,7 @@ export default function ScannerScreen() {
   const [currentEventId, setCurrentEventId] = useState<string>('');
   const [currentEventName, setCurrentEventName] = useState<string>('');
   const [scanMode, setScanMode] = useState<ScanMode>('scan-in');
-  const [toggleAnimation] = useState(new Animated.Value(0));
-  const [pulseAnimation] = useState(new Animated.Value(1));
+  // Remove unused animations for simplified UI
 
   useEffect(() => {
     // Update current event ID when route parameter changes
@@ -52,39 +46,12 @@ export default function ScannerScreen() {
   useEffect(() => {
     initializeAudio();
     loadEventName();
-    startPulseAnimation();
   }, []);
 
   useEffect(() => {
     // Reload event name when currentEventId changes
     loadEventName();
   }, [currentEventId]);
-
-  useEffect(() => {
-    Animated.spring(toggleAnimation, {
-      toValue: scanMode === 'scan-in' ? 0 : 1,
-      useNativeDriver: false,
-      tension: 120,
-      friction: 7,
-    }).start();
-  }, [scanMode]);
-
-  const startPulseAnimation = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnimation, {
-          toValue: 1.1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnimation, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  };
 
   const loadEventName = async () => {
     try {
@@ -295,71 +262,69 @@ export default function ScannerScreen() {
     }
   };
 
-  const toggleBackgroundColor = toggleAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#06D6A0', '#F72585'],
-  });
-
-  const toggleTranslateX = toggleAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [2, screenWidth / 2 - 20],
-  });
+  // Simplified UI without complex animations
 
   const customHeader = (
     <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
-      {/* Event Info Card */}
-      <View style={[styles.eventCard, { backgroundColor: colors.card }]}>
-        <View style={styles.eventIconContainer}>
-          <Calendar size={20} color="#06D6A0" />
-        </View>
-        <View style={styles.eventDetails}>
-          <Text style={[styles.eventLabel, { color: colors.secondary }]}>ACTIVE EVENT</Text>
-          <Text style={[styles.eventName, { color: colors.text }]} numberOfLines={1}>
-            {currentEventName}
-          </Text>
-        </View>
-        <Animated.View style={[styles.statusIndicator, { transform: [{ scale: pulseAnimation }] }]}>
-          <Zap size={16} color="#06D6A0" />
-        </Animated.View>
+      {/* Simple Event Info */}
+      <View style={styles.simpleEventInfo}>
+        <Text style={[styles.eventNameSimple, { color: colors.text }]} numberOfLines={1}>
+          {currentEventName}
+        </Text>
       </View>
       
-      {/* Simple Minimal Toggle */}
-      <View style={styles.toggleSection}>
-        <Text style={[styles.modeLabel, { color: colors.text }]}>
-          {scanMode === 'scan-in' ? 'Check In Mode' : 'Check Out Mode'}
-        </Text>
-        
-        <TouchableOpacity onPress={toggleScanMode} activeOpacity={0.7}>
-          <Animated.View style={[styles.toggleTrack, { backgroundColor: toggleBackgroundColor }]}>
-            <Animated.View 
-              style={[
-                styles.toggleThumb, 
-                { transform: [{ translateX: toggleTranslateX }] }
-              ]}
-            >
-              {scanMode === 'scan-in' ? (
-                <LogIn size={16} color="#06D6A0" strokeWidth={2} />
-              ) : (
-                <LogOut size={16} color="#F72585" strokeWidth={2} />
-              )}
-            </Animated.View>
-          </Animated.View>
+      {/* Large Toggle Buttons */}
+      <View style={styles.modeToggleContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.modeButton, 
+            styles.checkInButton,
+            scanMode === 'scan-in' && styles.activeButton,
+            { backgroundColor: scanMode === 'scan-in' ? '#06D6A0' : colors.card }
+          ]}
+          onPress={() => {
+            if (scanMode !== 'scan-in') toggleScanMode();
+          }}
+          activeOpacity={0.8}
+        >
+          <LogIn size={24} color={scanMode === 'scan-in' ? '#FFFFFF' : '#06D6A0'} strokeWidth={2.5} />
+          <Text style={[
+            styles.modeButtonText, 
+            { color: scanMode === 'scan-in' ? '#FFFFFF' : '#06D6A0' }
+          ]}>
+            Check In
+          </Text>
         </TouchableOpacity>
         
-        <View style={styles.toggleHint}>
-          <Text style={[styles.toggleHintText, { color: colors.secondary }]}>
-            Tap to switch modes
+        <TouchableOpacity 
+          style={[
+            styles.modeButton, 
+            styles.checkOutButton,
+            scanMode === 'scan-out' && styles.activeButton,
+            { backgroundColor: scanMode === 'scan-out' ? '#F72585' : colors.card }
+          ]}
+          onPress={() => {
+            if (scanMode !== 'scan-out') toggleScanMode();
+          }}
+          activeOpacity={0.8}
+        >
+          <LogOut size={24} color={scanMode === 'scan-out' ? '#FFFFFF' : '#F72585'} strokeWidth={2.5} />
+          <Text style={[
+            styles.modeButtonText, 
+            { color: scanMode === 'scan-out' ? '#FFFFFF' : '#F72585' }
+          ]}>
+            Check Out
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
-      {/* Group Scan Button */}
+      {/* Simple Group Scan Button */}
       <TouchableOpacity 
-        style={[styles.groupScanButton, { backgroundColor: colors.primary }]}
+        style={[styles.groupScanButtonSimple, { backgroundColor: colors.primary }]}
         onPress={handleGroupScan}
       >
-        <Users size={20} color="#FFFFFF" />
-        <Text style={styles.groupScanButtonText}>Group Scan</Text>
+        <Users size={18} color="#FFFFFF" />
+        <Text style={styles.groupScanButtonTextSimple}>Group Scan</Text>
       </TouchableOpacity>
     </View>
   );
@@ -384,104 +349,78 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingBottom: 20,
   },
-  eventCard: {
+  // Simplified Event Info
+  simpleEventInfo: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  eventNameSimple: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  // Large Toggle Buttons
+  modeToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 25,
+    gap: 15,
+  },
+  modeButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    justifyContent: 'center',
     paddingVertical: 18,
-    borderRadius: 20,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  checkInButton: {
+    borderWidth: 2,
+    borderColor: '#06D6A0',
+  },
+  checkOutButton: {
+    borderWidth: 2,
+    borderColor: '#F72585',
+  },
+  activeButton: {
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },
-  eventIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(6, 214, 160, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  eventDetails: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  eventLabel: {
-    fontSize: 11,
+  modeButtonText: {
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    opacity: 0.7,
+    marginLeft: 8,
   },
-  eventName: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    lineHeight: 22,
-  },
-  statusIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(6, 214, 160, 0.1)',
-    justifyContent: 'center',
+  // Simple Group Scan Button
+  groupScanButtonSimple: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  toggleSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modeLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  toggleTrack: {
-    width: 120,
-    height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  toggleThumb: {
-    position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    top: 2,
-    left: 2,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  toggleHint: {
-    marginTop: 8,
-  },
-  toggleHintText: {
-    fontSize: 12,
-    fontWeight: '500',
-    opacity: 0.6,
+  groupScanButtonTextSimple: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   statusBadge: {
     alignSelf: 'center',

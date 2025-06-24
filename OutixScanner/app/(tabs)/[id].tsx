@@ -1,50 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-} from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { 
-  Calendar, 
-  Clock, 
-  MapPin, 
-  QrCode, 
-  Users, 
-  BarChart, 
-  Settings,
-  Ticket, 
-  DollarSign,
-  CheckCircle,
-  UserCheck,
-  User,
-  Plus,
-  RefreshCw
+    BarChart,
+    Calendar,
+    ChevronDown,
+    ChevronUp,
+    Clock,
+    MapPin,
+    QrCode,
+    Ticket,
+    UserCheck,
+    Users
 } from 'lucide-react-native';
-import { useTheme } from '../../context/ThemeContext';
-import { useRefresh } from '../../context/RefreshContext';
-import { 
-  getGuestList, 
-  getEvents, 
-  validateQRCode, 
-  scanQRCode, 
-  unscanQRCode,
-  testProxyConnectivity,
-  setManualProxyIP,
-  getCurrentProxyURL,
-  clearManualProxyIP,
-  getCurrentProxyIP,
-  QRScanResponse,
-  getCheckedInGuestList
-} from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import QRScanner from '../../components/QRScanner';
+import { useRefresh } from '../../context/RefreshContext';
+import { useTheme } from '../../context/ThemeContext';
+import {
+    clearManualProxyIP,
+    getCheckedInGuestList,
+    getCurrentProxyIP,
+    getCurrentProxyURL,
+    getEvents,
+    getGuestList,
+    scanQRCode,
+    setManualProxyIP,
+    testProxyConnectivity,
+    unscanQRCode,
+    validateQRCode
+} from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
 // Mock data types
@@ -165,9 +159,7 @@ const mockEvents: { [key: string]: Event } = {
   },
 };
 
-// Tab names - removing Guest List and Attendance
-type TabName = 'Overview' | 'Analytics' | 'Tickets';
-const tabs: TabName[] = ['Overview', 'Analytics', 'Tickets'];
+// No tabs needed - merged into single view
 
 export default function EventDetail() {
   const { colors, isDarkMode, setSelectedEventId, setSelectedEventName } = useTheme();
@@ -176,13 +168,13 @@ export default function EventDetail() {
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
   const [event, setEvent] = useState<Event | null>(null);
-  const [activeTab, setActiveTab] = useState<TabName>('Overview');
   const [loading, setLoading] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate'); // Track scan mode
   const [guestList, setGuestList] = useState<Attendee[]>([]); // Separate guest list state
   const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState<number>(0); // Total guests from API
   const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]); // Separate state for checked-in guests
+  const [isEventDetailsExpanded, setIsEventDetailsExpanded] = useState(false); // Event details expansion state
 
   useEffect(() => {
     initializeAudio();
@@ -821,280 +813,180 @@ export default function EventDetail() {
   const totalGuestsCount = totalGuestsFromAPI || 0;
   const attendancePercentage = totalGuestsCount ? Math.round((checkedInCount / totalGuestsCount) * 100) : 0;
 
-  const renderTabBar = () => (
-    <View style={[styles.tabBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-      {tabs.map((tab) => (
-        <TouchableOpacity
-          key={tab}
-          style={[
-            styles.tab,
-            activeTab === tab && [styles.activeTab, { backgroundColor: colors.primary }]
-          ]}
-          onPress={() => {
-            feedback.buttonPress();
-            setActiveTab(tab);
-          }}
-        >
-          <Text style={[
-              styles.tabText,
-            { color: activeTab === tab ? '#FFFFFF' : colors.text }
-          ]}>
-            {tab}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  // No tab bar needed - merged into single view
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'Overview':
-        return (
-          <View style={styles.tabContent}>
-            <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Overview</Text>
-              
-              <View style={styles.statsContainer}>
-                <View style={[styles.statCard, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.2)' }]}>
-                    <Users size={24} color="#FF9500" />
-                  </View>
-                  <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsCount}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Guests</Text>
-                </View>
-                
-                <View style={[styles.statCard, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
-                    <UserCheck size={24} color="#34C759" />
-                  </View>
-                  <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
-                </View>
-                
-                <View style={[styles.statCard, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.2)' }]}>
-                    <BarChart size={24} color="#007AFF" />
-                  </View>
-                  <Text style={[styles.statValue, { color: colors.text }]}>{attendancePercentage}%</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Attendance</Text>
-                </View>
+  const renderMergedContent = () => {
+    return (
+      <View style={styles.modernContainer}>
+        {/* Compact Stats Row */}
+        <View style={[styles.compactStatsCard, { backgroundColor: colors.card }]}>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(255, 107, 0, 0.1)' }]}>
+                <Users size={20} color="#FF6B00" />
               </View>
-            </View>
-
-            {/* Quick Actions */}
-            <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
-              
-              <View style={styles.actionGrid}>
-                <TouchableOpacity 
-                  style={[styles.actionCard, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    handleOpenScanner('validate');
-                  }}
-                >
-                  <View style={styles.actionIconContainer}>
-                    <QrCode size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.actionCardText}>Scan Ticket</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.actionCard, { backgroundColor: '#34C759' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    router.push(`/(tabs)/guest-list/${eventId}`);
-                  }}
-                >
-                  <View style={styles.actionIconContainer}>
-                    <Users size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.actionCardText}>Guest List</Text>
-                </TouchableOpacity>
-              </View>
-                
-              <View style={styles.actionGrid}>
-                <TouchableOpacity 
-                  style={[styles.actionCard, { backgroundColor: '#FF6B35' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    router.push(`/(tabs)/attendance/${eventId}`);
-                  }}
-                >
-                  <View style={styles.actionIconContainer}>
-                    <UserCheck size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.actionCardText}>Attendance</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.actionCard, { backgroundColor: '#9C27B0' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    setActiveTab('Analytics');
-                  }}
-                >
-                  <View style={styles.actionIconContainer}>
-                    <BarChart size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.actionCardText}>Analytics</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        );
-        
-      case 'Analytics':
-        return (
-          <View style={styles.tabContent}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Event Analytics</Text>
-              
-              <View style={[styles.statsContainer, { padding: 16 }]}>
-                <View style={styles.statCard}>
-                  <Users size={24} color={colors.primary} />
-                  <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsCount}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Registered</Text>
-                </View>
-                
-                <View style={styles.statCard}>
-                  <UserCheck size={24} color="#34C759" />
-                  <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
-                </View>
-                
-                <View style={styles.statCard}>
-                  <DollarSign size={24} color={colors.primary} />
-                  <Text style={[styles.statValue, { color: colors.text }]}>${event?.revenue || 0}</Text>
-                  <Text style={[styles.statLabel, { color: colors.secondary }]}>Revenue</Text>
-                </View>
-              </View>
+              <Text style={[styles.compactStatValue, { color: colors.text }]}>{totalGuestsCount}</Text>
+              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Total</Text>
             </View>
             
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Attendance Overview</Text>
-              
-              <View style={[styles.attendanceContainer, { padding: 16 }]}>
-                <View style={styles.attendanceItem}>
-                  <View style={[styles.attendanceCircle, { borderColor: colors.primary }]}>
-                    <Text style={[styles.attendancePercentage, { color: colors.primary }]}>
-                      {attendancePercentage}%
-                    </Text>
-                  </View>
-                  <Text style={[styles.attendanceLabel, { color: colors.text }]}>Check-in Rate</Text>
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+                <UserCheck size={20} color="#22C55E" />
+              </View>
+              <Text style={[styles.compactStatValue, { color: colors.text }]}>{checkedInCount}</Text>
+              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Present</Text>
+            </View>
+            
+            <View style={styles.statDivider} />
+            
+            <View style={styles.statItem}>
+              <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+                <BarChart size={20} color="#3B82F6" />
+              </View>
+              <Text style={[styles.compactStatValue, { color: colors.text }]}>{attendancePercentage}%</Text>
+              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Rate</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions Grid */}
+        <View style={[styles.actionsGrid, { backgroundColor: colors.card }]}>
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: 'rgba(255, 107, 0, 0.05)' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              handleOpenScanner('validate');
+            }}
+          >
+            <View style={[styles.compactActionIconContainer, { backgroundColor: '#FF6B00' }]}>
+              <QrCode size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.compactActionText, { color: colors.text }]}>Scan</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: 'rgba(59, 130, 246, 0.05)' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              router.push(`/(tabs)/guest-list/${eventId}`);
+            }}
+          >
+            <View style={[styles.compactActionIconContainer, { backgroundColor: '#3B82F6' }]}>
+              <Users size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.compactActionText, { color: colors.text }]}>Guests</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: 'rgba(34, 197, 94, 0.05)' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              router.push(`/(tabs)/attendance/${eventId}`);
+            }}
+          >
+            <View style={[styles.compactActionIconContainer, { backgroundColor: '#22C55E' }]}>
+              <UserCheck size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.compactActionText, { color: colors.text }]}>Attendance</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionItem, { backgroundColor: 'rgba(168, 85, 247, 0.05)' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              router.push(`/(tabs)/analytics`);
+            }}
+          >
+            <View style={[styles.compactActionIconContainer, { backgroundColor: '#A855F7' }]}>
+              <BarChart size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.compactActionText, { color: colors.text }]}>Analytics</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Compact Attendance Overview */}
+        <View style={[styles.attendanceCompactCard, { backgroundColor: colors.card }]}>
+          <View style={styles.attendanceRowLayout}>
+            <View style={styles.attendanceCircleCompact}>
+              <Text style={[styles.attendancePercentText, { color: '#FF6B00' }]}>
+                {attendancePercentage}%
+              </Text>
+            </View>
+            
+            <View style={styles.attendanceDetailsSection}>
+              <Text style={[styles.attendanceTitleText, { color: colors.text }]}>Check-in Progress</Text>
+              <View style={styles.attendanceStatsRow}>
+                <View style={styles.attendanceStatCompact}>
+                  <Text style={[styles.attendanceStatValueCompact, { color: '#22C55E' }]}>{checkedInCount}</Text>
+                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Present</Text>
                 </View>
-                
-                <View style={styles.attendanceStats}>
-                  <View style={styles.attendanceStatItem}>
-                    <UserCheck color="#34C759" size={20} />
-                    <View style={styles.attendanceStatText}>
-                      <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
-                      {checkedInCount}
-                    </Text>
-                      <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
-                        Present
-                      </Text>
-                  </View>
-                  </View>
-                  <View style={styles.attendanceStatItem}>
-                    <User color="#FF6B35" size={20} />
-                    <View style={styles.attendanceStatText}>
-                      <Text style={[styles.attendanceStatValue, { color: colors.text }]}>
-                        {totalGuestsCount - checkedInCount}
-                    </Text>
-                      <Text style={[styles.attendanceStatLabel, { color: colors.secondary }]}>
-                        Not Arrived
-                      </Text>
-                    </View>
-                  </View>
+                <View style={styles.attendanceStatCompact}>
+                  <Text style={[styles.attendanceStatValueCompact, { color: colors.secondary }]}>{totalGuestsCount - checkedInCount}</Text>
+                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Pending</Text>
                 </View>
               </View>
             </View>
           </View>
-        );
-        
-      case 'Tickets':
-        return (
-          <View style={styles.tabContent}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <View style={styles.cardHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Ticket Types</Text>
-                <TouchableOpacity style={styles.addButton}>
-                  <Plus size={16} color={colors.primary} />
-                  <Text style={[styles.addButtonText, { color: colors.primary }]}>Add</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {event?.tickets && event.tickets.length > 0 ? (
-                <FlatList
-                  data={event.tickets}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <View style={[styles.ticketItem, { backgroundColor: colors.primary }]}>
-                      <View style={styles.ticketHeader}>
-                        <Text style={[styles.ticketType, { color: colors.card }]}>{item.type}</Text>
-                        <Text style={[styles.ticketPrice, { color: colors.card }]}>${item.price}</Text>
-                      </View>
-                      <View style={styles.ticketStats}>
-                        <View style={styles.ticketStatItem}>
-                          <Text style={[styles.ticketStatValue, { color: colors.card }]}>{item.sold}</Text>
-                          <Text style={[styles.ticketStatLabel, { color: colors.card }]}>Sold</Text>
-                        </View>
-                        <View style={styles.ticketStatItem}>
-                          <Text style={[styles.ticketStatValue, { color: colors.card }]}>{item.available}</Text>
-                          <Text style={[styles.ticketStatLabel, { color: colors.card }]}>Available</Text>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.ticketList}
-                />
-              ) : (
-                <View style={[styles.emptyState, { padding: 30 }]}>
-                  <Ticket size={40} color={colors.secondary} opacity={0.5} />
-                  <Text style={[styles.emptyStateText, { color: colors.text }]}>No ticket types configured</Text>
-                  <Text style={[styles.emptyStateSubtext, { color: colors.secondary }]}>
-                    Configure ticket types to better manage your event.
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-        
-      default:
-        return null;
-    }
+        </View>
+      </View>
+    );
   };
 
   // Content for each tab is now rendered separately
   const renderEventHeader = () => (
-    <View style={[styles.header, { backgroundColor: colors.card }]}>
-      <View style={styles.eventMeta}>
-        <View style={styles.metaItem}>
-          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
-            <Calendar size={16} color="#FF9500" />
+    <TouchableOpacity 
+      style={[styles.compactHeader, { backgroundColor: colors.card }]}
+      onPress={() => setIsEventDetailsExpanded(!isEventDetailsExpanded)}
+      activeOpacity={0.7}
+    >
+      {!isEventDetailsExpanded ? (
+        // Compact view - only event name
+        <View style={styles.compactContent}>
+          <View style={styles.compactTitleSection}>
+            <Text style={[styles.compactTitle, { color: colors.text }]} numberOfLines={2}>
+              {event!.title}
+            </Text>
+            <ChevronDown size={20} color="#FF6B00" />
           </View>
-          <Text style={[styles.metaText, { color: colors.text }]}>{event!.date}</Text>
         </View>
-        <View style={styles.metaItem}>
-          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
-            <Clock size={16} color="#007AFF" />
+      ) : (
+        // Expanded view - full details
+        <View style={styles.expandedContent}>
+          <View style={styles.expandedTitleSection}>
+            <Text style={[styles.expandedTitle, { color: colors.text }]}>{event!.title}</Text>
+            <ChevronUp size={20} color="#FF6B00" />
           </View>
-          <Text style={[styles.metaText, { color: colors.text }]}>{event!.time}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <View style={[styles.metaIconContainer, { backgroundColor: 'rgba(255, 45, 85, 0.1)' }]}>
-            <MapPin size={16} color="#FF2D55" />
+          
+          {/* Date and Time on same line */}
+          <View style={styles.dateTimeRow}>
+            <View style={styles.dateTimeItem}>
+              <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
+                <Calendar size={16} color="#FF6B00" />
+              </View>
+              <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.date}</Text>
+            </View>
+            <View style={styles.dateTimeItem}>
+              <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
+                <Clock size={16} color="#FF6B00" />
+              </View>
+              <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.time}</Text>
+            </View>
           </View>
-          <Text style={[styles.metaText, { color: colors.text, flex: 1 }]}>
-            {event!.location}
-          </Text>
+          
+          {/* Location on separate line */}
+          <View style={styles.locationRow}>
+            <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
+              <MapPin size={16} color="#FF6B00" />
+            </View>
+            <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={2}>
+              {event!.location}
+            </Text>
+          </View>
         </View>
-      </View>
-    </View>
+      )}
+    </TouchableOpacity>
   );
 
   const generateTestQRCode = () => {
@@ -1297,15 +1189,13 @@ export default function EventDetail() {
     );
   }
 
-  // Render the appropriate content based on the active tab
+  // Render the merged content without tabs
   const renderContent = () => {
-    // All remaining tabs use ScrollView as they don't contain FlatLists
-      return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {renderEventHeader()}
-          {renderTabBar()}
-        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-          {renderTabContent()}
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderEventHeader()}
+        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {renderMergedContent()}
         </ScrollView>
       </View>
     );
@@ -1316,7 +1206,7 @@ export default function EventDetail() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
         options={{ 
-          title: event?.title || "Event Details",
+          title: "",
           headerShown: true,
           headerRight: () => null,
         }}
@@ -1339,7 +1229,7 @@ export default function EventDetail() {
 
 // Helper function to generate colors for different ticket types
 const getTicketColor = (index: number) => {
-  const colors = ['#FF9500', '#4CAF50', '#2196F3', '#9C27B0', '#FF3B30'];
+  const colors = ['#FF6B00', '#4CAF50', '#2196F3', '#9C27B0', '#FF3B30'];
   return colors[index % colors.length];
 };
 
@@ -1368,29 +1258,68 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 120, // Space for navigation bar + extra padding
+  },
   header: {
     padding: 20,
-    marginBottom: 12,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    marginBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
+  },
+  headerContent: {
+    gap: 16,
+  },
+  eventTitleSection: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  eventTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    marginBottom: 2,
+  },
+  eventSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
   },
   eventMeta: {
-    gap: 16,
+    gap: 12,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  metaTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  metaLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 1,
+    opacity: 0.8,
   },
   metaText: {
-    marginLeft: 12,
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   metaIconContainer: {
     width: 36,
@@ -1399,42 +1328,248 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  // Compact Header Styles
+  compactHeader: {
+    padding: 16,
+    marginBottom: 12,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF6B00',
+  },
+  compactContent: {
+    minHeight: 40,
+  },
+  compactTitleSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  compactTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 12,
+    letterSpacing: -0.2,
+  },
+  expandedContent: {
+    gap: 12,
+  },
+  expandedTitleSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  expandedTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 12,
+    letterSpacing: -0.3,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  dateTimeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  compactIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 20,
+  },
+  // Modern Compact Design Styles
+  modernContainer: {
+    gap: 16,
+    paddingHorizontal: 16,
+  },
+  compactStatsCard: {
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compactStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  compactStatLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginHorizontal: 8,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  actionItem: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+  },
+  compactActionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compactActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  attendanceCompactCard: {
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  attendanceRowLayout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  attendanceCircleCompact: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  attendancePercentText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  attendanceDetailsSection: {
+    flex: 1,
+  },
+  attendanceTitleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  attendanceStatsRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  attendanceStatCompact: {
+    alignItems: 'center',
+  },
+  attendanceStatValueCompact: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  attendanceStatLabelCompact: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginHorizontal: 20,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 2,
-    borderRadius: 8,
+    marginHorizontal: 4,
+    borderRadius: 12,
   },
   activeTab: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#FF6B00',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   tabText: {
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 15,
     textAlign: 'center',
   },
   tabContent: {
@@ -1442,14 +1577,16 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   infoCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 16,
+    borderRadius: 20,
+    marginBottom: 20,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
     overflow: 'hidden',
   },
   sectionTitle: {
@@ -1873,14 +2010,16 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   statsCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 20,
-    padding: 20,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -1956,6 +2095,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  attendanceStatIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   attendanceStatText: {
     alignItems: 'center',
   },
@@ -1968,14 +2120,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   actionsCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 20,
-    padding: 20,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
   },
   actionGrid: {
     flexDirection: 'row',
@@ -2010,5 +2164,336 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
     textAlign: 'center',
+  },
+  // New Beautiful Hero Stats Card
+  heroStatsCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
+  },
+  heroStatsHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
+  },
+  heroStatsGrid: {
+    gap: 12,
+  },
+  heroStatCard: {
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  heroStatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  heroStatIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  heroStatValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  heroStatLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    letterSpacing: -0.1,
+  },
+  heroStatBar: {
+    height: 3,
+    borderRadius: 1.5,
+    width: '100%',
+  },
+  // Modern Actions Card
+  modernActionsCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
+  },
+  actionsHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  actionsTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  actionsSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
+  },
+  modernActionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  modernActionCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    backgroundColor: 'rgba(255, 107, 0, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.1)',
+  },
+  modernActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modernActionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  modernActionDesc: {
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    opacity: 0.8,
+    lineHeight: 18,
+  },
+  // Analytics Card Styles
+  analyticsCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
+  },
+  analyticsHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  analyticsTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  analyticsSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
+  },
+  analyticsGrid: {
+    gap: 12,
+  },
+  analyticsStatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  analyticsStatIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  analyticsStatContent: {
+    flex: 1,
+  },
+  analyticsStatValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginBottom: 2,
+  },
+  analyticsStatLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+    opacity: 0.8,
+  },
+  // Attendance Card Styles
+  attendanceCard: {
+    borderRadius: 20,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B00',
+  },
+  attendanceHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  attendanceTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
+  },
+  attendanceSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
+  },
+  attendanceContent: {
+    gap: 16,
+  },
+  attendanceMainStat: {
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  attendanceCircleNew: {
+    width: 100,
+    height: 100,
+    borderWidth: 5,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  attendancePercentageNew: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  attendanceRateLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 3,
+  },
+  attendanceStatsNew: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 12,
+  },
+  attendanceStatNew: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 107, 0, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.1)',
+  },
+  attendanceStatIconNew: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  attendanceStatTextNew: {
+    alignItems: 'center',
+  },
+  attendanceStatValueNew: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginBottom: 3,
+  },
+  attendanceStatLabelNew: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.1,
   },
 }); 

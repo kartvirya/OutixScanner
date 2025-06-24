@@ -1,10 +1,8 @@
+import { Tabs, usePathname, useRouter } from "expo-router";
+import { BarChart, Bell, Calendar, QrCode, User } from "lucide-react-native";
 import React, { useEffect } from "react";
-import { Tabs } from "expo-router";
-import { View, StyleSheet, TouchableOpacity, Dimensions, Text } from "react-native";
-import { useRouter, usePathname } from "expo-router";
-import ThemeToggle from "../../components/theme/ThemeToggle";
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../context/ThemeContext";
-import { Calendar, QrCode, User, BarChart, Bell } from "lucide-react-native";
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -36,8 +34,22 @@ function CustomTabBar() {
   ];
 
   const isActive = (route: string) => {
+    console.log('Checking active state:', { route, pathname });
+    
     if (route === '/(tabs)') {
-      return pathname === '/(tabs)' || pathname === '/(tabs)/';
+      return pathname === '/(tabs)' || pathname === '/(tabs)/' || pathname === '/';
+    }
+    if (route === '/(tabs)/analytics') {
+      return pathname.includes('/analytics');
+    }
+    if (route === '/(tabs)/scanner') {
+      return pathname.includes('/scanner');
+    }
+    if (route === '/(tabs)/notifications') {
+      return pathname.includes('/notifications');
+    }
+    if (route === '/(tabs)/profile') {
+      return pathname.includes('/profile');
     }
     return pathname === route;
   };
@@ -63,10 +75,10 @@ function CustomTabBar() {
               <View style={[
                 styles.centerTab,
                 {
-                  backgroundColor: active ? colors.primary : isDarkMode ? '#2C2C2E' : '#E5E5EA',
+                  backgroundColor: active ? '#FF6B00' : isDarkMode ? '#2C2C2E' : '#E5E5EA',
                 }
               ]}>
-                <IconComponent size={32} color={active ? '#FFFFFF' : colors.text} strokeWidth={2.5} />
+                <IconComponent size={28} color={active ? '#FFFFFF' : colors.text} strokeWidth={2.5} />
               </View>
             </TouchableOpacity>
           );
@@ -75,22 +87,34 @@ function CustomTabBar() {
         return (
           <TouchableOpacity
             key={tab.name}
-            style={styles.regularTab}
+            style={[
+              styles.regularTab,
+              active && styles.activeTab
+            ]}
             onPress={() => handleTabPress(tab.route)}
             activeOpacity={0.7}
           >
-            <View style={[styles.tabIconContainer, { opacity: active ? 1 : 0.7 }]}>
+            <View style={[
+              styles.tabIconContainer, 
+              { 
+                opacity: active ? 1 : 0.7,
+                backgroundColor: active ? `${colors.primary}20` : 'transparent',
+                borderRadius: 12,
+                padding: 8,
+              }
+            ]}>
               <IconComponent 
                 size={24} 
-                color={active ? colors.primary : colors.secondary} 
+                color={active ? '#FF6B00' : colors.secondary} 
                 strokeWidth={2.5} 
               />
             </View>
             <Text style={[
               styles.tabLabel,
               { 
-                color: active ? colors.primary : colors.secondary,
+                color: active ? '#FF6B00' : colors.secondary,
                 marginTop: 4,
+                fontWeight: active ? '700' : '600',
               }
             ]}>
               {tab.title}
@@ -120,10 +144,6 @@ export default function TabsLayout() {
         headerTintColor: colors.text,
         headerTitleStyle: {
           fontWeight: '600',
-        },
-        headerRight: () => <ThemeToggle />,
-        headerRightContainerStyle: {
-          paddingRight: 16,
         },
       }}
     >
@@ -197,6 +217,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
   },
+  activeTab: {
+    transform: [{ scale: 1.05 }],
+  },
   centerTabContainer: {
     flex: 1,
     alignItems: 'center',
@@ -204,9 +227,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   centerTab: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -217,9 +240,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
-    borderWidth: 3,
-    borderColor: 'transparent',
-    transform: [{ translateY: -28 }],
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    transform: [{ translateY: -15 }],
   },
   tabIconContainer: {
     alignItems: 'center',

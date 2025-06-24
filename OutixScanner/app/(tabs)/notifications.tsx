@@ -1,7 +1,7 @@
+import { AlertCircle, Calendar, CheckCircle, Info, LucideIcon } from 'lucide-react-native';
 import React from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { Bell, CheckCircle, AlertCircle, Info, Calendar, LucideIcon } from 'lucide-react-native';
 
 interface Notification {
   id: string;
@@ -89,7 +89,7 @@ export default function Notifications() {
         data={mockNotifications}
         renderItem={renderNotification}
         keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 120 }]}
         showsVerticalScrollIndicator={false}
       />
     </View>

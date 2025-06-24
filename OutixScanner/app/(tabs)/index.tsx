@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { Text, View, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert, RefreshControl } from "react-native";
-import { Calendar, Clock, MapPin, ChevronRight, CalendarX } from "lucide-react-native";
-import { useTheme } from "../../context/ThemeContext";
-import { useRefresh } from "../../context/RefreshContext";
-import { router } from "expo-router";
-import { login, getEvents } from "../../services/api";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
+import { Calendar, CalendarX, ChevronRight, Clock, MapPin } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useRefresh } from "../../context/RefreshContext";
+import { useTheme } from "../../context/ThemeContext";
+import { getEvents, login } from "../../services/api";
 
 // Define event type
 interface Event {
@@ -165,7 +164,7 @@ export default function Index() {
 
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity 
-      style={styles.eventCard}
+      style={[styles.eventCard, { backgroundColor: colors.card }]}
       onPress={() => {
         // Set selected event in context
         setSelectedEventId(item.id);
@@ -181,30 +180,51 @@ export default function Index() {
         resizeMode="cover"
       />
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)']}
         style={styles.gradientOverlay}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
-      <View style={styles.eventOverlay} pointerEvents="box-none">
-        <View style={styles.eventHeader}>
-          <Text style={[styles.eventTitle, { color: '#FFFFFF' }]}>{item.title}</Text>
+      
+      <View style={styles.eventOverlay}>
+        <View style={styles.eventContent}>
+          <View style={styles.eventHeader}>
+            <Text style={[styles.eventTitle, { color: '#FFFFFF' }]} numberOfLines={2} ellipsizeMode="tail">
+              {item.title}
+            </Text>
+          </View>
+          
+          <View style={styles.eventDetails}>
+            <View style={styles.detailRow}>
+              <View style={styles.iconWrapper}>
+                <Calendar size={14} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
+                {item.date}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <View style={styles.iconWrapper}>
+                <Clock size={14} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
+                {item.time}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <View style={styles.iconWrapper}>
+                <MapPin size={14} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.detailText, { color: '#FFFFFF', flex: 1 }]}>
+                {item.location}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.eventDetails}>
-          <View style={styles.detailRow}>
-            <Calendar size={14} color="#FFFFFF" style={styles.icon} />
-            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.date}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Clock size={14} color="#FFFFFF" style={styles.icon} />
-            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.time}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <MapPin size={14} color="#FFFFFF" style={styles.icon} />
-            <Text style={[styles.detailText, { color: '#FFFFFF' }]}>{item.location}</Text>
-          </View>
-        </View>
-        <View style={styles.viewDetailsContainer}> 
+        
+        <View style={styles.viewDetailsContainer}>
           <View style={styles.viewDetails}>
             <Text style={styles.viewDetailsText}>View Details</Text>
             <ChevronRight size={12} color="#FFFFFF" />
@@ -235,6 +255,7 @@ export default function Index() {
             keyExtractor={(item) => item.id}
             style={styles.eventList}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContainer}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -272,16 +293,16 @@ const styles = StyleSheet.create({
     color: "#000000",
   },
   listContainer: {
-    paddingBottom: 20,
+    paddingBottom: 120, // Space for navigation bar + extra padding
   },
   eventCard: {
     borderRadius: 16,
     marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
     overflow: 'hidden',
     height: 200,
     position: 'relative',
@@ -295,7 +316,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 0.75,
+    opacity: 0.8,
   },
   gradientOverlay: {
     position: 'absolute',
@@ -303,48 +324,54 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
+
   eventOverlay: {
     flex: 1,
-    padding: 18,
+    padding: 16,
     justifyContent: 'space-between',
+    zIndex: 1,
+  },
+  eventContent: {
+    flex: 1,
+    paddingRight: 130, // Add padding to prevent overlap with button
+    paddingBottom: 50, // Add bottom padding for button space
   },
   eventHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    marginBottom: 12,
   },
   eventTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    flex: 1,
-    marginBottom: 12,
+    fontSize: 22,
+    fontWeight: "800",
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    lineHeight: 26,
   },
   eventDetails: {
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
   },
   detailRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
+    minHeight: 20,
   },
-  icon: {
-    marginRight: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 1,
+  iconWrapper: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   detailText: {
-    fontSize: 14,
-    fontWeight: "500",
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    fontSize: 15,
+    fontWeight: "600",
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
+    lineHeight: 18,
   },
   emptyState: {
     flex: 1,
@@ -363,25 +390,29 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   viewDetailsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
     position: 'absolute',
-    bottom: 18,
-    right: 18,
+    bottom: 16,
+    right: 16,
   },
   viewDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    backgroundColor: 'rgba(255, 149, 0, 0.9)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    shadowColor: '#FF9500',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   viewDetailsText: {
     color: '#FFFFFF',
-    fontWeight: '600',
-    marginRight: 4,
-    fontSize: 13,
+    fontWeight: '700',
+    marginRight: 6,
+    fontSize: 14,
+    letterSpacing: 0.5,
   },
   centerContainer: {
     flex: 1,

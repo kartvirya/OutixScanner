@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
-import { useTheme } from '../../context/ThemeContext';
+import { Calendar, Clock, DollarSign, TrendingUp, UserCheck, Users } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRefresh } from '../../context/RefreshContext';
-import { BarChart, TrendingUp, Users, DollarSign, Calendar, UserCheck, UserX, Clock } from 'lucide-react-native';
-import { getEvents, getGuestList, getCheckedInGuestList } from '../../services/api';
+import { useTheme } from '../../context/ThemeContext';
+import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
 
 interface AnalyticsData {
   totalEvents: number;
@@ -144,6 +144,7 @@ export default function Analytics() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollContent}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -252,6 +253,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 120, // Space for navigation bar + extra padding
+  },
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -277,20 +281,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 12,
+    gap: 12,
   },
   statCard: {
-    width: '46%',
-    margin: '2%',
-    padding: 16,
-    borderRadius: 16,
+    flex: 1,
+    minWidth: '45%',
+    padding: 20,
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9500',
   },
   iconContainer: {
     width: 48,
@@ -318,17 +325,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   eventCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 4,
     },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9500',
   },
   eventInfo: {
     flex: 1,

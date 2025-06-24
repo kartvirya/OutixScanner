@@ -1,43 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { 
-  QrCode, 
-  UserCheck, 
-  Settings,
-  CheckCircle,
-  User,
-  Search,
   ArrowLeft,
-  RefreshCw,
   Clock,
+  QrCode,
+  RefreshCw,
+  Search,
+  User,
+  UserCheck,
   Users
 } from 'lucide-react-native';
-import { useTheme } from '../../../context/ThemeContext';
-import { useRefresh } from '../../../context/RefreshContext';
-import { 
-  getCheckedInGuestList,
-  getGuestList, 
-  getEvents, 
-  validateQRCode, 
-  scanQRCode,
-  unscanQRCode,
-  testProxyConnectivity,
-  getCurrentProxyURL,
-  getCurrentProxyIP
-} from '../../../services/api';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import QRScanner from '../../../components/QRScanner';
+import { useRefresh } from '../../../context/RefreshContext';
+import { useTheme } from '../../../context/ThemeContext';
+import {
+  getCheckedInGuestList,
+  getCurrentProxyIP,
+  getCurrentProxyURL,
+  getEvents,
+  getGuestList,
+  scanQRCode,
+  testProxyConnectivity,
+  unscanQRCode,
+  validateQRCode
+} from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 
 interface Attendee {
@@ -219,15 +217,18 @@ export default function AttendancePage() {
       if (scanMode === 'scanIn') {
         Alert.alert(
           'Valid Ticket Found',
-          `${ticketInfo?.fullname || 'Guest'}\n${ticketInfo?.ticket_title || 'Unknown ticket'}\nAvailable admits: ${ticketInfo?.available || 0}/${ticketInfo?.admits || 0}`,
+          `${ticketInfo?.fullname || 'Guest'}\n${ticketInfo?.ticket_title || 'Unknown ticket'}\nAvailable admits: ${ticketInfo?.available || 0}/${ticketInfo?.admits || 0}\nPrice: $${ticketInfo?.price || '0.00'}`,
           [
             {
               text: 'Cancel',
               style: 'cancel',
-              onPress: () => feedback.buttonPress()
+              onPress: () => {
+                feedback.buttonPress();
+                setScanMode('scanIn');
+              }
             },
             {
-              text: 'Check In',
+              text: 'Admit Guest',
               onPress: async () => {
                 feedback.buttonPressHeavy();
                 await performScanIn(data, validationResult);
@@ -236,14 +237,30 @@ export default function AttendancePage() {
           ]
         );
       } else {
+        // Scan Out mode
+        const existingAttendee = checkedInGuests.find(attendee => 
+          attendee.scanCode === data || 
+          attendee.email.toLowerCase() === ticketInfo?.email?.toLowerCase()
+        );
+        
+        if (!existingAttendee) {
+          feedback.error();
+          Alert.alert('Not Found', 'This guest is not currently checked in.');
+          setScanMode('scanIn');
+          return;
+        }
+        
         Alert.alert(
           'Check Out Guest',
-          `${ticketInfo?.fullname || 'Guest'}\n${ticketInfo?.ticket_title || 'Unknown ticket'}\n\nAre you sure you want to check out this guest?`,
+          `${existingAttendee.name}\nAre you sure you want to check out this guest?`,
           [
             {
               text: 'Cancel',
               style: 'cancel',
-              onPress: () => feedback.buttonPress()
+              onPress: () => {
+                feedback.buttonPress();
+                setScanMode('scanIn');
+              }
             },
             {
               text: 'Check Out',
@@ -261,7 +278,6 @@ export default function AttendancePage() {
       console.error('QR scan error:', error);
       feedback.error();
       Alert.alert('Error', 'An unexpected error occurred while processing the QR code.');
-    } finally {
       setScanMode('scanIn');
     }
   };
@@ -280,6 +296,7 @@ export default function AttendancePage() {
         
         feedback.error();
         Alert.alert('Scan In Failed', errorMessage + '\n\nLocal attendance has been updated.');
+        setScanMode('scanIn');
         return;
       }
       
@@ -299,7 +316,7 @@ export default function AttendancePage() {
       
       Alert.alert(
         'Guest Checked In Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been checked in.\n\n${successMessage}\n\nAttendance updated locally.`
+        `${ticketInfo?.fullname || 'Guest'} has been checked in.\n\n${successMessage}`
       );
       
     } catch (error) {
@@ -307,6 +324,8 @@ export default function AttendancePage() {
       await updateLocalScanIn(scanCode, validationResult);
       feedback.error();
       Alert.alert('Scan In Error', 'Failed to scan in guest via API. Local attendance has been updated.');
+    } finally {
+      setScanMode('scanIn');
     }
   };
 
@@ -314,26 +333,27 @@ export default function AttendancePage() {
     try {
       await updateLocalScanOut(scanCode, validationResult);
       
-      const unscanResult = await unscanQRCode(eventId, scanCode);
+      const scanResult = await unscanQRCode(eventId, scanCode);
       
-      if (!unscanResult || unscanResult.error) {
+      if (!scanResult || scanResult.error) {
         let errorMessage = 'Failed to scan out guest';
-        if (unscanResult?.msg) {
-          errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
+        if (scanResult?.msg) {
+          errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
         }
         
         feedback.error();
         Alert.alert('Scan Out Failed', errorMessage + '\n\nLocal attendance has been updated.');
+        setScanMode('scanIn');
         return;
       }
       
       feedback.success();
       
-      let successMessage = 'Unscan successful';
-      if (typeof unscanResult.msg === 'string') {
-        successMessage = unscanResult.msg;
-      } else if (unscanResult.msg && typeof unscanResult.msg === 'object' && 'message' in unscanResult.msg) {
-        successMessage = unscanResult.msg.message;
+      let successMessage = 'Guest checked out successfully';
+      if (typeof scanResult.msg === 'string') {
+        successMessage = scanResult.msg;
+      } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
+        successMessage = scanResult.msg.message;
       }
       
       let ticketInfo = null;
@@ -343,7 +363,7 @@ export default function AttendancePage() {
       
       Alert.alert(
         'Guest Checked Out Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been checked out.\n\n${successMessage}\n\nAttendance updated locally.`
+        `${ticketInfo?.fullname || 'Guest'} has been checked out.\n\n${successMessage}`
       );
       
     } catch (error) {
@@ -351,6 +371,8 @@ export default function AttendancePage() {
       await updateLocalScanOut(scanCode, validationResult);
       feedback.error();
       Alert.alert('Scan Out Error', 'Failed to scan out guest via API. Local attendance has been updated.');
+    } finally {
+      setScanMode('scanIn');
     }
   };
 
@@ -359,35 +381,19 @@ export default function AttendancePage() {
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     const ticketInfo = validationResult.msg.info;
-    let guestIndex = checkedInGuests.findIndex(a => 
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
+    const newAttendee: Attendee = {
+      id: `attendee_${Date.now()}`,
+      name: ticketInfo.fullname,
+      email: ticketInfo.email,
+      ticketType: ticketInfo.ticket_title,
+      scannedIn: true,
+      scanInTime: timeString,
+      scanCode: scanCode
+    };
     
-    if (guestIndex < 0) {
-      const newAttendee: Attendee = {
-        id: `guest_${Date.now()}`,
-        name: ticketInfo.fullname,
-        email: ticketInfo.email,
-        ticketType: ticketInfo.ticket_title,
-        scannedIn: true,
-        scanInTime: timeString,
-        scanCode: scanCode
-      };
-      
-      setCheckedInGuests(prev => [...prev, newAttendee]);
-    } else {
-      const updatedGuestList = [...checkedInGuests];
-      updatedGuestList[guestIndex] = {
-        ...updatedGuestList[guestIndex],
-        scannedIn: true,
-        scanInTime: timeString,
-        scanCode: scanCode
-      };
-      setCheckedInGuests(updatedGuestList);
-    }
+    setCheckedInGuests(prev => [...prev, newAttendee]);
     
-    console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
+    console.log(`Checked in ${ticketInfo.fullname} at ${timeString}`);
     feedback.checkIn();
     
     // Trigger refresh for other components
@@ -397,20 +403,15 @@ export default function AttendancePage() {
 
   const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
     const ticketInfo = validationResult.msg.info;
-    let guestIndex = checkedInGuests.findIndex(a => 
-      a.scanCode === scanCode ||
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
+    
+    setCheckedInGuests(prev => 
+      prev.filter(attendee => 
+        attendee.scanCode !== scanCode && 
+        attendee.email.toLowerCase() !== ticketInfo?.email?.toLowerCase()
+      )
     );
     
-    if (guestIndex >= 0) {
-      // Remove from checked-in list
-      const updatedGuestList = [...checkedInGuests];
-      updatedGuestList.splice(guestIndex, 1);
-      setCheckedInGuests(updatedGuestList);
-    }
-    
-    console.log(`Updated scan-out status for ${ticketInfo.fullname}`);
+    console.log(`Checked out ${ticketInfo.fullname}`);
     feedback.success();
     
     // Trigger refresh for other components
@@ -419,34 +420,24 @@ export default function AttendancePage() {
   };
 
   const testNetworkConnectivity = async () => {
-    feedback.buttonPress();
-    
     try {
       const result = await testProxyConnectivity();
       const currentURL = await getCurrentProxyURL();
       const currentIP = await getCurrentProxyIP();
       
-      if (result.success) {
-        Alert.alert(
-          'Network Test Successful! ✅',
-          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}`,
-          [{ text: 'OK', onPress: () => feedback.success() }]
-        );
-      } else {
-        Alert.alert(
-          'Network Test Failed ❌',
-          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}`,
-          [{ text: 'OK', style: 'cancel' }]
-        );
-      }
+      Alert.alert(
+        'Network Test Result',
+        `Proxy Status: ${result ? 'Connected ✅' : 'Failed ❌'}\nURL: ${currentURL}\nIP: ${currentIP}`,
+        [{ text: 'OK', onPress: () => feedback.buttonPress() }]
+      );
     } catch (error) {
-      Alert.alert('Network Test Error', 'Failed to test network connectivity');
+      Alert.alert('Network Test Failed', 'Unable to test network connectivity.');
     }
   };
 
   const refreshAttendance = async () => {
     try {
-      console.log('Refreshing attendance...');
+      console.log('Manually refreshing attendance...');
       await fetchCheckedInGuests();
       await fetchTotalGuestCount();
       feedback.success();
@@ -464,7 +455,7 @@ export default function AttendancePage() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ title: "Attendance", headerShown: true }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text style={[styles.loadingText, { color: colors.text }]}>Loading attendance...</Text>
         </View>
       </SafeAreaView>
@@ -480,9 +471,9 @@ export default function AttendancePage() {
         }}
       />
       
-      {/* Header */}
+      {/* Minimal Header */}
       <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <View style={styles.headerTop}>
+        <View style={styles.headerRow}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => {
@@ -490,43 +481,52 @@ export default function AttendancePage() {
               router.back();
             }}
           >
-            <ArrowLeft size={24} color={colors.primary} />
+            <ArrowLeft size={20} color="#FF6B00" />
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
+          <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Live Attendance</Text>
             <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
           </View>
         </View>
-        
-        <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
-              <UserCheck size={20} color="#34C759" />
+      </View>
+
+      {/* Clean Stats Row */}
+      <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <View style={[styles.statIcon, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+              <UserCheck size={20} color="#22C55E" />
             </View>
-            <Text style={[styles.statNumber, { color: '#34C759' }]}>{checkedInCount}</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
             <Text style={[styles.statLabel, { color: colors.secondary }]}>Present</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.2)' }]}>
-              <Users size={20} color="#007AFF" />
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+              <Users size={20} color="#3B82F6" />
             </View>
-            <Text style={[styles.statNumber, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
             <Text style={[styles.statLabel, { color: colors.secondary }]}>Total</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
-            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.2)' }]}>
-              <Clock size={20} color="#FF9500" />
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <View style={[styles.statIcon, { backgroundColor: 'rgba(255, 107, 0, 0.1)' }]}>
+              <Clock size={20} color="#FF6B00" />
             </View>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>{attendancePercentage}%</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{attendancePercentage}%</Text>
             <Text style={[styles.statLabel, { color: colors.secondary }]}>Rate</Text>
           </View>
         </View>
       </View>
 
-      {/* Search and Actions */}
-      <View style={[styles.controlsContainer, { backgroundColor: colors.card }]}>
-        <View style={[styles.searchBar, { backgroundColor: colors.background }]}>
-          <Search size={20} color={colors.secondary} />
+      {/* Simple Search */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.searchBar, { backgroundColor: colors.card }]}>
+          <Search size={16} color={colors.secondary} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search attendees..."
@@ -535,85 +535,69 @@ export default function AttendancePage() {
             onChangeText={setSearchQuery}
           />
         </View>
-        
-        <View style={styles.actionGrid}>
-          <TouchableOpacity 
-            style={[styles.primaryActionButton, { backgroundColor: colors.primary }]}
-            onPress={() => handleOpenScanner('scanIn')}
-          >
-            <View style={styles.actionIconContainer}>
-              <QrCode size={20} color="#FFFFFF" />
-            </View>
-            <Text style={styles.primaryActionText}>Check In</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.primaryActionButton, { backgroundColor: '#FF3B30' }]}
-            onPress={() => handleOpenScanner('scanOut')}
-          >
-            <View style={styles.actionIconContainer}>
-              <User size={20} color="#FFFFFF" />
-            </View>
-            <Text style={styles.primaryActionText}>Check Out</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.secondaryActions}>
-          <TouchableOpacity 
-            style={[styles.secondaryActionButton, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}
-            onPress={() => {
-              feedback.buttonPress();
-              refreshAttendance();
-            }}
-          >
-            <RefreshCw size={16} color="#34C759" />
-            <Text style={[styles.secondaryActionText, { color: '#34C759' }]}>Refresh</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Attendance List */}
+      {/* Action Buttons */}
+      <View style={[styles.actionsContainer, { backgroundColor: colors.background }]}>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: '#FF6B00' }]}
+          onPress={() => handleOpenScanner('scanIn')}
+        >
+          <QrCode size={20} color="#FFFFFF" />
+          <Text style={styles.actionText}>Check In</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+          onPress={() => handleOpenScanner('scanOut')}
+        >
+          <User size={20} color="#FFFFFF" />
+          <Text style={styles.actionText}>Check Out</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.refreshButton, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}
+          onPress={refreshAttendance}
+        >
+          <RefreshCw size={16} color="#22C55E" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Clean Attendee List */}
       {filteredAttendees.length > 0 ? (
         <FlatList
           data={filteredAttendees}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={[styles.attendeeCard, { backgroundColor: colors.card }]}>
-              <View style={styles.attendeeHeader}>
+              <View style={styles.attendeeRow}>
                 <View style={styles.attendeeAvatar}>
-                  <UserCheck size={24} color="#34C759" />
+                  <UserCheck size={20} color="#22C55E" />
                 </View>
                 <View style={styles.attendeeInfo}>
                   <Text style={[styles.attendeeName, { color: colors.text }]}>{item.name}</Text>
                   <Text style={[styles.attendeeEmail, { color: colors.secondary }]}>{item.email}</Text>
                 </View>
-                <View style={[styles.statusIndicator, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
-                  <CheckCircle size={16} color="#34C759" />
-                </View>
-              </View>
-              
-              <View style={styles.attendeeFooter}>
-                <View style={[styles.ticketTypeBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.ticketTypeText}>{item.ticketType}</Text>
-                </View>
-                {item.scanInTime && (
-                  <View style={styles.timeContainer}>
-                    <Clock size={14} color="#34C759" />
-                    <Text style={[styles.checkInTime, { color: '#34C759' }]}>
+                <View style={styles.attendeeRight}>
+                  <View style={[styles.ticketBadge, { backgroundColor: '#FF6B00' }]}>
+                    <Text style={styles.ticketText}>{item.ticketType}</Text>
+                  </View>
+                  {item.scanInTime && (
+                    <Text style={[styles.timeText, { color: '#22C55E' }]}>
                       {item.scanInTime}
                     </Text>
-                  </View>
-                )}
+                  )}
+                </View>
               </View>
             </View>
           )}
           style={styles.attendeeList}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <UserCheck size={60} color={colors.secondary} opacity={0.5} />
+          <UserCheck size={48} color={colors.secondary} opacity={0.3} />
           <Text style={[styles.emptyText, { color: colors.text }]}>
             {searchQuery ? 'No attendees match your search' : 'No one checked in yet'}
           </Text>
@@ -625,7 +609,7 @@ export default function AttendancePage() {
           </Text>
           {!searchQuery && (
             <TouchableOpacity 
-              style={[styles.emptyButton, { backgroundColor: colors.primary }]}
+              style={[styles.emptyButton, { backgroundColor: '#FF6B00' }]}
               onPress={() => handleOpenScanner('scanIn')}
             >
               <QrCode size={16} color="#FFFFFF" />
@@ -659,247 +643,203 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   loadingText: {
-    fontSize: 16,
-    marginTop: 16,
+    fontSize: 14,
+    marginTop: 12,
     textAlign: 'center',
+    fontWeight: '500',
   },
+  
+  // Header
   header: {
-    padding: 20,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
-  headerTop: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
   },
   backButton: {
     padding: 8,
     marginRight: 12,
   },
-  headerTitleContainer: {
+  headerContent: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.8,
+    fontSize: 14,
     fontWeight: '500',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 12,
-  },
-  statCard: {
-    alignItems: 'center',
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  statIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+  
+  // Stats
+  statsCard: {
+    margin: 16,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
-    textAlign: 'center',
   },
-  controlsContainer: {
-    padding: 20,
-    marginBottom: 12,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 16,
+  },
+  
+  // Search
+  searchContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
-    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 8,
     fontSize: 16,
     fontWeight: '500',
   },
-  actionGrid: {
+  
+  // Actions
+  actionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     marginBottom: 16,
     gap: 12,
   },
-  primaryActionButton: {
+  actionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 16,
     borderRadius: 12,
-    flex: 1,
-    justifyContent: 'center',
+    gap: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  actionIconContainer: {
-    marginRight: 8,
-  },
-  primaryActionText: {
+  actionText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 16,
   },
-  secondaryActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  secondaryActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    minWidth: 100,
-    justifyContent: 'center',
-  },
-  secondaryActionText: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  attendeeList: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  attendeeCard: {
-    padding: 20,
-    borderRadius: 16,
-    marginVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  attendeeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  attendeeAvatar: {
+  refreshButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    marginRight: 16,
+  },
+  
+  // Attendee List
+  attendeeList: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  listContainer: {
+    paddingBottom: 120,
+  },
+  attendeeCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  attendeeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  attendeeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   attendeeInfo: {
     flex: 1,
-    paddingRight: 12,
   },
   attendeeName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
-    letterSpacing: 0.3,
+    marginBottom: 2,
   },
   attendeeEmail: {
     fontSize: 14,
-    marginBottom: 0,
     fontWeight: '500',
   },
-  attendeeFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  attendeeRight: {
+    alignItems: 'flex-end',
   },
-  ticketTypeBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  ticketTypeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    paddingVertical: 4,
+  ticketBadge: {
     paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
+    marginBottom: 4,
   },
-  checkInTime: {
-    fontSize: 12,
-    marginLeft: 6,
+  ticketText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '600',
   },
-  statusIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  timeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
+  
+  // Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -907,7 +847,7 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
     marginTop: 16,
     marginBottom: 8,
@@ -925,11 +865,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
+    gap: 8,
   },
   emptyButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
-    marginLeft: 6,
   },
 }); 
