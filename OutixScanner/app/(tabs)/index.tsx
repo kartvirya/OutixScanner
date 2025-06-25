@@ -188,32 +188,32 @@ export default function Index() {
       
       <View style={styles.eventOverlay}>
         <View style={styles.eventContent}>
-          <View style={styles.eventHeader}>
+        <View style={styles.eventHeader}>
             <Text style={[styles.eventTitle, { color: '#FFFFFF' }]} numberOfLines={2} ellipsizeMode="tail">
               {item.title}
             </Text>
-          </View>
+        </View>
           
-          <View style={styles.eventDetails}>
-            <View style={styles.detailRow}>
+        <View style={styles.eventDetails}>
+          <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
                 <Calendar size={14} color="#FFFFFF" />
               </View>
               <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
                 {item.date}
               </Text>
-            </View>
+          </View>
             
-            <View style={styles.detailRow}>
+          <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
                 <Clock size={14} color="#FFFFFF" />
               </View>
               <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
                 {item.time}
               </Text>
-            </View>
+          </View>
             
-            <View style={styles.detailRow}>
+          <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
                 <MapPin size={14} color="#FFFFFF" />
               </View>
@@ -224,8 +224,14 @@ export default function Index() {
           </View>
         </View>
         
-        <View style={styles.viewDetailsContainer}>
-          <View style={styles.viewDetails}>
+        <View style={styles.viewDetailsContainer}> 
+          <View style={[
+            styles.viewDetails, 
+            { 
+              backgroundColor: `${colors.primary}E6`,
+              shadowColor: colors.primary
+            }
+          ]}>
             <Text style={styles.viewDetailsText}>View Details</Text>
             <ChevronRight size={12} color="#FFFFFF" />
           </View>
@@ -397,11 +403,9 @@ const styles = StyleSheet.create({
   viewDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 149, 0, 0.9)',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 25,
-    shadowColor: '#FF9500',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
+ ArrowLeft,
   Clock,
   QrCode,
   RefreshCw,

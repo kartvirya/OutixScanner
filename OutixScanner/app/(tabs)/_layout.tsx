@@ -2,6 +2,7 @@ import { Tabs, usePathname, useRouter } from "expo-router";
 import { BarChart, Bell, Calendar, QrCode, User } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from "../../context/ThemeContext";
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -16,6 +17,41 @@ const TabIcon: React.FC<TabIconProps> = ({ icon }) => {
     <View style={{ alignItems: 'center', justifyContent: 'center', width: 24, height: 24 }}>
       {icon}
     </View>
+  );
+};
+
+// Custom Tab Bar Shape Component
+const TabBarShape = ({ color }: { color: string }) => {
+  const width = screenWidth;
+  const height = 85;
+  const centerX = width / 2;
+  const cutoutRadius = 55; // Radius for the circular cutout
+  const curveRadius = 30;
+  const strokeWidth = 1;
+  const cutoutOffset = 10;
+  const curveOffset = 10;
+  const strokeColor = '#FF6B00';
+  
+  // Create a smooth curved cutout path
+  const pathData = `
+    M 0,20
+    L 0,${height}
+    L ${width},${height}
+    L ${width},20
+    Q ${width},0 ${width - 20},0
+    L ${centerX + cutoutRadius + curveRadius},0
+    Q ${centerX + cutoutRadius},0 ${centerX + cutoutRadius - curveRadius},${curveRadius}
+    A ${cutoutRadius},${cutoutRadius} 0 0,0 ${centerX - cutoutRadius + curveRadius},${curveRadius}
+    Q ${centerX - cutoutRadius},0 ${centerX - cutoutRadius - curveRadius},0
+    L 20,0
+    Q 0,0 0,20
+    Z
+  `;
+
+  return (
+    <Svg width={width} height={height} style={StyleSheet.absoluteFillObject}>
+      <Path d={pathData} fill={color} />
+    </Svg>
   );
 };
 
@@ -59,68 +95,132 @@ function CustomTabBar() {
   };
 
   return (
-    <View style={[styles.customTabBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-      {tabs.map((tab, index) => {
-        const IconComponent = tab.icon;
-        const active = isActive(tab.route);
+    <View style={styles.tabBarContainer}>
+      {/* Custom Shaped Tab Bar Background */}
+      <View style={[styles.customTabBar, { backgroundColor: 'transparent' }]}>
+        <TabBarShape color={colors.background} />
         
+        {/* Tab Content */}
+        <View style={styles.tabContent}>
+          {/* Left Side Tabs */}
+          <View style={styles.leftTabsContainer}>
+            {tabs.slice(0, 2).map((tab, index) => {
+              const IconComponent = tab.icon;
+              const active = isActive(tab.route);
+              
+              return (
+                <TouchableOpacity
+                  key={tab.name}
+                  style={styles.regularTab}
+                  onPress={() => handleTabPress(tab.route)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.tabIconContainer, 
+                    { 
+                      opacity: active ? 1 : 0.6,
+                      backgroundColor: active ? `${colors.primary}15` : 'transparent',
+                      borderRadius: 12,
+                      padding: 8,
+                    }
+                  ]}>
+                    <IconComponent 
+                      size={22} 
+                      color={active ? '#FF6B00' : colors.secondary} 
+                      strokeWidth={active ? 2.5 : 2} 
+                    />
+                  </View>
+                  <Text style={[
+                    styles.tabLabel,
+                    { 
+                      color: active ? '#FF6B00' : colors.secondary,
+                      marginTop: 4,
+                      fontWeight: active ? '700' : '500',
+                      opacity: active ? 1 : 0.7,
+                    }
+                  ]}>
+                    {tab.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Center Cutout Space */}
+          <View style={styles.centerCutout} />
+
+          {/* Right Side Tabs */}
+          <View style={styles.rightTabsContainer}>
+            {tabs.slice(3).map((tab, index) => {
+              const IconComponent = tab.icon;
+              const active = isActive(tab.route);
+              
+              return (
+                <TouchableOpacity
+                  key={tab.name}
+                  style={styles.regularTab}
+                  onPress={() => handleTabPress(tab.route)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.tabIconContainer, 
+                    { 
+                      opacity: active ? 1 : 0.6,
+                      backgroundColor: active ? `${colors.primary}15` : 'transparent',
+                      borderRadius: 12,
+                      padding: 8,
+                    }
+                  ]}>
+                    <IconComponent 
+                      size={22} 
+                      color={active ? '#FF6B00' : colors.secondary} 
+                      strokeWidth={active ? 2.5 : 2} 
+                    />
+                  </View>
+                  <Text style={[
+                    styles.tabLabel,
+                    { 
+                      color: active ? '#FF6B00' : colors.secondary,
+                      marginTop: 4,
+                      fontWeight: active ? '700' : '500',
+                      opacity: active ? 1 : 0.7,
+                    }
+                  ]}>
+                    {tab.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      {/* Elevated Center Tab */}
+      {tabs.map((tab, index) => {
         if (tab.isCenter) {
+          const IconComponent = tab.icon;
+          const active = isActive(tab.route);
+          
           return (
             <TouchableOpacity
               key={tab.name}
-              style={styles.centerTabContainer}
+              style={styles.floatingTabContainer}
               onPress={() => handleTabPress(tab.route)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
               <View style={[
-                styles.centerTab,
+                styles.floatingTab,
                 {
-                  backgroundColor: active ? '#FF6B00' : isDarkMode ? '#2C2C2E' : '#E5E5EA',
+                  backgroundColor: '#FF6B00',
+                  transform: active ? [{ scale: 1.05 }] : [{ scale: 1 }],
                 }
               ]}>
-                <IconComponent size={28} color={active ? '#FFFFFF' : colors.text} strokeWidth={2.5} />
+                <IconComponent size={28} color="#FFFFFF" strokeWidth={2.5} />
               </View>
             </TouchableOpacity>
           );
         }
-
-        return (
-          <TouchableOpacity
-            key={tab.name}
-            style={[
-              styles.regularTab,
-              active && styles.activeTab
-            ]}
-            onPress={() => handleTabPress(tab.route)}
-            activeOpacity={0.7}
-          >
-            <View style={[
-              styles.tabIconContainer, 
-              { 
-                opacity: active ? 1 : 0.7,
-                backgroundColor: active ? `${colors.primary}20` : 'transparent',
-                borderRadius: 12,
-                padding: 8,
-              }
-            ]}>
-              <IconComponent 
-                size={24} 
-                color={active ? '#FF6B00' : colors.secondary} 
-                strokeWidth={2.5} 
-              />
-            </View>
-            <Text style={[
-              styles.tabLabel,
-              { 
-                color: active ? '#FF6B00' : colors.secondary,
-                marginTop: 4,
-                fontWeight: active ? '700' : '600',
-              }
-            ]}>
-              {tab.title}
-            </Text>
-          </TouchableOpacity>
-        );
+        return null;
       })}
     </View>
   );
@@ -164,7 +264,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="scanner"
         options={{
-          title: "Scan & Pay",
+          title: "Scan QR",
           headerShown: false,
         }}
       />
@@ -195,64 +295,87 @@ export default function TabsLayout() {
 } 
 
 const styles = StyleSheet.create({
-  customTabBar: {
-    flexDirection: 'row',
-    height: 85,
-    paddingTop: 10,
-    paddingBottom: 0,
-    borderTopWidth: 1,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  tabBarContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    height: 85,
+  },
+  customTabBar: {
+    position: 'relative',
+    height: 85,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  tabContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    paddingTop: 12,
+    paddingBottom: 8,
+    zIndex: 1,
+  },
+  leftTabsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingLeft: 10,
+  },
+  rightTabsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingRight: 10,
+  },
+  centerCutout: {
+    width: 120,
+    height: 85,
+    backgroundColor: 'transparent',
   },
   regularTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
   },
-  activeTab: {
-    transform: [{ scale: 1.05 }],
-  },
-  centerTabContainer: {
-    flex: 1,
+  floatingTabContainer: {
+    position: 'absolute',
+    bottom: 30,
+    left: '50%',
+    marginLeft: -32, // Half of the tab width (64/2)
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 0,
+    zIndex: 10,
   },
-  centerTab: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  floatingTab: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#FF6B00',
     shadowOffset: {
       width: 0,
       height: 4,
     },
     shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 12,
     borderWidth: 4,
     borderColor: '#FFFFFF',
-    transform: [{ translateY: -15 }],
   },
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 24,
-    height: 24,
   },
   tabLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
-}); 
+});

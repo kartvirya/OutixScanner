@@ -1,7 +1,7 @@
-import axios, { InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // Base URL for direct API calls
 const BASE_URL = 'https://www.outix.co/apis';
@@ -867,6 +867,171 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
   }
 };
 
+// New function to fetch paginated guest list (most recent transactions first)
+export const getGuestListPaginated = async (eventId: string, page: number = 1, limit: number = 10): Promise<{
+  guests: any[];
+  totalCount: number;
+  hasMore: boolean;
+  currentPage: number;
+}> => {
+  try {
+    // Make sure we have the token
+    if (!authToken) {
+      console.log("No auth token available for paginated guest list, trying to get from storage");
+      const storedToken = await getStorageItem('auth_token');
+      if (storedToken) {
+        authToken = storedToken;
+      } else {
+        console.log("No token in storage for paginated guest list, using default token");
+        authToken = '8534838IGWQYmheB4432355';
+      }
+    }
+    
+    console.log(`Fetching paginated guest list for event ${eventId}, page ${page}, limit ${limit}`);
+    
+    // First get all guests (we'll implement server-side pagination later if API supports it)
+    const allGuests = await getGuestList(eventId);
+    
+    if (!Array.isArray(allGuests)) {
+      return {
+        guests: [],
+        totalCount: 0,
+        hasMore: false,
+        currentPage: page
+      };
+    }
+    
+    // Sort by most recent transaction (purchased_date or check-in time)
+    const sortedGuests = allGuests.sort((a, b) => {
+      // First prioritize checked-in guests (most recent check-ins first)
+      if (a.scannedIn && !b.scannedIn) return -1;
+      if (!a.scannedIn && b.scannedIn) return 1;
+      
+      // For checked-in guests, sort by check-in time (most recent first)
+      if (a.scannedIn && b.scannedIn) {
+        const aTime = a.checkedin_date || a.check_in_time || a.scanInTime || '0';
+        const bTime = b.checkedin_date || b.check_in_time || b.scanInTime || '0';
+        return bTime.localeCompare(aTime);
+      }
+      
+      // For non-checked-in guests, sort by purchase date (most recent first)
+      const aDate = a.purchased_date || '0';
+      const bDate = b.purchased_date || '0';
+      return bDate.localeCompare(aDate);
+    });
+    
+    // Calculate pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedGuests = sortedGuests.slice(startIndex, endIndex);
+    const hasMore = endIndex < sortedGuests.length;
+    
+    return {
+      guests: paginatedGuests.map((guest: any) => ({
+        ...guest,
+        qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+      })),
+      totalCount: sortedGuests.length,
+      hasMore,
+      currentPage: page
+    };
+    
+  } catch (error) {
+    console.error(`Paginated guest list error for event ${eventId}:`, error);
+    
+    // Return mock data for testing
+    const mockGuests = [
+      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001', purchased_date: '2024-01-15' },
+      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002', purchased_date: '2024-01-14' },
+      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003', purchased_date: '2024-01-13' },
+      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004', purchased_date: '2024-01-12' },
+      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005', purchased_date: '2024-01-11' },
+    ];
+    
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedMock = mockGuests.slice(startIndex, endIndex);
+    
+    return {
+      guests: paginatedMock,
+      totalCount: mockGuests.length,
+      hasMore: endIndex < mockGuests.length,
+      currentPage: page
+    };
+  }
+};
+
+// New function to search guests from API
+export const searchGuestList = async (eventId: string, searchQuery: string): Promise<any[]> => {
+  try {
+    // Make sure we have the token
+    if (!authToken) {
+      console.log("No auth token available for guest search, trying to get from storage");
+      const storedToken = await getStorageItem('auth_token');
+      if (storedToken) {
+        authToken = storedToken;
+      } else {
+        console.log("No token in storage for guest search, using default token");
+        authToken = '8534838IGWQYmheB4432355';
+      }
+    }
+    
+    console.log(`Searching guests for event ${eventId} with query: "${searchQuery}"`);
+    
+    // For now, we'll fetch all guests and filter client-side
+    // In the future, this could be optimized with server-side search
+    const allGuests = await getGuestList(eventId);
+    
+    if (!Array.isArray(allGuests) || !searchQuery.trim()) {
+      return allGuests || [];
+    }
+    
+    const query = searchQuery.toLowerCase().trim();
+    
+    // Search across multiple fields
+    const filteredGuests = allGuests.filter((guest: any) => {
+      const name = (guest.purchased_by || guest.name || guest.fullname || '').toLowerCase();
+      const email = (guest.email || '').toLowerCase();
+      const ticketType = (guest.ticket_title || guest.ticketType || '').toLowerCase();
+      const ticketId = (guest.ticket_identifier || guest.reference_num || '').toLowerCase();
+      const mobile = (guest.mobile || '').toLowerCase();
+      
+      return name.includes(query) || 
+             email.includes(query) || 
+             ticketType.includes(query) || 
+             ticketId.includes(query) ||
+             mobile.includes(query);
+    });
+    
+    // Sort search results by relevance (exact matches first, then partial matches)
+    return filteredGuests.sort((a, b) => {
+      const aName = (a.purchased_by || a.name || a.fullname || '').toLowerCase();
+      const bName = (b.purchased_by || b.name || b.fullname || '').toLowerCase();
+      
+      // Prioritize exact name matches
+      if (aName === query && bName !== query) return -1;
+      if (bName === query && aName !== query) return 1;
+      
+      // Then prioritize name starts with query
+      if (aName.startsWith(query) && !bName.startsWith(query)) return -1;
+      if (bName.startsWith(query) && !aName.startsWith(query)) return 1;
+      
+      // Finally, prioritize checked-in guests
+      if (a.scannedIn && !b.scannedIn) return -1;
+      if (!a.scannedIn && b.scannedIn) return 1;
+      
+      return 0;
+    }).map((guest: any) => ({
+      ...guest,
+      qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+    }));
+    
+  } catch (error) {
+    console.error(`Guest search error for event ${eventId}:`, error);
+    return [];
+  }
+};
+
 // New function to fetch only checked-in guests for attendance list
 export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => {
   try {
@@ -1452,7 +1617,7 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
 };
 
 // Export storage functions for testing
-export { getStorageItem, setStorageItem, removeStorageItem };
+export { getStorageItem, removeStorageItem, setStorageItem };
 
 export const getGroupTickets = async (eventId: string, qrData: string): Promise<any> => {
   try {
@@ -1542,16 +1707,32 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     console.log('Group tickets found:', groupTickets.length);
     
     // Map to consistent format
-    const formattedTickets = groupTickets.map((ticket: any) => ({
-      id: ticket.id || ticket.ticket_id || ticket.reference_num,
-      name: ticket.fullname || ticket.name || 'Guest',
-      email: ticket.email || 'No email',
-      ticketType: ticket.ticket_title || ticket.ticketType || 'General Admission',
-      isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || ticket.scannedIn || false,
-      qrCode: ticket.qrCode || ticket.ticket_identifier || ticket.reference_num || ticket.id
-    }));
+    const formattedTickets = groupTickets.map((ticket: any, index: number) => {
+      console.log(`Ticket ${index + 1} raw data:`, {
+        id: ticket.id,
+        ticket_id: ticket.ticket_id,
+        tid: ticket.tid,
+        reference_num: ticket.reference_num,
+        ticket_identifier: ticket.ticket_identifier,
+        fullname: ticket.fullname,
+        name: ticket.name
+      });
+      
+      // Use tid as the primary unique identifier, fallback to ticket_id, then other fields
+      const uniqueId = ticket.tid || ticket.ticket_id || ticket.id || ticket.reference_num || `ticket_${index}`;
+      
+      return {
+        id: uniqueId, // Use the unique ticket ID
+        name: ticket.fullname || ticket.name || 'Guest',
+        email: ticket.email || 'No email',
+        ticketType: ticket.ticket_title || ticket.ticketType || 'General Admission',
+        ticketIdentifier: ticket.ticket_identifier || ticket.reference_num || uniqueId, // Add ticket identifier
+        isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || ticket.scannedIn || false,
+        qrCode: ticket.qrCode || ticket.ticket_identifier || ticket.reference_num || uniqueId
+      };
+    });
     
-    console.log('Formatted tickets:', formattedTickets);
+    console.log('Formatted tickets with unique IDs:', formattedTickets.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
     
     return {
       success: true,
@@ -1571,9 +1752,9 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
       return {
         success: true,
         tickets: [
-          { id: 'mock1', name: 'John Smith', email: 'john@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_001' },
-          { id: 'mock2', name: 'Jane Smith', email: 'jane@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_002' },
-          { id: 'mock3', name: 'Bob Smith', email: 'bob@example.com', ticketType: 'VIP', isCheckedIn: false, qrCode: 'MOCK_QR_003' }
+          { id: 'tid_001', name: 'John Smith', email: 'john@example.com', ticketType: 'VIP', ticketIdentifier: '12064355LUJYXADA', isCheckedIn: false, qrCode: 'MOCK_QR_001' },
+          { id: 'tid_002', name: 'Jane Smith', email: 'jane@example.com', ticketType: 'VIP', ticketIdentifier: '12064356LUJYXADB', isCheckedIn: false, qrCode: 'MOCK_QR_002' },
+          { id: 'tid_003', name: 'Bob Smith', email: 'bob@example.com', ticketType: 'VIP', ticketIdentifier: '12064357LUJYXADC', isCheckedIn: false, qrCode: 'MOCK_QR_003' }
         ],
         purchaser: {
           email: 'john@example.com',

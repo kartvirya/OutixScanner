@@ -2,13 +2,14 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
     ArrowLeft,
     CheckCircle,
+    ChevronDown,
     QrCode,
     Search,
     User,
     UserCheck,
     Users
 } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -28,8 +29,9 @@ import {
     generateSampleQRData,
     getCheckedInGuestList,
     getEvents,
-    getGuestList,
+    getGuestListPaginated,
     scanQRCode,
+    searchGuestList,
     validateQRCode
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
@@ -61,81 +63,52 @@ export default function GuestListPage() {
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
-  const [guestList, setGuestList] = useState<Attendee[]>([]);
-  const [filteredGuestList, setFilteredGuestList] = useState<Attendee[]>([]);
+  // Updated state for pagination
+  const [displayedGuests, setDisplayedGuests] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'checked-in' | 'not-arrived'>('all');
   const [eventTitle, setEventTitle] = useState('');
   const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState<number>(0);
   const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]);
-  const [mergedGuestList, setMergedGuestList] = useState<Attendee[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchResults, setSearchResults] = useState<Attendee[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Debounce search
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track which guests we've already marked as checked in to prevent duplicates
   const markedAsCheckedInRef = useRef(new Set<string>());
 
-  useEffect(() => {
-    initializeAudio();
-    fetchEventAndGuestData();
-    
-    // Register for auto-refresh
-    const unsubscribe = onGuestListRefresh(eventId, () => {
-      console.log('Guest list auto-refresh triggered for event', eventId);
-      fetchEventAndGuestData();
-    });
-    
-    return unsubscribe;
-  }, [eventId, onGuestListRefresh]);
-
-  useEffect(() => {
-    mergeGuestLists();
-  }, [guestList, checkedInGuests]);
-
-  useEffect(() => {
-    filterGuests();
-  }, [mergedGuestList, searchQuery, filterStatus]);
-
-  const fetchEventAndGuestData = async () => {
-    setLoading(true);
-    
-    try {
-      // Fetch event details for title
-      const eventsData = await getEvents();
-      if (Array.isArray(eventsData) && eventsData.length > 0) {
-        const apiEvent = eventsData.find(e => 
-          e.id === eventId || 
-          e.eventId === eventId || 
-          e.EventId === eventId || 
-          String(e._id) === eventId
-        );
-        
-        if (apiEvent) {
-          setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
-        }
-      }
-      
-      // Fetch guest list
-      await fetchGuestList();
-      
-      // Fetch checked-in guests
-      await fetchCheckedInGuests();
-      
-    } catch (err) {
-      console.error("Failed to load guest data:", err);
-    } finally {
-      setLoading(false);
-    }
+  // Debug function to log current state
+  const logCurrentState = (action: string, guest: Attendee) => {
+    console.log(`🔍 ${action} Debug State for ${guest.name}:`);
+    console.log(`  - Guest scannedIn: ${guest.scannedIn}`);
+    console.log(`  - Current filter: ${filterStatus}`);
+    console.log(`  - Displayed guests count: ${displayedGuests.length}`);
+    console.log(`  - Checked-in guests count: ${checkedInGuests.length}`);
+    console.log(`  - Is search mode: ${isSearchMode}`);
   };
 
-  const fetchGuestList = async () => {
+  // Define functions with useCallback to avoid dependency issues
+  const fetchPaginatedGuests = useCallback(async (page: number, reset: boolean = false) => {
     try {
-      const guestListData = await getGuestList(eventId);
+      if (!reset && page === 1) {
+        setLoading(true);
+      } else if (!reset) {
+        setLoadingMore(true);
+      }
+
+      const result = await getGuestListPaginated(eventId, page, 10);
       
-      if (guestListData && Array.isArray(guestListData)) {
-        console.log('Guest data sample:', JSON.stringify(guestListData[0], null, 2));
-        
-        const attendees = guestListData.map(guest => ({
+      const processedGuests = result.guests.map(guest => ({
           id: guest.id || guest.guestId || String(Math.random()),
           name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
           email: guest.email || 'N/A',
@@ -143,7 +116,6 @@ export default function GuestListPage() {
           scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
           scanCode: guest.scanCode || undefined,
-          // Additional fields from API
           purchased_date: guest.purchased_date || undefined,
           reference_num: guest.booking_reference || guest.reference_num || undefined,
           booking_id: guest.booking_id || undefined,
@@ -152,40 +124,36 @@ export default function GuestListPage() {
           mobile: guest.mobile || undefined,
           address: guest.address || undefined,
           notes: guest.notes || undefined,
-          // Raw guest data for details page
           rawData: guest
         }));
         
-        console.log('Processed attendees sample:', {
-          total: attendees.length,
-          checkedIn: attendees.filter(a => a.scannedIn).length,
-          sampleGuest: attendees[0]
-        });
-        
-        setGuestList(attendees);
-        setTotalGuestsFromAPI(attendees.length);
+      if (reset || page === 1) {
+        setDisplayedGuests(processedGuests);
       } else {
-        setGuestList([]);
-        setTotalGuestsFromAPI(0);
+        setDisplayedGuests(prev => [...prev, ...processedGuests]);
       }
-    } catch (err) {
-      console.error("Failed to fetch guest list:", err);
       
-      // Handle timeout errors specifically
-      if (err instanceof Error && err.message.includes('timeout')) {
-        console.log("Guest list API timed out, using fallback");
-        // Set empty list but don't show error to user since we already handle it in parent
-        setGuestList([]);
-        setTotalGuestsFromAPI(0);
-      } else {
-        // For other errors, still set empty list
-        setGuestList([]);
-        setTotalGuestsFromAPI(0);
+      setCurrentPage(page);
+      setHasMore(result.hasMore);
+      setTotalGuestsFromAPI(result.totalCount);
+      
+      console.log(`Loaded page ${page}, total guests: ${result.totalCount}, has more: ${result.hasMore}`);
+      
+      // Sync check-in status with already fetched checked-in guests
+      if (checkedInGuests.length > 0) {
+        console.log('🔄 Syncing check-in status after loading paginated guests...');
+        setTimeout(() => syncCheckInStatus(checkedInGuests), 100);
       }
+      
+    } catch (error) {
+      console.error('Failed to fetch paginated guests:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [eventId]);
 
-  const fetchCheckedInGuests = async () => {
+  const fetchCheckedInGuests = useCallback(async () => {
     try {
       console.log('Fetching checked-in guests for guest list...');
       const checkedInData = await getCheckedInGuestList(eventId);
@@ -199,8 +167,7 @@ export default function GuestListPage() {
           ticketType: guest.ticketType || guest.ticket_type || 'General',
           scannedIn: true, // All guests from this endpoint are checked in
           scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
-          scanCode: guest.scanCode || guest.qrCode || undefined,
-          // Additional fields from API
+          scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
           reference_num: guest.booking_reference || guest.reference_num || undefined,
           booking_id: guest.booking_id || undefined,
@@ -209,103 +176,248 @@ export default function GuestListPage() {
           mobile: guest.mobile || undefined,
           address: guest.address || undefined,
           notes: guest.notes || undefined,
-          // Raw guest data for details page
           rawData: guest
         }));
         
-        console.log(`Found ${attendees.length} checked-in guests`);
         setCheckedInGuests(attendees);
+        
+        // Sync the check-in status with displayed guests
+        syncCheckInStatus(attendees);
       } else {
-        console.log('No checked-in guests found');
         setCheckedInGuests([]);
       }
-    } catch (err) {
-      console.error("Failed to fetch checked-in guests:", err);
-      // Keep existing data on error
+    } catch (error) {
+      console.error('Failed to fetch checked-in guests:', error);
       setCheckedInGuests([]);
     }
-  };
+  }, [eventId]);
 
-  const mergeGuestLists = () => {
-    // Don't try to merge - just use the original guest list
-    // We'll determine check-in status dynamically when filtering
-    setMergedGuestList([...guestList]);
-  };
-
-  // Helper function to check if a guest is checked in
-  const isGuestCheckedIn = (guest: Attendee) => {
-    // If we've already marked someone as checked in with the same name/email, return false
-    const guestKey = `${guest.name?.toLowerCase()}-${guest.email?.toLowerCase()}`;
-    
-    if (markedAsCheckedInRef.current.has(guestKey)) {
-      return false;
-    }
-    
-    // Check if this guest appears in the checked-in guests list
-    const isMatched = checkedInGuests.some(checkedGuest => {
-      // Try to match by unique identifiers first
-      if (guest.id && checkedGuest.id && guest.id === checkedGuest.id) {
-        return true;
-      }
-      if (guest.ticket_identifier && checkedGuest.ticket_identifier && 
-          guest.ticket_identifier === checkedGuest.ticket_identifier) {
-        return true;
-      }
-      if (guest.booking_id && checkedGuest.booking_id && 
-          guest.booking_id === checkedGuest.booking_id) {
-        return true;
-      }
-      if (guest.reference_num && checkedGuest.reference_num && 
-          guest.reference_num === checkedGuest.reference_num) {
-        return true;
+  // Function to sync check-in status between checked-in guests and displayed guests
+  const syncCheckInStatus = useCallback((checkedInList: Attendee[]) => {
+    setDisplayedGuests(prevGuests => {
+      let syncedCount = 0;
+      const updated = prevGuests.map(guest => {
+        // Check if this guest is in the checked-in list
+        const checkedInGuest = checkedInList.find(checkedInGuest => 
+          checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() ||
+          checkedInGuest.email.toLowerCase() === guest.email.toLowerCase() ||
+          (checkedInGuest.id === guest.id && guest.id !== 'N/A')
+        );
+        
+        if (checkedInGuest && !guest.scannedIn) {
+          syncedCount++;
+          console.log(`✅ Synced check-in status for: ${guest.name}`);
+          return {
+            ...guest,
+            scannedIn: true,
+            scanInTime: checkedInGuest.scanInTime || guest.scanInTime,
+            scanCode: checkedInGuest.scanCode || guest.scanCode
+          };
+        }
+        
+        return guest;
+      });
+      
+      if (syncedCount > 0) {
+        console.log(`✅ Successfully synced ${syncedCount} guests' check-in status`);
+      } else {
+        console.log('ℹ️ No guests needed sync (all status up to date)');
       }
       
-      // Fallback to name/email match
-      return guest.name?.toLowerCase() === checkedGuest.name?.toLowerCase() && 
-             guest.email?.toLowerCase() === checkedGuest.email?.toLowerCase();
+      return updated;
+    });
+  }, []);
+
+  const refreshGuestList = useCallback(async () => {
+    // Reset pagination and reload
+    setCurrentPage(1);
+    setDisplayedGuests([]);
+    setSearchQuery('');
+    setIsSearchMode(false);
+    setSearchResults([]);
+    await fetchPaginatedGuests(1, true);
+    await fetchCheckedInGuests();
+  }, [fetchPaginatedGuests, fetchCheckedInGuests]);
+
+  const fetchEventAndInitialData = useCallback(async () => {
+    setLoading(true);
+    console.log(`🚀 Starting fetchEventAndInitialData for event: ${eventId}`);
+    
+    try {
+      // Fetch event details for title
+      console.log('📋 Fetching event details...');
+      const eventsData = await getEvents();
+      if (Array.isArray(eventsData) && eventsData.length > 0) {
+        const apiEvent = eventsData.find(e => 
+          e.id === eventId || 
+          e.eventId === eventId || 
+          e.EventId === eventId || 
+          String(e._id) === eventId
+        );
+        
+        if (apiEvent) {
+          setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
+          console.log(`✅ Event title set: ${apiEvent.title || apiEvent.name || apiEvent.EventName}`);
+        }
+      }
+      
+      // Fetch initial paginated guest list
+      console.log('📋 Fetching paginated guests...');
+      await fetchPaginatedGuests(1, true);
+      
+      // Fetch checked-in guests for stats
+      console.log('📋 Fetching checked-in guests...');
+      await fetchCheckedInGuests();
+      
+      console.log('✅ Initial data fetch completed');
+      
+    } catch (err) {
+      console.error("❌ Failed to load guest data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, fetchPaginatedGuests, fetchCheckedInGuests]);
+
+  useEffect(() => {
+    initializeAudio();
+    fetchEventAndInitialData();
+    
+    // Register for auto-refresh
+    const unsubscribe = onGuestListRefresh(eventId, () => {
+      console.log('Guest list auto-refresh triggered for event', eventId);
+      refreshGuestList();
     });
     
-    // If matched, mark this guest key as used to prevent other tickets from matching
-    if (isMatched) {
-      markedAsCheckedInRef.current.add(guestKey);
+    return unsubscribe;
+  }, [eventId, onGuestListRefresh, fetchEventAndInitialData, refreshGuestList]);
+
+  // Sync check-in status whenever checked-in guests are updated and we have displayed guests
+  useEffect(() => {
+    if (checkedInGuests.length > 0 && displayedGuests.length > 0) {
+      console.log(`🔄 Syncing check-in status: ${checkedInGuests.length} checked-in guests with ${displayedGuests.length} displayed guests...`);
+      syncCheckInStatus(checkedInGuests);
     }
-    
-    return isMatched;
+  }, [checkedInGuests, displayedGuests.length, syncCheckInStatus]);
+
+  // Handle search with debouncing
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchQuery.trim() === '') {
+      setIsSearchMode(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearchMode(true);
+    setSearchLoading(true);
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        console.log('Performing search for:', searchQuery);
+        const results = await searchGuestList(eventId, searchQuery);
+        const processedResults = results.map(guest => ({
+          id: guest.id || guest.guestId || String(Math.random()),
+          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+          email: guest.email || 'N/A',
+          ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
+          scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
+          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
+          scanCode: guest.scanCode || undefined,
+          purchased_date: guest.purchased_date || undefined,
+          reference_num: guest.booking_reference || guest.reference_num || undefined,
+          booking_id: guest.booking_id || undefined,
+          ticket_identifier: guest.ticket_identifier || undefined,
+          price: guest.price || undefined,
+          mobile: guest.mobile || undefined,
+          address: guest.address || undefined,
+          notes: guest.notes || undefined,
+          rawData: guest
+        }));
+        
+        setSearchResults(processedResults);
+        
+        // Sync check-in status for search results if we have checked-in guests
+        if (checkedInGuests.length > 0) {
+          setTimeout(() => {
+            setSearchResults(prevResults => 
+              prevResults.map(guest => {
+                const checkedInGuest = checkedInGuests.find(checkedInGuest => 
+                  checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() ||
+                  checkedInGuest.email.toLowerCase() === guest.email.toLowerCase() ||
+                  (checkedInGuest.id === guest.id && guest.id !== 'N/A')
+                );
+                
+                if (checkedInGuest) {
+                  return {
+                    ...guest,
+                    scannedIn: true,
+                    scanInTime: checkedInGuest.scanInTime || guest.scanInTime,
+                    scanCode: checkedInGuest.scanCode || guest.scanCode
+                  };
+                }
+                
+                return guest;
+              })
+            );
+          }, 50);
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, eventId]);
+
+  // Get filtered guests for display
+  const getFilteredGuests = (guests: Attendee[]) => {
+    switch (filterStatus) {
+      case 'checked-in':
+        // Use dedicated checked-in guests list for Present tab
+        return checkedInGuests;
+      case 'not-arrived':
+        return guests.filter(guest => !guest.scannedIn);
+      default:
+        return guests;
+    }
   };
 
-  const filterGuests = () => {
-    // Clear the tracking set at the start of each filter operation
-    markedAsCheckedInRef.current.clear();
-    
-    let filtered;
-    
-    // For "Present" filter, use the checked-in guests directly (source of truth)
+  // Handle filtering logic based on search mode and filter status
+  const filteredGuestList = (() => {
     if (filterStatus === 'checked-in') {
-      filtered = [...checkedInGuests];
-    } else {
-      // For "All" and "Absent", use the original guest list with dynamic check-in status
-      filtered = mergedGuestList.map(guest => ({
-        ...guest,
-        scannedIn: isGuestCheckedIn(guest) // Dynamically determine check-in status
-      }));
-      
-      if (filterStatus === 'not-arrived') {
-        filtered = filtered.filter(guest => !guest.scannedIn);
+      // For Present tab, always use checked-in guests list
+      if (isSearchMode && searchQuery.trim()) {
+        // Filter checked-in guests by search query
+        return checkedInGuests.filter(guest => 
+          guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          guest.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          guest.ticketType.toLowerCase().includes(searchQuery.toLowerCase())
+        );
       }
+      return checkedInGuests;
+    } else {
+      // For All and Absent tabs, use regular filtering
+      return isSearchMode 
+        ? getFilteredGuests(searchResults)
+        : getFilteredGuests(displayedGuests);
     }
+  })();
+
+  const handleLoadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || isSearchMode) return;
     
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(guest => 
-        guest.name.toLowerCase().includes(query) ||
-        guest.email.toLowerCase().includes(query) ||
-        guest.ticketType.toLowerCase().includes(query)
-      );
-    }
-    
-    setFilteredGuestList(filtered);
-  };
+    await fetchPaginatedGuests(currentPage + 1, false);
+  }, [hasMore, loadingMore, isSearchMode, fetchPaginatedGuests, currentPage]);
 
   const handleOpenScanner = () => {
     feedback.buttonPress();
@@ -426,7 +538,7 @@ export default function GuestListPage() {
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     const ticketInfo = validationResult.msg.info;
-    let guestIndex = guestList.findIndex(a => 
+    let guestIndex = displayedGuests.findIndex(a => 
       a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
       a.email.toLowerCase() === ticketInfo.email.toLowerCase()
     );
@@ -453,10 +565,10 @@ export default function GuestListPage() {
         rawData: ticketInfo
       };
       
-      setGuestList(prev => [...prev, newAttendee]);
+      setDisplayedGuests(prev => [...prev, newAttendee]);
       setTotalGuestsFromAPI(prev => prev + 1);
     } else {
-      const updatedGuestList = [...guestList];
+      const updatedGuestList = [...displayedGuests];
       updatedGuestList[guestIndex] = {
         ...updatedGuestList[guestIndex],
         scannedIn: true,
@@ -474,7 +586,7 @@ export default function GuestListPage() {
         // Raw guest data for details page
         rawData: ticketInfo
       };
-      setGuestList(updatedGuestList);
+      setDisplayedGuests(updatedGuestList);
     }
     
     console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
@@ -491,6 +603,8 @@ export default function GuestListPage() {
   const handleManualScanIn = async (guest: Attendee) => {
     try {
       feedback.buttonPress();
+      console.log(`🔄 Manual check-in requested for: ${guest.name}`);
+      logCurrentState('BEFORE CHECK-IN', guest);
       
       Alert.alert(
         'Manual Check-In',
@@ -505,24 +619,56 @@ export default function GuestListPage() {
             text: 'Check In',
             onPress: async () => {
               feedback.buttonPressHeavy();
+              console.log(`✅ User confirmed check-in for: ${guest.name}`);
               await performManualScanIn(guest);
             }
           }
         ]
       );
     } catch (error) {
-      console.error('Manual scan in error:', error);
+      console.error('❌ Manual scan in error:', error);
       feedback.error();
       Alert.alert('Error', 'Failed to check in guest manually.');
     }
   };
 
+    const handleManualScanOut = async (guest: Attendee) => {
+    try {
+      feedback.buttonPress();
+      console.log(`🔄 Manual check-out requested for: ${guest.name}`);
+      logCurrentState('BEFORE CHECK-OUT', guest);
+      
+      console.log(`🚨 BYPASSING ALERT - Directly performing checkout for ${guest.name}`);
+      
+      // Skip the alert for now and directly perform checkout
+      try {
+        feedback.buttonPressHeavy();
+        console.log(`✅ Directly performing check-out for: ${guest.name}`);
+        console.log(`🚀 Starting performManualScanOut...`);
+        await performManualScanOut(guest);
+        console.log(`🎉 performManualScanOut completed for: ${guest.name}`);
+      } catch (error) {
+        console.error(`💥 Error in performManualScanOut:`, error);
+        console.log(`Failed to check out ${guest.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Manual scan out error:', error);
+      feedback.error();
+      console.log(`Failed to check out guest manually: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const performManualScanIn = async (guest: Attendee) => {
     try {
+      console.log(`🔧 Starting performManualScanIn for: ${guest.name}`);
+      
       // Generate a mock scan code for manual check-in
       const mockScanCode = generateSampleQRData(guest.id);
+      console.log(`📱 Generated scan code: ${mockScanCode}`);
       
       // Update local state first
+      console.log(`💾 Updating local state...`);
       await updateLocalManualScanIn(guest);
       
       // Try to call the API with the mock scan code
@@ -572,24 +718,145 @@ export default function GuestListPage() {
     const now = new Date();
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    const guestIndex = guestList.findIndex(g => g.id === guest.id);
-    
+    // Update in displayed guests list (for All/Absent tabs)
+    const guestIndex = displayedGuests.findIndex(g => g.id === guest.id);
     if (guestIndex >= 0) {
-      const updatedGuestList = [...guestList];
+      const updatedGuestList = [...displayedGuests];
       updatedGuestList[guestIndex] = {
         ...updatedGuestList[guestIndex],
         scannedIn: true,
         scanInTime: timeString,
         scanCode: `MANUAL_${Date.now()}`
       };
-      setGuestList(updatedGuestList);
+      setDisplayedGuests(updatedGuestList);
     }
     
-    console.log(`Manual check-in for ${guest.name} at ${timeString}`);
+    // Also update in search results if it exists there
+    const searchIndex = searchResults.findIndex(g => g.id === guest.id);
+    if (searchIndex >= 0) {
+      const updatedSearchResults = [...searchResults];
+      updatedSearchResults[searchIndex] = {
+        ...updatedSearchResults[searchIndex],
+        scannedIn: true,
+        scanInTime: timeString,
+        scanCode: `MANUAL_${Date.now()}`
+      };
+      setSearchResults(updatedSearchResults);
+    }
+    
+    console.log(`✅ Manual check-in for ${guest.name} at ${timeString}`);
     feedback.checkIn();
     
-    // Also update the checked-in guests list to keep counts in sync
+    // Refresh checked-in guests list to keep counts in sync and update Present tab
+    console.log(`🔄 Refreshing checked-in guests list...`);
     await fetchCheckedInGuests();
+    console.log(`✅ Check-in process completed for ${guest.name}`);
+    
+    // Trigger refresh for other components
+    triggerAttendanceRefresh(eventId);
+    triggerAnalyticsRefresh();
+  };
+
+  const performManualScanOut = async (guest: Attendee) => {
+    try {
+      console.log(`🔧 Starting performManualScanOut for: ${guest.name}`);
+      
+      // Update local state first for immediate UI feedback
+      console.log(`💾 Updating local state...`);
+      await updateLocalManualScanOut(guest);
+      
+      // For now, just do local update and show success
+      // We'll add API call later once basic functionality works
+      feedback.success();
+      Alert.alert(
+        'Guest Checked Out Successfully',
+        `${guest.name} has been checked out locally. The change should be visible immediately.`
+      );
+      
+      // Log the state after update
+      setTimeout(() => {
+        console.log(`🔍 POST-CHECKOUT State check for ${guest.name}:`);
+        console.log(`  - DisplayedGuests count: ${displayedGuests.length}`);
+        console.log(`  - CheckedInGuests count: ${checkedInGuests.length}`);
+        logCurrentState('AFTER CHECK-OUT', guest);
+      }, 500);
+      
+    } catch (error) {
+      console.error('❌ Manual scan out error:', error);
+      feedback.error();
+      Alert.alert(
+        'Checkout Failed',
+        `Failed to check out ${guest.name}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  const updateLocalManualScanOut = async (guest: Attendee) => {
+    console.log(`🔧 updateLocalManualScanOut starting for: ${guest.name}`);
+    console.log(`🔍 Looking for guest with ID: ${guest.id}, Email: ${guest.email}, Name: ${guest.name}`);
+    
+    // Update in displayed guests list (for All tab)
+    const guestIndex = displayedGuests.findIndex(g => 
+      g.id === guest.id || 
+      g.email === guest.email ||
+      g.name === guest.name
+    );
+    
+    console.log(`🔍 Guest index in displayedGuests: ${guestIndex} (out of ${displayedGuests.length} guests)`);
+    
+    if (guestIndex >= 0) {
+      const updatedGuestList = [...displayedGuests];
+      const originalGuest = updatedGuestList[guestIndex];
+      console.log(`🔍 Original guest scannedIn status: ${originalGuest.scannedIn}`);
+      
+      updatedGuestList[guestIndex] = {
+        ...updatedGuestList[guestIndex],
+        scannedIn: false,
+        scanInTime: undefined,
+        scanCode: undefined
+      };
+      
+      setDisplayedGuests(updatedGuestList);
+      console.log(`✅ Updated guest in displayedGuests: ${guest.name} (scannedIn changed from ${originalGuest.scannedIn} to false)`);
+    } else {
+      console.log(`❌ Guest NOT FOUND in displayedGuests: ${guest.name}`);
+      console.log(`🔍 Available guests in displayedGuests:`, displayedGuests.map(g => ({name: g.name, id: g.id, email: g.email})));
+    }
+    
+    // Also update in search results if it exists there
+    const searchIndex = searchResults.findIndex(g => 
+      g.id === guest.id || 
+      g.email === guest.email ||
+      g.name === guest.name
+    );
+    
+    if (searchIndex >= 0) {
+      const updatedSearchResults = [...searchResults];
+      updatedSearchResults[searchIndex] = {
+        ...updatedSearchResults[searchIndex],
+        scannedIn: false,
+        scanInTime: undefined,
+        scanCode: undefined
+      };
+      setSearchResults(updatedSearchResults);
+      console.log(`✅ Updated guest in searchResults: ${guest.name}`);
+    }
+    
+    // Remove from checked-in guests list (for Present tab)
+    setCheckedInGuests(prevCheckedIn => {
+      const filtered = prevCheckedIn.filter(g => 
+        g.id !== guest.id && 
+        g.email !== guest.email &&
+        g.name !== guest.name
+      );
+      console.log(`✅ Removed guest from checkedInGuests: ${guest.name}`);
+      return filtered;
+    });
+    
+    console.log(`✅ Manual check-out for ${guest.name}`);
+    feedback.checkIn();
+    
+    console.log(`✅ Check-out process completed for ${guest.name} - skipping API refresh for now`);
     
     // Trigger refresh for other components
     triggerAttendanceRefresh(eventId);
@@ -732,12 +999,35 @@ export default function GuestListPage() {
         </View>
       </View>
 
+      {/* Test Button */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: 'red',
+          padding: 10,
+          margin: 10,
+          alignItems: 'center'
+        }}
+        onPress={() => {
+          Alert.alert('Test', 'Direct button works!');
+          console.log('Test button clicked');
+          if (filteredGuestList.length > 0 && filteredGuestList[0].scannedIn) {
+            console.log('Testing checkout with first guest:', filteredGuestList[0].name);
+            handleManualScanOut(filteredGuestList[0]);
+          }
+        }}
+      >
+        <Text style={{ color: 'white' }}>TEST CHECKOUT BUTTON</Text>
+      </TouchableOpacity>
+
       {/* Guest List */}
       {filteredGuestList.length > 0 ? (
+        <>
         <FlatList
           data={filteredGuestList}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
+            renderItem={({ item }) => {
+              console.log(`📋 Rendering guest: ${item.name}, scannedIn: ${item.scannedIn}`);
+              return (
             <View style={[styles.modernGuestItem, { backgroundColor: colors.card }]}>
               <TouchableOpacity 
                 style={styles.modernGuestInfo}
@@ -758,15 +1048,31 @@ export default function GuestListPage() {
               </TouchableOpacity>
               <View style={styles.modernGuestActions}>
                 {item.scannedIn ? (
+                    <View style={styles.modernActionGroup}>
+                      <TouchableOpacity
+                        style={styles.modernCheckOutButton}
+                        onPress={() => {
+                          console.log(`🔘 Check Out button pressed for: ${item.name} (scannedIn: ${item.scannedIn})`);
+                          handleManualScanOut(item);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <User size={12} color="#FFFFFF" />
+                        <Text style={styles.modernCheckOutText}>Check Out</Text>
+                      </TouchableOpacity>
                   <View style={styles.modernStatusPresent}>
                     <CheckCircle size={12} color="#22C55E" />
                     <Text style={styles.modernStatusTextPresent}>Present</Text>
+                      </View>
                   </View>
                 ) : (
                   <View style={styles.modernActionGroup}>
                     <TouchableOpacity
                       style={styles.modernCheckInButton}
-                      onPress={() => handleManualScanIn(item)}
+                        onPress={() => {
+                          console.log(`🔘 Check In button pressed for: ${item.name} (scannedIn: ${item.scannedIn})`);
+                          handleManualScanIn(item);
+                        }}
                     >
                       <UserCheck size={12} color="#FFFFFF" />
                       <Text style={styles.modernCheckInText}>Check In</Text>
@@ -779,33 +1085,128 @@ export default function GuestListPage() {
                 )}
               </View>
             </View>
-          )}
+            );
+            }}
           style={styles.guestList}
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
-        />
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.1}
+            ListFooterComponent={() => {
+              if (isSearchMode) {
+                return searchLoading ? (
+                  <View style={styles.searchLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.searchLoadingText, { color: colors.secondary }]}>
+                      Searching...
+                    </Text>
+                  </View>
+                ) : null;
+              }
+
+              if (loadingMore) {
+                return (
+                  <View style={styles.loadMoreContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.loadMoreText, { color: colors.secondary }]}>
+                      Loading more guests...
+                    </Text>
+                  </View>
+                );
+              }
+
+              if (hasMore && !isSearchMode) {
+                return (
+                  <TouchableOpacity 
+                    style={[styles.showMoreButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    onPress={handleLoadMore}
+                  >
+                    <Text style={[styles.showMoreText, { color: colors.primary }]}>
+                      Show More Guests
+                    </Text>
+                    <ChevronDown size={16} color={colors.primary} />
+                  </TouchableOpacity>
+                );
+              }
+
+              if (!hasMore && !isSearchMode && displayedGuests.length > 0) {
+                return (
+                  <View style={styles.endOfListContainer}>
+                    <Text style={[styles.endOfListText, { color: colors.secondary }]}>
+                      All guests loaded ({totalGuestsFromAPI} total)
+                    </Text>
+                  </View>
+                );
+              }
+
+              return null;
+            }}
+          />
+          
+          {/* Search/Filter Info */}
+          {(isSearchMode || filterStatus !== 'all') && (
+            <View style={[styles.searchInfoContainer, { backgroundColor: colors.card }]}>
+              <Text style={[styles.searchInfoText, { color: colors.secondary }]}>
+                {isSearchMode 
+                  ? `Found ${filteredGuestList.length} guests matching "${searchQuery}"`
+                  : `Showing ${filteredGuestList.length} guests (${filterStatus})`
+                }
+              </Text>
+              {isSearchMode && (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setSearchQuery('');
+                    setIsSearchMode(false);
+                    setSearchResults([]);
+                  }}
+                  style={styles.clearSearchButton}
+                >
+                  <Text style={[styles.clearSearchText, { color: colors.primary }]}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </>
       ) : (
         <View style={styles.emptyContainer}>
           <Users size={60} color={colors.secondary} opacity={0.5} />
           <Text style={[styles.emptyText, { color: colors.text }]}>
-            {searchQuery || filterStatus !== 'all' ? 'No guests match your filters' : 'No guests registered'}
+            {isSearchMode 
+              ? `No guests found for "${searchQuery}"`
+              : searchQuery || filterStatus !== 'all' 
+                ? 'No guests match your filters' 
+                : 'No guests registered'
+            }
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.secondary }]}>
-            {searchQuery || filterStatus !== 'all' 
+            {isSearchMode 
+              ? 'Try a different search term or check spelling.'
+              : searchQuery || filterStatus !== 'all' 
               ? 'Try adjusting your search or filter criteria.' 
               : 'No one has registered for this event yet.'
             }
           </Text>
-          {(!searchQuery && filterStatus === 'all') && (
+          {isSearchMode && (
             <TouchableOpacity 
-              style={[styles.emptyButton, { backgroundColor: colors.primary }]}
+              style={[styles.clearSearchButtonLarge, { backgroundColor: colors.primary }]}
               onPress={() => {
-                feedback.buttonPress();
-                fetchGuestList();
+                setSearchQuery('');
+                setIsSearchMode(false);
+                setSearchResults([]);
               }}
             >
-              <QrCode size={16} color="#FFFFFF" />
-              <Text style={styles.emptyButtonText}>Scan Guests</Text>
+              <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+            </TouchableOpacity>
+          )}
+          {(!searchQuery && filterStatus === 'all' && !isSearchMode) && (
+            <TouchableOpacity 
+              style={[styles.emptyActionButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                feedback.buttonPress();
+                refreshGuestList();
+              }}
+            >
+              <Text style={styles.emptyActionText}>Refresh List</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1222,6 +1623,21 @@ const styles = StyleSheet.create({
     color: '#FF6B35',
     marginLeft: 3,
   },
+  modernCheckOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#F72585',
+    marginBottom: 6,
+  },
+  modernCheckOutText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 11,
+    marginLeft: 3,
+  },
   // Simple Design Styles
   simpleHeader: {
     backgroundColor: '#FFFFFF',
@@ -1306,6 +1722,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   simpleFilterText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  searchLoadingContainer: {
+    padding: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  searchLoadingText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  loadMoreContainer: {
+    padding: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  showMoreButton: {
+    margin: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  showMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  endOfListContainer: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  endOfListText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  searchInfoContainer: {
+    margin: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  searchInfoText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  clearSearchButton: {
+    padding: 8,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clearSearchButtonLarge: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+  },
+  clearSearchButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyActionButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  emptyActionText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },

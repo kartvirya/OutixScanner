@@ -816,7 +816,7 @@ export default function EventDetail() {
   // No tab bar needed - merged into single view
 
   const renderMergedContent = () => {
-    return (
+        return (
       <View style={styles.modernContainer}>
         {/* Compact Stats Row */}
         <View style={[styles.compactStatsCard, { backgroundColor: colors.card }]}>
@@ -824,114 +824,114 @@ export default function EventDetail() {
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(255, 107, 0, 0.1)' }]}>
                 <Users size={20} color="#FF6B00" />
-              </View>
+                  </View>
               <Text style={[styles.compactStatValue, { color: colors.text }]}>{totalGuestsCount}</Text>
               <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Total</Text>
-            </View>
-            
+                </View>
+                
             <View style={styles.statDivider} />
             
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
                 <UserCheck size={20} color="#22C55E" />
-              </View>
+                  </View>
               <Text style={[styles.compactStatValue, { color: colors.text }]}>{checkedInCount}</Text>
               <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Present</Text>
-            </View>
-            
+                </View>
+                
             <View style={styles.statDivider} />
             
             <View style={styles.statItem}>
               <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
                 <BarChart size={20} color="#3B82F6" />
-              </View>
+                  </View>
               <Text style={[styles.compactStatValue, { color: colors.text }]}>{attendancePercentage}%</Text>
               <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Rate</Text>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
 
         {/* Quick Actions Grid */}
         <View style={[styles.actionsGrid, { backgroundColor: colors.card }]}>
-          <TouchableOpacity 
+                <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: 'rgba(255, 107, 0, 0.05)' }]}
-            onPress={() => {
-              feedback.buttonPress();
-              handleOpenScanner('validate');
-            }}
-          >
+                  onPress={() => {
+                    feedback.buttonPress();
+                    handleOpenScanner('validate');
+                  }}
+                >
             <View style={[styles.compactActionIconContainer, { backgroundColor: '#FF6B00' }]}>
-              <QrCode size={24} color="#FFFFFF" />
-            </View>
+                    <QrCode size={24} color="#FFFFFF" />
+                  </View>
             <Text style={[styles.compactActionText, { color: colors.text }]}>Scan</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: 'rgba(59, 130, 246, 0.05)' }]}
-            onPress={() => {
-              feedback.buttonPress();
-              router.push(`/(tabs)/guest-list/${eventId}`);
-            }}
-          >
+                  onPress={() => {
+                    feedback.buttonPress();
+                    router.push(`/(tabs)/guest-list/${eventId}`);
+                  }}
+                >
             <View style={[styles.compactActionIconContainer, { backgroundColor: '#3B82F6' }]}>
-              <Users size={24} color="#FFFFFF" />
-            </View>
+                    <Users size={24} color="#FFFFFF" />
+                  </View>
             <Text style={[styles.compactActionText, { color: colors.text }]}>Guests</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: 'rgba(34, 197, 94, 0.05)' }]}
-            onPress={() => {
-              feedback.buttonPress();
-              router.push(`/(tabs)/attendance/${eventId}`);
-            }}
-          >
+                  onPress={() => {
+                    feedback.buttonPress();
+                    router.push(`/(tabs)/attendance/${eventId}`);
+                  }}
+                >
             <View style={[styles.compactActionIconContainer, { backgroundColor: '#22C55E' }]}>
-              <UserCheck size={24} color="#FFFFFF" />
-            </View>
+                    <UserCheck size={24} color="#FFFFFF" />
+                  </View>
             <Text style={[styles.compactActionText, { color: colors.text }]}>Attendance</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: 'rgba(168, 85, 247, 0.05)' }]}
-            onPress={() => {
-              feedback.buttonPress();
+                  onPress={() => {
+                    feedback.buttonPress();
               router.push(`/(tabs)/analytics`);
-            }}
-          >
+                  }}
+                >
             <View style={[styles.compactActionIconContainer, { backgroundColor: '#A855F7' }]}>
-              <BarChart size={24} color="#FFFFFF" />
-            </View>
+                    <BarChart size={24} color="#FFFFFF" />
+                  </View>
             <Text style={[styles.compactActionText, { color: colors.text }]}>Analytics</Text>
-          </TouchableOpacity>
-        </View>
+                </TouchableOpacity>
+              </View>
 
         {/* Compact Attendance Overview */}
         <View style={[styles.attendanceCompactCard, { backgroundColor: colors.card }]}>
           <View style={styles.attendanceRowLayout}>
             <View style={styles.attendanceCircleCompact}>
               <Text style={[styles.attendancePercentText, { color: '#FF6B00' }]}>
-                {attendancePercentage}%
-              </Text>
-            </View>
-            
+                      {attendancePercentage}%
+                    </Text>
+                </View>
+                
             <View style={styles.attendanceDetailsSection}>
               <Text style={[styles.attendanceTitleText, { color: colors.text }]}>Check-in Progress</Text>
               <View style={styles.attendanceStatsRow}>
                 <View style={styles.attendanceStatCompact}>
                   <Text style={[styles.attendanceStatValueCompact, { color: '#22C55E' }]}>{checkedInCount}</Text>
                   <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Present</Text>
-                </View>
+                  </View>
                 <View style={styles.attendanceStatCompact}>
                   <Text style={[styles.attendanceStatValueCompact, { color: colors.secondary }]}>{totalGuestsCount - checkedInCount}</Text>
                   <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Pending</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             </View>
           </View>
-        </View>
-      </View>
-    );
+        );
   };
 
   // Content for each tab is now rendered separately
@@ -949,30 +949,30 @@ export default function EventDetail() {
               {event!.title}
             </Text>
             <ChevronDown size={20} color="#FF6B00" />
-          </View>
-        </View>
+              </View>
+                      </View>
       ) : (
         // Expanded view - full details
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleSection}>
             <Text style={[styles.expandedTitle, { color: colors.text }]}>{event!.title}</Text>
             <ChevronUp size={20} color="#FF6B00" />
-          </View>
+                </View>
           
           {/* Date and Time on same line */}
           <View style={styles.dateTimeRow}>
             <View style={styles.dateTimeItem}>
               <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
                 <Calendar size={16} color="#FF6B00" />
-              </View>
+          </View>
               <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.date}</Text>
-            </View>
+        </View>
             <View style={styles.dateTimeItem}>
               <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
                 <Clock size={16} color="#FF6B00" />
-              </View>
+          </View>
               <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.time}</Text>
-            </View>
+        </View>
           </View>
           
           {/* Location on separate line */}
@@ -981,10 +981,10 @@ export default function EventDetail() {
               <MapPin size={16} color="#FF6B00" />
             </View>
             <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={2}>
-              {event!.location}
-            </Text>
-          </View>
+            {event!.location}
+          </Text>
         </View>
+      </View>
       )}
     </TouchableOpacity>
   );
@@ -1191,9 +1191,9 @@ export default function EventDetail() {
 
   // Render the merged content without tabs
   const renderContent = () => {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderEventHeader()}
+      return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          {renderEventHeader()}
         <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {renderMergedContent()}
         </ScrollView>

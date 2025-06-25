@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { X, QrCode } from 'lucide-react-native';
+import { QrCode, X } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { feedback } from '../services/feedback';
 
@@ -11,11 +11,15 @@ interface QRScannerProps {
   customHeader?: React.ReactNode;
   showCloseButton?: boolean;
   headerTitle?: string;
+  pauseScanning?: boolean;
+  onRequestResume?: () => void;
+  scanMode?: 'scan-in' | 'scan-out';
+  onScanModeChange?: (mode: 'scan-in' | 'scan-out') => void;
 }
 
 const { width, height } = Dimensions.get('window');
 
-export default function QRScanner({ onScan, onClose, customHeader, showCloseButton, headerTitle }: QRScannerProps) {
+export default function QRScanner({ onScan, onClose, customHeader, showCloseButton, headerTitle, pauseScanning, onRequestResume, scanMode, onScanModeChange }: QRScannerProps) {
   const { colors } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -55,7 +59,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   }, [permission, requestPermission, onClose]);
 
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
-    if (scanned) return;
+    if (scanned || pauseScanning) return;
     
     console.log('QR Code scanned:', { type, data });
     setScanned(true);
@@ -63,13 +67,10 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
     // Provide immediate feedback for successful scan
     feedback.qrScanSuccess();
     
-    // Vibrate or provide feedback here if needed
+    // Call the parent's scan handler
     onScan(data);
     
-    // Reset after 2 seconds to allow scanning again
-    setTimeout(() => {
-      setScanned(false);
-    }, 2000);
+    // Don't auto-reset - let parent control when to resume scanning
   };
 
   const handleCameraReady = () => {
@@ -79,6 +80,21 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
     // Light haptic feedback when camera is ready
     feedback.buttonPress();
   };
+
+  // Add function to resume scanning
+  const resumeScanning = () => {
+    setScanned(false);
+    if (onRequestResume) {
+      onRequestResume();
+    }
+  };
+
+  useEffect(() => {
+    // Reset scanning state when pauseScanning changes
+    if (!pauseScanning && scanned) {
+      setScanned(false);
+    }
+  }, [pauseScanning, scanned]);
 
   // Loading state
   if (!permission) {
@@ -158,6 +174,47 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
           
           {/* Scanner Area */}
           <View style={styles.scannerContainer}>
+            {/* Scan Mode Toggle Overlay */}
+            {scanMode && onScanModeChange && (
+              <View style={styles.scanModeOverlay}>
+                <View style={styles.scanModeToggleContainer}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.scanModeButton,
+                      scanMode === 'scan-in' && styles.scanModeButtonActive,
+                      { backgroundColor: scanMode === 'scan-in' ? '#06D6A0' : 'rgba(0,0,0,0.6)' }
+                    ]}
+                    onPress={() => onScanModeChange('scan-in')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.scanModeButtonText, 
+                      { color: scanMode === 'scan-in' ? '#FFFFFF' : '#FFFFFF' }
+                    ]}>
+                      Check In
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.scanModeButton,
+                      scanMode === 'scan-out' && styles.scanModeButtonActive,
+                      { backgroundColor: scanMode === 'scan-out' ? '#F72585' : 'rgba(0,0,0,0.6)' }
+                    ]}
+                    onPress={() => onScanModeChange('scan-out')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.scanModeButtonText, 
+                      { color: scanMode === 'scan-out' ? '#FFFFFF' : '#FFFFFF' }
+                    ]}>
+                      Check Out
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            
             <View style={styles.scanArea}>
               <View style={styles.cornerTL} />
               <View style={styles.cornerTR} />
@@ -177,11 +234,26 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
             <Text style={styles.instructions}>
               {!cameraReady 
                 ? "Initializing camera..." 
+                : pauseScanning
+                ? "Scanning paused - processing..."
                 : scanned 
-                ? "QR code detected and processed" 
+                ? "QR code scanned successfully!" 
                 : "Position the QR code within the frame"
               }
             </Text>
+            
+            {/* Show Scan Next button when scanned or paused */}
+            {(scanned || pauseScanning) && (
+              <TouchableOpacity 
+                style={[styles.resumeButton, { backgroundColor: '#06D6A0' }]} 
+                onPress={resumeScanning}
+                disabled={pauseScanning}
+              >
+                <Text style={styles.buttonText}>
+                  {pauseScanning ? 'Processing...' : 'Scan Next'}
+                </Text>
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity 
               style={[styles.cancelButton, { backgroundColor: colors.primary }]} 
@@ -306,7 +378,7 @@ const styles = StyleSheet.create({
   },
   instructionsContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 80,
+    paddingBottom: 140, // Increased from 80 to 140 to avoid overlap with bottom navigation
     alignItems: 'center',
     minHeight: 120,
   },
@@ -314,7 +386,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 20, // Reduced from 30 to 20 to optimize spacing
     lineHeight: 22,
   },
   cancelButton: {
@@ -322,6 +394,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 25,
     minWidth: 120,
+    marginTop: 10, // Added margin top for better spacing from buttons above
   },
   buttonText: {
     color: '#FFFFFF',
@@ -365,5 +438,46 @@ const styles = StyleSheet.create({
   },
   qrcodeIcon: {
     opacity: 0.3,
+  },
+  resumeButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 25,
+    marginTop: 15, // Reduced from 20 to 15 for better spacing
+    marginBottom: 10, // Added margin bottom to separate from Cancel button
+  },
+  scanModeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+    paddingVertical: 16,
+  },
+  scanModeToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  scanModeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 2,
+  },
+  scanModeButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  scanModeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
