@@ -1,125 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { InternalAxiosRequestConfig } from 'axios';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 
-// Base URL for direct API calls
+// Base URL for direct API calls - now that CORS is fixed in the backend
 const BASE_URL = 'https://www.outix.co/apis';
 
-// Function to get the appropriate proxy URL based on the environment
-const getProxyURL = (): string => {
-  // Check if we're running on a physical device vs simulator/emulator
-  const { manifest } = Constants;
-  
-  if (Platform.OS === 'android') {
-    // For Android physical devices, we need to use the host machine's IP
-    // For Android emulator, we can use the special IP 10.0.2.2
-    if (Constants.isDevice) {
-      // Physical Android device - use host machine IP
-      // This should be set as an environment variable or detected dynamically
-      const hostIP = manifest?.debuggerHost?.split(':')[0] || 'localhost';
-      return `http://${hostIP}:3000/api`;
-    } else {
-      // Android emulator - use special emulator IP
-      return 'http://10.0.2.2:3000/api';
-    }
-  } else if (Platform.OS === 'ios') {
-    if (Constants.isDevice) {
-      // Physical iOS device - use host machine IP
-      const hostIP = manifest?.debuggerHost?.split(':')[0] || 'localhost';
-      return `http://${hostIP}:3000/api`;
-    } else {
-      // iOS simulator - can use localhost
-      return 'http://localhost:3000/api';
-    }
-  }
-  
-  // Fallback for web or other platforms
-  return 'http://localhost:3000/api';
-};
-
-// Get the proxy URL dynamically
-const PROXY_URL = getProxyURL();
-
-console.log(`Using proxy URL: ${PROXY_URL}`);
-console.log(`Platform: ${Platform.OS}, Is Device: ${Constants.isDevice}`);
-
-// Manual IP override for development (can be set via storage)
-let manualProxyIP: string | null = '192.168.18.102'; // Set default IP for testing
-
-// Function to manually set the proxy server IP (useful for device testing)
-export const setManualProxyIP = async (ip: string): Promise<void> => {
-  manualProxyIP = ip;
-  await setStorageItem('manual_proxy_ip', ip);
-  console.log(`Manual proxy IP set to: ${ip}`);
-};
-
-// Function to get the current proxy URL (with manual override if set)
-export const getCurrentProxyURL = async (): Promise<string> => {
-  // Check if manual IP is set in storage
-  if (!manualProxyIP) {
-    manualProxyIP = await getStorageItem('manual_proxy_ip');
-  }
-  
-  // If still no manual IP, try to set the default
-  if (!manualProxyIP) {
-    manualProxyIP = '192.168.18.102'; // Default IP for testing
-    await setStorageItem('manual_proxy_ip', manualProxyIP);
-  }
-  
-  if (manualProxyIP) {
-    const manualURL = `http://${manualProxyIP}:3000/api`;
-    console.log(`Using manual proxy URL: ${manualURL}`);
-    return manualURL;
-  }
-  
-  return PROXY_URL;
-};
-
-// Function to clear manual IP and use auto-detection
-export const clearManualProxyIP = async (): Promise<void> => {
-  manualProxyIP = null;
-  await removeStorageItem('manual_proxy_ip');
-  console.log('Manual proxy IP cleared, will use auto-detection');
-};
-
-// Function to get current proxy IP
-export const getCurrentProxyIP = async (): Promise<string> => {
-  const url = await getCurrentProxyURL();
-  // Extract IP from URL like "http://192.168.18.102:3000/api"
-  const match = url.match(/http:\/\/([^:]+):/);
-  return match ? match[1] : 'unknown';
-};
-
-// Function to test proxy server connectivity
-export const testProxyConnectivity = async (): Promise<{ success: boolean; url: string; error?: string; ip?: string }> => {
-  const proxyURL = await getCurrentProxyURL();
-  
-  try {
-    console.log(`Testing connectivity to: ${proxyURL}`);
-    
-    // Test the server-info endpoint with a very short timeout for quick testing
-    const response = await axios.get(`${proxyURL.replace('/api', '')}/api/server-info`, {
-      timeout: 3000 // 3 second timeout for quick connectivity test
-    });
-    
-    console.log('Proxy connectivity test successful:', response.data);
-    
-    return {
-      success: true,
-      url: proxyURL,
-      ip: response.data.ip
-    };
-  } catch (error: any) {
-    console.error('Proxy connectivity test failed:', error.message);
-    
-    return {
-      success: false,
-      url: proxyURL,
-      error: error.message
-    };
-  }
-};
+console.log(`Using direct API URL: ${BASE_URL}`);
 
 // In-memory token storage (no AsyncStorage dependency)
 let authToken: string | null = null;
@@ -199,7 +84,7 @@ const removeStorageItem = async (key: string): Promise<boolean> => {
       }
     }
     
-    return true; // Memory removal succeeded
+    return true; // Memory storage succeeded
   } catch (error) {
     console.error(`Error in removeStorageItem(${key}):`, error);
     return false;
@@ -209,31 +94,56 @@ const removeStorageItem = async (key: string): Promise<boolean> => {
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Don't set Content-Type globally as it causes issues with GET requests
 });
 
 // Add interceptor to automatically add auth token to requests
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // If no in-memory token and AsyncStorage is working, try to get from AsyncStorage
-    if (!authToken && isAsyncStorageWorking) {
+    console.log("🔍 Interceptor called for request:", config.method?.toUpperCase(), config.url);
+    
+    // If no in-memory token, try to get from storage
+    if (!authToken) {
+      console.log("No token in memory, getting from storage...");
       try {
-        authToken = await AsyncStorage.getItem('auth_token');
+        authToken = await getStorageItem('auth_token');
+        console.log("Token from storage:", authToken ? `${authToken.substring(0, 10)}...` : "null");
       } catch (error) {
-        console.log("Error reading from AsyncStorage:", error);
-        isAsyncStorageWorking = false;
+        console.log("Error reading token from storage:", error);
       }
+    } else {
+      console.log("Using token from memory:", authToken.substring(0, 10) + "...");
     }
     
     if (authToken && config.headers) {
       // Use the exact header name 'Auth-Token' as shown in Postman
       config.headers['Auth-Token'] = authToken;
+      console.log(`✅ Added Auth-Token to request headers: ${authToken.substring(0, 10)}...`);
+      console.log("All headers being sent:", JSON.stringify(config.headers, null, 2));
+    } else {
+      console.log("❌ No auth token available for request or no headers object");
+      console.log("authToken exists:", !!authToken);
+      console.log("config.headers exists:", !!config.headers);
     }
+    
+    // Remove problematic headers for GET requests to avoid API issues
+    if (config.method?.toLowerCase() === 'get' && config.headers) {
+      if (config.headers['Content-Type']) {
+        console.log("Removing Content-Type header for GET request");
+        delete config.headers['Content-Type'];
+      }
+      if (config.headers['Accept']) {
+        console.log("Removing Accept header for GET request");
+        delete config.headers['Accept'];
+      }
+    }
+    
+    console.log("Final request headers:", JSON.stringify(config.headers, null, 2));
+    
     return config;
   },
   (error) => {
+    console.error("Interceptor error:", error);
     return Promise.reject(error);
   }
 );
@@ -262,28 +172,39 @@ export const login = async (username?: string, password?: string): Promise<strin
       console.log("Attempting login with provided credentials");
       
       try {
-        const proxyURL = await getCurrentProxyURL();
-        const response = await axios.post(`${proxyURL}/auth`, {
-          username: username,
-          password: password
-        }, {
+        // Use URLSearchParams for form data since we no longer have form-data dependency
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+        
+        const response = await axios.post(`${BASE_URL}/auth`, formData, {
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
           timeout: 30000
         });
         
         console.log("Login response status:", response.status);
+        console.log("Login response data:", JSON.stringify(response.data, null, 2));
         
         // Success path - extract token from response
         if (response.data && response.data.msg && response.data.msg.Auth_Token) {
           const token = response.data.msg.Auth_Token;
-          console.log("Got auth token from API");
+          console.log("Got auth token from API:", token);
+          console.log("Token length:", token.length);
+          console.log("Token first 10 chars:", token.substring(0, 10));
+          
           authToken = token;
           isLoggedOut = false; // Reset logout flag on successful login
           
           // Store token in storage
-          await setStorageItem('auth_token', token);
+          const stored = await setStorageItem('auth_token', token);
+          console.log("Token stored successfully:", stored);
+          
+          // Verify token was stored correctly
+          const retrievedToken = await getStorageItem('auth_token');
+          console.log("Retrieved token for verification:", retrievedToken);
+          console.log("Tokens match:", token === retrievedToken);
           
           // Store user profile data if available in the response
           if (response.data.msg) {
@@ -375,13 +296,13 @@ export const login = async (username?: string, password?: string): Promise<strin
 
     try {
       // Try automatic login with default credentials
-      const proxyURL = await getCurrentProxyURL();
-      const response = await axios.post(`${proxyURL}/auth`, {
-        username: 'Outix@thebend.co',
-        password: 'Scan$9841'
-      }, {
+      const formData = new URLSearchParams();
+      formData.append('username', 'Outix@thebend.co');
+      formData.append('password', 'Scan$9841');
+      
+      const response = await axios.post(`${BASE_URL}/auth`, formData, {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
         timeout: 30000
       });
@@ -441,30 +362,14 @@ export const login = async (username?: string, password?: string): Promise<strin
     }
     
     // If we get here, both stored token check and API failed
-    // Use mock token as fallback ONLY for auto-login (not manual login)
-    const mockToken = "8934796HSnvLiZIs4087116";
-    console.log("Using mock token as fallback for auto-login");
-    authToken = mockToken;
-    isLoggedOut = false;
-    await setStorageItem('auth_token', mockToken);
+    // Don't use mock token anymore since we have direct API access
+    console.error("Authentication failed - no valid token available");
+    authToken = null;
+    return null;
     
-    // Store mock user profile data as well
-    const mockUserProfile = {
-      UserID: 'mock_user_123',
-      LoggedName: 'Outix Scanner User',
-      ClientName: 'Outix Scanner',
-      email: 'Outix@thebend.co',
-      role: 'Event Manager',
-      eventsCreated: 12,
-      eventsAttended: 8,
-      Auth_Token: mockToken
-    };
-    console.log("Storing mock user profile data");
-    await setStorageItem('user_profile', JSON.stringify(mockUserProfile));
-    
-    return mockToken;
   } catch (error) {
-    console.error('Unexpected login error:', error);
+    console.error("Unexpected login error:", error);
+    authToken = null;
     return null;
   }
 };
@@ -503,204 +408,170 @@ const extractTokenFromResponse = (data: any): string | null => {
   return null;
 };
 
+// Create a custom fetch wrapper that works better with React Native
+const customFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  // Create headers object directly to preserve case sensitivity
+  const headersObject: Record<string, string> = {};
+  
+  // Add auth token if available - MUST be exactly 'Auth-Token' (case-sensitive)
+  if (authToken) {
+    headersObject['Auth-Token'] = authToken;
+  }
+  
+  // Merge with any existing headers
+  if (options.headers) {
+    const existingHeaders = options.headers as Record<string, string>;
+    Object.keys(existingHeaders).forEach(key => {
+      headersObject[key] = existingHeaders[key];
+    });
+  }
+  
+  const finalOptions: RequestInit = {
+    ...options,
+    headers: headersObject,
+  };
+  
+  console.log('Custom fetch - URL:', url);
+  console.log('Custom fetch - Headers:', JSON.stringify(headersObject, null, 2));
+  console.log('Custom fetch - Method:', finalOptions.method || 'GET');
+  
+  return fetch(url, finalOptions);
+};
+
 export const getEvents = async (): Promise<any[]> => {
   try {
     // Make sure we have the token
     if (!authToken) {
-      console.log("No auth token available, trying to get from storage");
+      console.log("No auth token in memory, trying to get from storage");
       const storedToken = await getStorageItem('auth_token');
+      console.log("Retrieved token from storage:", storedToken);
+      console.log("Storage token length:", storedToken?.length);
+      console.log("Storage token first 10 chars:", storedToken?.substring(0, 10));
+      
       if (storedToken) {
         authToken = storedToken;
+        console.log("Using stored token");
       } else {
         console.log("No token in storage, trying to login");
-        await login();
+        const freshToken = await login();
+        console.log("Fresh token from login:", freshToken);
+        if (freshToken) {
+          authToken = freshToken;
+        }
       }
+    } else {
+      console.log("Using existing token from memory");
+      console.log("Memory token length:", authToken.length);
+      console.log("Memory token first 10 chars:", authToken.substring(0, 10));
     }
     
-    console.log("Sending request with token:", authToken ? "token-exists" : "no-token");
+    if (!authToken) {
+      console.error("No auth token available after login attempt");
+      return [];
+    }
+    
+    console.log("Sending request with token:", authToken ? `token-exists: ${authToken.substring(0, 10)}...` : "no-token");
+    console.log("Full token for debugging:", authToken);
+    console.log("Request URL:", `${BASE_URL}/events`);
     
     try {
-      // First test if proxy server is accessible
-      const proxyURL = await getCurrentProxyURL();
-      console.log("Testing proxy connectivity before making events request...");
+      // Create a new axios instance specifically for this request to avoid interceptor issues
+      console.log("Making request with dedicated axios instance...");
       
-      // Quick connectivity test with shorter timeout
-      const connectivityTest = await testProxyConnectivity();
-      if (!connectivityTest.success) {
-        console.log("Proxy server not accessible, using mock data immediately");
-        throw new Error("Proxy server not accessible");
-      }
+      const dedicatedAxios = axios.create({
+        baseURL: BASE_URL,
+        timeout: 15000,
+      });
       
-      console.log("Proxy server accessible, making events request...");
-      const response = await axios.get(`${proxyURL}/events`, {
+      // Make the request with explicit headers
+      const response = await dedicatedAxios.get('/events', {
         headers: {
-          'auth-token': authToken || '',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000 // Reduced to 15 second timeout since we pre-tested connectivity
+          'Auth-Token': authToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
       });
       
       console.log("Events API response status:", response.status);
+      console.log("Response data type:", typeof response.data);
+      console.log("Has msg property:", !!response.data?.msg);
+      console.log("Events count:", response.data?.msg?.length || 0);
       
       // Format the event images with the correct base URL
       if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
-        // Add image base URL to all events
-        const eventsWithFormattedUrls = response.data.msg.map((event: any) => {
-          // Add the base URL to image fields
-          if (event.EventImage) {
-            event.EventImage = `https://www.outix.co/uploads/images/events/${event.EventImage}`;
-          }
-          if (event.EventLogo) {
-            event.EventLogo = `https://www.outix.co/uploads/images/events/${event.EventLogo}`;
-          }
-          return event;
-        });
-        return eventsWithFormattedUrls;
+        const formattedEvents = response.data.msg.map((event: any) => ({
+          ...event,
+          image: event.image ? `${BASE_URL}${event.image}` : null
+        }));
+        
+        console.log(`Successfully fetched ${formattedEvents.length} events`);
+        return formattedEvents;
+      } else {
+        console.log("No events found in response, returning empty array");
+        return [];
       }
       
-      // If we got a response but data format is unexpected
-      if (response.data) {
-        console.log("Got response but data format is unexpected");
-        if (Array.isArray(response.data)) {
-          return response.data;
+    } catch (error: any) {
+      console.error("Events request failed:", error.message);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      
+      // Try to get a fresh token and retry
+      console.log("Attempting to get fresh token and retry...");
+      
+      // Clear the old token first
+      authToken = null;
+      await removeStorageItem('auth_token');
+      
+      // Also clear from memory cache
+      memoryStorage.delete('auth_token');
+      
+      // Force a fresh login with credentials
+      const freshToken = await login('Outix@thebend.co', 'Scan$9841');
+      
+      if (freshToken && freshToken !== authToken) {
+        console.log("Got fresh token, retrying request...");
+        authToken = freshToken;
+        
+        try {
+          // Create another dedicated instance for retry
+          const retryAxios = axios.create({
+            baseURL: BASE_URL,
+            timeout: 15000,
+          });
+          
+          const retryResponse = await retryAxios.get('/events', {
+            headers: {
+              'Auth-Token': freshToken,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          });
+          
+          console.log("Retry response status:", retryResponse.status);
+          
+          if (retryResponse.data && retryResponse.data.msg && Array.isArray(retryResponse.data.msg)) {
+            const formattedEvents = retryResponse.data.msg.map((event: any) => ({
+              ...event,
+              image: event.image ? `${BASE_URL}${event.image}` : null
+            }));
+            
+            console.log(`Retry successful - fetched ${formattedEvents.length} events`);
+            return formattedEvents;
+          }
+        } catch (retryError: any) {
+          console.error("Retry request also failed:", retryError.message);
+          console.error("Retry error response:", retryError.response?.data);
         }
       }
-    } catch (apiError: any) {
-      console.error("Error making API request:", apiError.message || apiError);
       
-      // Log more details about the error
-      if (apiError.response) {
-        console.log("Response status:", apiError.response.status);
-      } else if (apiError.request) {
-        console.log("No response received");
-      }
-      
-      // Continue to mock data
+      console.log("All attempts failed, returning empty array");
+      return [];
     }
     
-    // Return mock data (existing code)
-    console.log("Using mock events data");
-    return [
-      { 
-        id: '77809',
-        EventId: '77809',
-        EventName: '2025 Event Pass',
-        showStart: '2024-09-30 01:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/456306-1697679646-event-cover-img.png'
-      },
-      { 
-        id: '78035', 
-        EventId: '78035',
-        EventName: 'Supercars Championship',
-        showStart: '2024-11-15 09:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/460735-1742338970-event-cover-img.jpg'
-      },
-      { 
-        id: '78102', 
-        EventId: '78102',
-        EventName: 'GT World Challenge',
-        showStart: '2024-12-05 10:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/460745-1743135190-event-cover-img.jpg'
-      },
-      {
-        id: '78215',
-        EventId: '78215',
-        EventName: 'Tailem Bend Motorsport Festival',
-        showStart: '2024-09-20 10:00:00',
-        VenueName: 'Tailem Bend',
-        EventImage: 'https://www.outix.co/uploads/images/events/460757-1742443499-event-cover-img.jpg'
-      },
-      {
-        id: '78301',
-        EventId: '78301',
-        EventName: 'Australian Grand Prix',
-        showStart: '2025-03-12 08:00:00',
-        VenueName: 'Melbourne',
-        EventImage: 'https://www.outix.co/uploads/images/events/460766-1742791548-event-cover-img.jpg'
-      },
-      {
-        id: '78422',
-        EventId: '78422',
-        EventName: 'Bathurst 1000',
-        showStart: '2024-10-10 09:00:00',
-        VenueName: 'Mount Panorama',
-        EventImage: 'https://www.outix.co/uploads/images/events/460875-1744422939-event-cover-img.jpg'
-      },
-      {
-        id: '78555',
-        EventId: '78555',
-        EventName: 'Formula Drift Championship',
-        showStart: '2025-01-15 14:00:00',
-        VenueName: 'Sydney Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/460897-1744778534-event-cover-img.jpg'
-      },
-      {
-        id: '78612',
-        EventId: '78612',
-        EventName: 'Adelaide 500',
-        showStart: '2025-02-28 10:00:00',
-        VenueName: 'Adelaide Street Circuit',
-        EventImage: 'https://www.outix.co/uploads/images/events/460928-1745279776-event-cover-img.png'
-      },
-      {
-        id: '78700',
-        EventId: '78700',
-        EventName: 'Australian Motorcycle Grand Prix',
-        showStart: '2025-04-15 09:30:00',
-        VenueName: 'Phillip Island',
-        EventImage: 'https://www.outix.co/uploads/images/events/460965-1745882713-event-cover-img.jpg'
-      }
-    ];
-  } catch (error) {
-    console.error('Unexpected get events error:', error);
-    
-    // Return an expanded set of mock data on unexpected error
-    return [
-      { 
-        id: '77809',
-        EventId: '77809',
-        EventName: '2025 Event Pass',
-        showStart: '2024-09-30 01:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/456306-1697679646-event-cover-img.png'
-      },
-      { 
-        id: '78035', 
-        EventId: '78035',
-        EventName: 'Supercars Championship',
-        showStart: '2024-11-15 09:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/460735-1742338970-event-cover-img.jpg'
-      },
-      { 
-        id: '78102', 
-        EventId: '78102',
-        EventName: 'GT World Challenge',
-        showStart: '2024-12-05 10:00:00',
-        VenueName: 'Shell V-Power Motorsport Park',
-        EventImage: 'https://www.outix.co/uploads/images/events/460745-1743135190-event-cover-img.jpg'
-      },
-      {
-        id: '78215',
-        EventId: '78215',
-        EventName: 'Tailem Bend Motorsport Festival',
-        showStart: '2024-09-20 10:00:00',
-        VenueName: 'Tailem Bend',
-        EventImage: 'https://www.outix.co/uploads/images/events/460757-1742443499-event-cover-img.jpg'
-      },
-      {
-        id: '78301',
-        EventId: '78301',
-        EventName: 'Australian Grand Prix',
-        showStart: '2025-03-12 08:00:00',
-        VenueName: 'Melbourne',
-        EventImage: 'https://www.outix.co/uploads/images/events/460766-1742791548-event-cover-img.jpg'
-      }
-    ];
+  } catch (error: any) {
+    console.error("Events API error:", error.message);
+    return [];
   }
 };
 
@@ -720,16 +591,10 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
     
     console.log("Sending guest list request with token:", authToken);
     
-    // First try with standard endpoint
+    // First try with the working guestlist endpoint
     try {
-      console.log(`Trying first endpoint: /events/${eventId}/guests`);
-      const proxyURL = await getCurrentProxyURL();
-      const response = await axios.get(`${proxyURL}/events/${eventId}/guests`, {
-        headers: {
-          'auth-token': authToken,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
+      console.log(`Trying primary endpoint: /guestlist/${eventId}`);
+      const response = await api.get(`/guestlist/${eventId}`, {
         timeout: 30000
       });
       
@@ -779,18 +644,12 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
       
       return [];
     } catch (error) {
-      console.log("First guest list endpoint failed, trying alternative endpoint");
+      console.log("Primary guest list endpoint failed, trying alternative endpoint");
       
       // If first endpoint fails, try the alternative endpoint
       try {
-        console.log(`Trying alternative endpoint: /guestlist/${eventId}`);
-        const proxyURL = await getCurrentProxyURL();
-        const response = await axios.get(`${proxyURL}/guestlist/${eventId}`, {
-          headers: {
-            'auth-token': authToken,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
+        console.log(`Trying alternative endpoint: /events/${eventId}/guests`);
+        const response = await api.get(`/events/${eventId}/guests`, {
           timeout: 30000
         });
         
@@ -1051,39 +910,21 @@ export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => 
     
     // Note: The API doesn't actually filter by checkedin=1 parameter, so we fetch all guests
     // and filter them client-side
-    const proxyURL = await getCurrentProxyURL();
-    const url = `${proxyURL}/guestlist/${eventId}`;
-    console.log(`Making request to: ${url}`);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'auth-token': authToken,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+    const response = await api.get(`/guestlist/${eventId}`, {
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("Checked-in guest list API response:", data);
-
-    if (data.error) {
-      console.error("API returned error:", data);
-      return [];
+    if (!response.data) {
+      throw new Error('No response data from guest list API');
     }
 
     // The API returns all guests, so we need to filter for checked-in guests client-side
     let allGuests = [];
-    if (data.msg && Array.isArray(data.msg)) {
-      allGuests = data.msg;
-    } else if (Array.isArray(data)) {
-      allGuests = data;
+    if (response.data.msg && Array.isArray(response.data.msg)) {
+      allGuests = response.data.msg;
+    } else if (Array.isArray(response.data)) {
+      allGuests = response.data;
     } else {
-      console.error("Unexpected API response format for checked-in guests:", data);
+      console.error("Unexpected API response format for checked-in guests:", response.data);
       return [];
     }
 
@@ -1101,46 +942,9 @@ export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => 
   }
 };
 
-export const checkInGuest = async (eventId: string, guestId: string): Promise<any> => {
-  try {
-    // Make sure we have the token
-    if (!authToken) {
-      console.log("No auth token available for check-in, trying to get from storage");
-      const storedToken = await getStorageItem('auth_token');
-      if (storedToken) {
-        authToken = storedToken;
-      } else {
-        console.log("No token in storage for check-in, trying to login");
-        await login();
-      }
-    }
-    
-    // Send data as JSON through the proxy
-    const proxyURL = await getCurrentProxyURL();
-    const response = await axios.post(`${proxyURL}/checkin`, {
-      eventId,
-      guestId,
-      timestamp: new Date().toISOString()
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'auth-token': authToken || ''
-      },
-      timeout: 30000
-    });
-    
-    console.log("Check-in API response status:", response.status);
-    
-    if (response.data && response.data.msg) {
-      return response.data.msg;
-    }
-    return response.data;
-  } catch (error) {
-    console.error(`Check-in error for guest ${guestId}:`, error);
-    // Return mock success response
-    return { success: true, message: 'Guest checked in successfully' };
-  }
-};
+// Note: checkInGuest function removed - use scanQRCode instead for check-in functionality
+// Check-in is now handled through QR code scanning with scanQRCode(eventId, scanCode)
+// Check-out is handled through unscanQRCode(eventId, scanCode)
 
 // Function to generate a sample QR code payload for testing
 export const generateSampleQRData = (guestId: string): string => {
@@ -1264,11 +1068,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     // If login didn't provide profile data, try the API endpoint
     try {
       console.log("Trying to fetch user profile through proxy after login");
-      const proxyURL = await getCurrentProxyURL();
-      const response = await axios.get(`${proxyURL}/user/profile`, {
-        headers: {
-          'Auth-Token': authToken || ''
-        },
+      const response = await api.get('/user/profile', {
         timeout: 30000
       });
       
@@ -1468,13 +1268,8 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
       };
     }
     
-    // Use the proxy server to make the validation request
-    const proxyURL = await getCurrentProxyURL();
-    const response = await axios.get(`${proxyURL}/validate/${eventId}/${scanCode}`, {
-      headers: {
-        'Auth-Token': authToken || '',
-        'Content-Type': 'application/json'
-      },
+    // Make direct API request to validate endpoint
+    const response = await api.get(`/validate/${eventId}/${scanCode}`, {
       timeout: 30000
     });
     
@@ -1523,13 +1318,8 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
       };
     }
     
-    // Use the proxy server to make the scan request
-    const proxyURL = await getCurrentProxyURL();
-    const response = await axios.get(`${proxyURL}/scan/${eventId}/${scanCode}`, {
-      headers: {
-        'Auth-Token': authToken || '',
-        'Content-Type': 'application/json'
-      },
+    // Make direct API request to scan endpoint
+    const response = await api.get(`/scan/${eventId}/${scanCode}`, {
       timeout: 30000
     });
     
@@ -1543,13 +1333,43 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
       const status = error.response.status;
       const data = error.response.data;
       
+      // If we get 401 Unauthorized, clear the token and try to re-authenticate
+      if (status === 401) {
+        console.log('Authentication failed during scan, clearing token and retrying...');
+        authToken = null;
+        await removeStorageItem('auth_token');
+        
+        // Also clear from memory cache
+        memoryStorage.delete('auth_token');
+        
+        // Try to login again
+        const newToken = await login();
+        if (newToken) {
+          console.log('Re-authentication successful, retrying scan...');
+          // Update the in-memory token
+          authToken = newToken;
+          // Retry the scan with the new token (interceptor will add it)
+          try {
+            const retryResponse = await api.get(`/scan/${eventId}/${scanCode}`, {
+              timeout: 30000
+            });
+            
+            console.log('Retry scan response:', retryResponse.data);
+            return retryResponse.data;
+          } catch (retryError: any) {
+            console.error('Retry scan also failed:', retryError);
+            // Fall through to normal error handling
+          }
+        }
+      }
+      
       // Check if data is nested in a 'details' object
       const responseData = data.details || data;
       
       // Return the actual API response for all status codes
       return {
         error: responseData.error !== undefined ? responseData.error : true,
-        msg: responseData.msg || (status === 404 ? 'Already Scanned Ticket, Cannot check in.' : 'Scan failed'),
+        msg: responseData.msg || responseData.message || (status === 404 ? 'Already Scanned Ticket, Cannot check in.' : status === 401 ? 'Authentication failed. Please check your credentials.' : 'Scan failed'),
         status: responseData.status || status
       };
     }
@@ -1574,13 +1394,8 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       };
     }
     
-    // Use the proxy server to make the unscan request with the correct parameter
-    const proxyURL = await getCurrentProxyURL();
-    const response = await axios.get(`${proxyURL}/scan/${eventId}/${scanCode}?unscan=1`, {
-      headers: {
-        'Auth-Token': authToken || '',
-        'Content-Type': 'application/json'
-      },
+    // Make direct API request to unscan endpoint
+    const response = await api.get(`/scan/${eventId}/${scanCode}?unscan=1`, {
       timeout: 30000
     });
     
@@ -1664,13 +1479,8 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     
     console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId });
     
-    // Get all attendees for this event
-    const proxyURL = await getCurrentProxyURL();
-    const response = await axios.get(`${proxyURL}/events/${eventId}/guests`, {
-      headers: {
-        'Auth-Token': authToken || '',
-        'Content-Type': 'application/json'
-      },
+    // Get all attendees for this event using the correct endpoint
+    const response = await api.get(`/guestlist/${eventId}`, {
       timeout: 30000
     });
     
@@ -1678,12 +1488,16 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
       throw new Error('No response data from guest list API');
     }
     
-    // Extract guests from response
+    // Extract guests from response - the correct format is response.data.msg
     let allGuests = [];
     if (response.data.msg && Array.isArray(response.data.msg)) {
       allGuests = response.data.msg;
     } else if (Array.isArray(response.data)) {
       allGuests = response.data;
+    } else if (response.data.data && Array.isArray(response.data.data)) {
+      allGuests = response.data.data;
+    } else if (response.data.guests && Array.isArray(response.data.guests)) {
+      allGuests = response.data.guests;
     } else {
       throw new Error('Unexpected guest list response format');
     }
@@ -1691,14 +1505,17 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     console.log('Total guests found:', allGuests.length);
     
     // Filter attendees by same purchaser email, name, or booking ID
+    // Note: guest list structure uses different field names
     const groupTickets = allGuests.filter((attendee: any) => {
-      if (purchaserBookingId && attendee.booking_id === purchaserBookingId) {
+      // Match by booking reference (booking_reference in guest list vs booking_id in validation)
+      if (purchaserBookingId && (attendee.booking_reference === purchaserBookingId || attendee.booking_id === purchaserBookingId)) {
         return true;
       }
       if (purchaserEmail && attendee.email === purchaserEmail) {
         return true;
       }
-      if (purchaserName && attendee.fullname === purchaserName) {
+      // Match by name (purchased_by in guest list vs fullname in validation)
+      if (purchaserName && (attendee.purchased_by === purchaserName || attendee.fullname === purchaserName)) {
         return true;
       }
       return false;
@@ -1706,29 +1523,28 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     
     console.log('Group tickets found:', groupTickets.length);
     
-    // Map to consistent format
+    // Map to consistent format using guest list field names
     const formattedTickets = groupTickets.map((ticket: any, index: number) => {
       console.log(`Ticket ${index + 1} raw data:`, {
-        id: ticket.id,
-        ticket_id: ticket.ticket_id,
-        tid: ticket.tid,
-        reference_num: ticket.reference_num,
         ticket_identifier: ticket.ticket_identifier,
-        fullname: ticket.fullname,
-        name: ticket.name
+        booking_reference: ticket.booking_reference,
+        purchased_by: ticket.purchased_by,
+        email: ticket.email,
+        checkedin: ticket.checkedin,
+        ticket_title: ticket.ticket_title
       });
       
-      // Use tid as the primary unique identifier, fallback to ticket_id, then other fields
-      const uniqueId = ticket.tid || ticket.ticket_id || ticket.id || ticket.reference_num || `ticket_${index}`;
+      // Use ticket_identifier as the primary QR code (this is what we scan)
+      const qrCode = ticket.ticket_identifier;
       
       return {
-        id: uniqueId, // Use the unique ticket ID
-        name: ticket.fullname || ticket.name || 'Guest',
+        id: qrCode, // Use the ticket identifier as the unique ID
+        name: ticket.purchased_by || ticket.admit_name || 'Guest',
         email: ticket.email || 'No email',
-        ticketType: ticket.ticket_title || ticket.ticketType || 'General Admission',
-        ticketIdentifier: ticket.ticket_identifier || ticket.reference_num || uniqueId, // Add ticket identifier
-        isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || ticket.scannedIn || false,
-        qrCode: ticket.qrCode || ticket.ticket_identifier || ticket.reference_num || uniqueId
+        ticketType: ticket.ticket_title || 'General Admission',
+        ticketIdentifier: ticket.ticket_identifier,
+        isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || false,
+        qrCode: qrCode
       };
     });
     

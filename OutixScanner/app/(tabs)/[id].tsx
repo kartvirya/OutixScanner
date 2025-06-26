@@ -27,15 +27,10 @@ import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-    clearManualProxyIP,
     getCheckedInGuestList,
-    getCurrentProxyIP,
-    getCurrentProxyURL,
     getEvents,
     getGuestList,
     scanQRCode,
-    setManualProxyIP,
-    testProxyConnectivity,
     unscanQRCode,
     validateQRCode
 } from '../../services/api';
@@ -1020,19 +1015,28 @@ export default function EventDetail() {
     feedback.buttonPress();
     
     try {
-      const result = await testProxyConnectivity();
-      const currentURL = await getCurrentProxyURL();
-      const currentIP = await getCurrentProxyIP();
+      console.log('Testing direct API connectivity...');
       
-      if (result.success) {
+      // Test direct connection to the backend API
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch('https://www.outix.co/apis/events', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
         Alert.alert(
           'Network Test Successful! ✅',
-          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}\n\nYour device can access the proxy server.`,
+          `Direct connection to backend API successful.\n\nAPI URL: https://www.outix.co/apis\nStatus: ${response.status}\n\nCORS has been fixed and proxy is no longer needed.`,
           [
-            {
-              text: 'Change IP',
-              onPress: () => showManualIPOptions()
-            },
             {
               text: 'OK',
               onPress: () => feedback.success()
@@ -1042,20 +1046,8 @@ export default function EventDetail() {
       } else {
         Alert.alert(
           'Network Test Failed ❌',
-          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}\n\nPlease check if:\n1. Proxy server is running\n2. Device is on same network\n3. Firewall allows port 3000`,
+          `Cannot connect to backend API.\n\nAPI URL: https://www.outix.co/apis\nStatus: ${response.status}\n\nPlease check your internet connection.`,
           [
-            {
-              text: 'Set Manual IP',
-              onPress: () => showManualIPOptions()
-            },
-            {
-              text: 'Use Default IP',
-              onPress: async () => {
-                await setManualProxyIP('192.168.18.102');
-                feedback.success();
-                Alert.alert('IP Set', 'Using default IP: 192.168.18.102\n\nTest connectivity again to verify.');
-              }
-            },
             {
               text: 'OK',
               style: 'cancel'
@@ -1063,102 +1055,22 @@ export default function EventDetail() {
           ]
         );
       }
-    } catch (error) {
-      Alert.alert('Network Test Error', 'Failed to test network connectivity');
+    } catch (error: any) {
+      Alert.alert(
+        'Network Test Error',
+        `Failed to connect to backend API.\n\nError: ${error.message}\n\nPlease check your internet connection.`,
+        [
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
     }
   };
 
-  const showManualIPOptions = () => {
-    Alert.alert(
-      'Network Configuration',
-      'Choose how to configure the proxy server IP:',
-      [
-        {
-          text: 'Use 192.168.18.102',
-          onPress: async () => {
-            await setManualProxyIP('192.168.18.102');
-            feedback.success();
-            Alert.alert('IP Set', 'Proxy IP set to: 192.168.18.102\n\nTest connectivity to verify it works.');
-          }
-        },
-        {
-          text: 'Enter Different IP',
-          onPress: () => showCustomIPInput()
-        },
-        {
-          text: 'Auto-Detect',
-          onPress: async () => {
-            await clearManualProxyIP();
-            feedback.buttonPress();
-            Alert.alert('Auto-Detection Enabled', 'Will use automatic IP detection.\n\nTest connectivity to see the detected IP.');
-          }
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showCustomIPInput = () => {
-    // Since Alert.prompt doesn't work on all platforms, provide common IP options
-    Alert.alert(
-      'Select IP Address',
-      'Choose a common IP range or cancel to keep current setting:',
-      [
-        {
-          text: '192.168.1.x',
-          onPress: () => showSpecificIPOptions('192.168.1')
-        },
-        {
-          text: '192.168.0.x',
-          onPress: () => showSpecificIPOptions('192.168.0')
-        },
-        {
-          text: '192.168.18.x',
-          onPress: () => showSpecificIPOptions('192.168.18')
-        },
-        {
-          text: '10.0.0.x',
-          onPress: () => showSpecificIPOptions('10.0.0')
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showSpecificIPOptions = (baseIP: string) => {
-    const commonEndings = ['100', '101', '102', '103', '105', '110'];
-    
-    Alert.alert(
-      `Select ${baseIP}.x`,
-      'Choose the last number for your IP address:',
-      [
-        ...commonEndings.map(ending => ({
-          text: `${baseIP}.${ending}`,
-          onPress: async () => {
-            const fullIP = `${baseIP}.${ending}`;
-            await setManualProxyIP(fullIP);
-            feedback.success();
-            Alert.alert('IP Set', `Proxy IP set to: ${fullIP}\n\nTest connectivity to verify it works.`);
-          }
-        })),
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showManualIPDialog = () => {
-    // This is now replaced by showManualIPOptions
-    showManualIPOptions();
-  };
+  // Network configuration functions removed since proxy is no longer needed
+  // CORS has been fixed in the backend, so we connect directly to the API
 
   if (loading) {
     return (

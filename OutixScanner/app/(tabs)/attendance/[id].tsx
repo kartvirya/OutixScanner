@@ -1,40 +1,37 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
- ArrowLeft,
-  Clock,
-  QrCode,
-  RefreshCw,
-  Search,
-  User,
-  UserCheck,
-  Users
+    ArrowLeft,
+    Clock,
+    QrCode,
+    RefreshCw,
+    Search,
+    User,
+    UserCheck,
+    Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
 import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
-  getCheckedInGuestList,
-  getCurrentProxyIP,
-  getCurrentProxyURL,
-  getEvents,
-  getGuestList,
-  scanQRCode,
-  testProxyConnectivity,
-  unscanQRCode,
-  validateQRCode
+    getCheckedInGuestList,
+    getEvents,
+    getGuestList,
+    scanQRCode,
+    unscanQRCode,
+    validateQRCode
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 
@@ -421,17 +418,36 @@ export default function AttendancePage() {
 
   const testNetworkConnectivity = async () => {
     try {
-      const result = await testProxyConnectivity();
-      const currentURL = await getCurrentProxyURL();
-      const currentIP = await getCurrentProxyIP();
+      console.log('Testing direct API connectivity...');
+      
+      // Test direct connection to the backend API
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch('https://www.outix.co/apis/events', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
       
       Alert.alert(
         'Network Test Result',
-        `Proxy Status: ${result ? 'Connected ✅' : 'Failed ❌'}\nURL: ${currentURL}\nIP: ${currentIP}`,
+        response.ok 
+          ? `Direct API connection successful ✅\nAPI URL: https://www.outix.co/apis\nStatus: ${response.status}\nCORS fixed, proxy no longer needed!`
+          : `API connection failed ❌\nStatus: ${response.status}\nPlease check your internet connection.`,
         [{ text: 'OK', onPress: () => feedback.buttonPress() }]
       );
-    } catch (error) {
-      Alert.alert('Network Test Failed', 'Unable to test network connectivity.');
+    } catch (error: any) {
+      Alert.alert(
+        'Network Test Failed', 
+        `Unable to connect to backend API.\nError: ${error.message}\nPlease check your internet connection.`,
+        [{ text: 'OK', onPress: () => feedback.buttonPress() }]
+      );
     }
   };
 
