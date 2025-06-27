@@ -4,7 +4,6 @@ export default {
   version: "1.0.0",
   orientation: "portrait",
   scheme: "outixscanner",
-  owner: "outix",
   userInterfaceStyle: "automatic",
   splash: {
     backgroundColor: "#FF6B00"
@@ -26,17 +25,14 @@ export default {
     bundler: "metro"
   },
   plugins: [
+    "expo-router",
     [
       "expo-camera",
       {
         "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan QR codes."
       }
     ],
-    "expo-font"
-  ],
-  extra: {
-    eas: {
-      projectId: "outix-scanner"
-    }
-  }
+    "expo-font",
+    "expo-web-browser"
+  ]
 }; 

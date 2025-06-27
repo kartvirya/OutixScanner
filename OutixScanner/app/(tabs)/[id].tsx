@@ -1,38 +1,42 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-    BarChart,
-    Calendar,
-    ChevronDown,
-    ChevronUp,
-    Clock,
-    MapPin,
-    QrCode,
-    Ticket,
-    UserCheck,
-    Users
+  BarChart,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  MapPin,
+  Ticket,
+  UserCheck,
+  Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-    getCheckedInGuestList,
-    getEvents,
-    getGuestList,
-    scanQRCode,
-    unscanQRCode,
-    validateQRCode
+  clearManualProxyIP,
+  getCheckedInGuestList,
+  getCurrentProxyIP,
+  getCurrentProxyURL,
+  getEvents,
+  getGuestList,
+  scanQRCode,
+  setManualProxyIP,
+  testProxyConnectivity,
+  unscanQRCode,
+  validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -849,19 +853,6 @@ export default function EventDetail() {
         {/* Quick Actions Grid */}
         <View style={[styles.actionsGrid, { backgroundColor: colors.card }]}>
                 <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: 'rgba(255, 107, 0, 0.05)' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    handleOpenScanner('validate');
-                  }}
-                >
-            <View style={[styles.compactActionIconContainer, { backgroundColor: '#FF6B00' }]}>
-                    <QrCode size={24} color="#FFFFFF" />
-                  </View>
-            <Text style={[styles.compactActionText, { color: colors.text }]}>Scan</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
             style={[styles.actionItem, { backgroundColor: 'rgba(59, 130, 246, 0.05)' }]}
                   onPress={() => {
                     feedback.buttonPress();
@@ -871,7 +862,7 @@ export default function EventDetail() {
             <View style={[styles.compactActionIconContainer, { backgroundColor: '#3B82F6' }]}>
                     <Users size={24} color="#FFFFFF" />
                   </View>
-            <Text style={[styles.compactActionText, { color: colors.text }]}>Guests</Text>
+            <Text style={[styles.compactActionText, { color: colors.text }]}>TotalGuests</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -885,19 +876,6 @@ export default function EventDetail() {
                     <UserCheck size={24} color="#FFFFFF" />
                   </View>
             <Text style={[styles.compactActionText, { color: colors.text }]}>Attendance</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: 'rgba(168, 85, 247, 0.05)' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-              router.push(`/(tabs)/analytics`);
-                  }}
-                >
-            <View style={[styles.compactActionIconContainer, { backgroundColor: '#A855F7' }]}>
-                    <BarChart size={24} color="#FFFFFF" />
-                  </View>
-            <Text style={[styles.compactActionText, { color: colors.text }]}>Analytics</Text>
                 </TouchableOpacity>
               </View>
 
@@ -915,7 +893,7 @@ export default function EventDetail() {
               <View style={styles.attendanceStatsRow}>
                 <View style={styles.attendanceStatCompact}>
                   <Text style={[styles.attendanceStatValueCompact, { color: '#22C55E' }]}>{checkedInCount}</Text>
-                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Present</Text>
+                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Checked In</Text>
                   </View>
                 <View style={styles.attendanceStatCompact}>
                   <Text style={[styles.attendanceStatValueCompact, { color: colors.secondary }]}>{totalGuestsCount - checkedInCount}</Text>
@@ -1015,28 +993,19 @@ export default function EventDetail() {
     feedback.buttonPress();
     
     try {
-      console.log('Testing direct API connectivity...');
+      const result = await testProxyConnectivity();
+      const currentURL = await getCurrentProxyURL();
+      const currentIP = await getCurrentProxyIP();
       
-      // Test direct connection to the backend API
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch('https://www.outix.co/apis/events', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
+      if (result.success) {
         Alert.alert(
           'Network Test Successful! ✅',
-          `Direct connection to backend API successful.\n\nAPI URL: https://www.outix.co/apis\nStatus: ${response.status}\n\nCORS has been fixed and proxy is no longer needed.`,
+          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}\n\nYour device can access the proxy server.`,
           [
+            {
+              text: 'Change IP',
+              onPress: () => showManualIPOptions()
+            },
             {
               text: 'OK',
               onPress: () => feedback.success()
@@ -1046,8 +1015,20 @@ export default function EventDetail() {
       } else {
         Alert.alert(
           'Network Test Failed ❌',
-          `Cannot connect to backend API.\n\nAPI URL: https://www.outix.co/apis\nStatus: ${response.status}\n\nPlease check your internet connection.`,
+          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}\n\nPlease check if:\n1. Proxy server is running\n2. Device is on same network\n3. Firewall allows port 3000`,
           [
+            {
+              text: 'Set Manual IP',
+              onPress: () => showManualIPOptions()
+            },
+            {
+              text: 'Use Default IP',
+              onPress: async () => {
+                await setManualProxyIP('192.168.18.102');
+                feedback.success();
+                Alert.alert('IP Set', 'Using default IP: 192.168.18.102\n\nTest connectivity again to verify.');
+              }
+            },
             {
               text: 'OK',
               style: 'cancel'
@@ -1055,22 +1036,102 @@ export default function EventDetail() {
           ]
         );
       }
-    } catch (error: any) {
-      Alert.alert(
-        'Network Test Error',
-        `Failed to connect to backend API.\n\nError: ${error.message}\n\nPlease check your internet connection.`,
-        [
-          {
-            text: 'OK',
-            style: 'cancel'
-          }
-        ]
-      );
+    } catch (error) {
+      Alert.alert('Network Test Error', 'Failed to test network connectivity');
     }
   };
 
-  // Network configuration functions removed since proxy is no longer needed
-  // CORS has been fixed in the backend, so we connect directly to the API
+  const showManualIPOptions = () => {
+    Alert.alert(
+      'Network Configuration',
+      'Choose how to configure the proxy server IP:',
+      [
+        {
+          text: 'Use 192.168.18.102',
+          onPress: async () => {
+            await setManualProxyIP('192.168.18.102');
+            feedback.success();
+            Alert.alert('IP Set', 'Proxy IP set to: 192.168.18.102\n\nTest connectivity to verify it works.');
+          }
+        },
+        {
+          text: 'Enter Different IP',
+          onPress: () => showCustomIPInput()
+        },
+        {
+          text: 'Auto-Detect',
+          onPress: async () => {
+            await clearManualProxyIP();
+            feedback.buttonPress();
+            Alert.alert('Auto-Detection Enabled', 'Will use automatic IP detection.\n\nTest connectivity to see the detected IP.');
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showCustomIPInput = () => {
+    // Since Alert.prompt doesn't work on all platforms, provide common IP options
+    Alert.alert(
+      'Select IP Address',
+      'Choose a common IP range or cancel to keep current setting:',
+      [
+        {
+          text: '192.168.1.x',
+          onPress: () => showSpecificIPOptions('192.168.1')
+        },
+        {
+          text: '192.168.0.x',
+          onPress: () => showSpecificIPOptions('192.168.0')
+        },
+        {
+          text: '192.168.18.x',
+          onPress: () => showSpecificIPOptions('192.168.18')
+        },
+        {
+          text: '10.0.0.x',
+          onPress: () => showSpecificIPOptions('10.0.0')
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showSpecificIPOptions = (baseIP: string) => {
+    const commonEndings = ['100', '101', '102', '103', '105', '110'];
+    
+    Alert.alert(
+      `Select ${baseIP}.x`,
+      'Choose the last number for your IP address:',
+      [
+        ...commonEndings.map(ending => ({
+          text: `${baseIP}.${ending}`,
+          onPress: async () => {
+            const fullIP = `${baseIP}.${ending}`;
+            await setManualProxyIP(fullIP);
+            feedback.success();
+            Alert.alert('IP Set', `Proxy IP set to: ${fullIP}\n\nTest connectivity to verify it works.`);
+          }
+        })),
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const showManualIPDialog = () => {
+    // This is now replaced by showManualIPOptions
+    showManualIPOptions();
+  };
 
   if (loading) {
     return (

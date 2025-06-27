@@ -2,10 +2,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
     ArrowLeft,
     Clock,
-    QrCode,
-    RefreshCw,
     Search,
-    User,
     UserCheck,
     Users
 } from 'lucide-react-native';
@@ -545,40 +542,13 @@ export default function AttendancePage() {
           <Search size={16} color={colors.secondary} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Search attendees..."
+            placeholder="Search for guests..."
             placeholderTextColor={colors.secondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
       </View>
-
-      {/* Action Buttons */}
-      <View style={[styles.actionsContainer, { backgroundColor: colors.background }]}>
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#FF6B00' }]}
-          onPress={() => handleOpenScanner('scanIn')}
-        >
-          <QrCode size={20} color="#FFFFFF" />
-          <Text style={styles.actionText}>Check In</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
-          onPress={() => handleOpenScanner('scanOut')}
-        >
-          <User size={20} color="#FFFFFF" />
-          <Text style={styles.actionText}>Check Out</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.refreshButton, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}
-          onPress={refreshAttendance}
-        >
-          <RefreshCw size={16} color="#22C55E" />
-        </TouchableOpacity>
-      </View>
-
       {/* Clean Attendee List */}
       {filteredAttendees.length > 0 ? (
         <FlatList
@@ -623,15 +593,7 @@ export default function AttendancePage() {
               : 'Guests will appear here once they check in.'
             }
           </Text>
-          {!searchQuery && (
-            <TouchableOpacity 
-              style={[styles.emptyButton, { backgroundColor: '#FF6B00' }]}
-              onPress={() => handleOpenScanner('scanIn')}
-            >
-              <QrCode size={16} color="#FFFFFF" />
-              <Text style={styles.emptyButtonText}>Start Checking In</Text>
-            </TouchableOpacity>
-          )}
+d
         </View>
       )}
       

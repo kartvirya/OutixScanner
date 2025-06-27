@@ -3,8 +3,11 @@ import axios, { InternalAxiosRequestConfig } from 'axios';
 
 // Base URL for direct API calls - now that CORS is fixed in the backend
 const BASE_URL = 'https://www.outix.co/apis';
+// Base URL for images (usually the main domain, not the API subdomain)
+const IMAGE_BASE_URL = 'https://www.outix.co/uploads/images/events/';
 
 console.log(`Using direct API URL: ${BASE_URL}`);
+console.log(`Using image base URL: ${IMAGE_BASE_URL}`);
 
 // In-memory token storage (no AsyncStorage dependency)
 let authToken: string | null = null;
@@ -441,7 +444,7 @@ const customFetch = async (url: string, options: RequestInit = {}): Promise<Resp
 export const getEvents = async (): Promise<any[]> => {
   try {
     // Make sure we have the token
-    if (!authToken) {
+    if (typeof authToken !== 'string' ) {
       console.log("No auth token in memory, trying to get from storage");
       const storedToken = await getStorageItem('auth_token');
       console.log("Retrieved token from storage:", storedToken);
@@ -478,31 +481,45 @@ export const getEvents = async (): Promise<any[]> => {
       // Create a new axios instance specifically for this request to avoid interceptor issues
       console.log("Making request with dedicated axios instance...");
       
-      const dedicatedAxios = axios.create({
-        baseURL: BASE_URL,
-        timeout: 15000,
-      });
-      
       // Make the request with explicit headers
-      const response = await dedicatedAxios.get('/events', {
-        headers: {
-          'Auth-Token': authToken,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
+      const response = await api.get('/events');
       
       console.log("Events API response status:", response.status);
       console.log("Response data type:", typeof response.data);
       console.log("Has msg property:", !!response.data?.msg);
       console.log("Events count:", response.data?.msg?.length || 0);
       
+      // Log a sample event for debugging
+      if (response.data?.msg?.length > 0) {
+        console.log("Sample event data:", JSON.stringify(response.data.msg[0], null, 2));
+      }
+      
       // Format the event images with the correct base URL
       if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
-        const formattedEvents = response.data.msg.map((event: any) => ({
-          ...event,
-          image: event.image ? `${BASE_URL}${event.image}` : null
-        }));
+        const formattedEvents = response.data.msg.map((event: any) => {
+          console.log(`Processing event: ${event.name || event.title || event.id}`);
+          console.log(`Original image URL: ${event.image}`);
+          
+          let formattedImageUrl = null;
+          if (event.image) {
+            // Check if image URL is already complete
+            if (event.image.startsWith('http://') || event.image.startsWith('https://')) {
+              formattedImageUrl = event.image;
+              console.log(`Image URL is already complete: ${formattedImageUrl}`);
+            } else {
+              // Remove leading slash since IMAGE_BASE_URL already ends with '/'
+              const imageUrl = event.image.startsWith('/') ? event.image.substring(1) : event.image;
+              // Use IMAGE_BASE_URL for images, not the API base URL
+              formattedImageUrl = `${IMAGE_BASE_URL}${imageUrl}`;
+              console.log(`Formatted image URL: ${formattedImageUrl}`);
+            }
+          }
+          
+          return {
+            ...event,
+            image: formattedImageUrl
+          };
+        });
         
         console.log(`Successfully fetched ${formattedEvents.length} events`);
         return formattedEvents;
@@ -526,44 +543,7 @@ export const getEvents = async (): Promise<any[]> => {
       // Also clear from memory cache
       memoryStorage.delete('auth_token');
       
-      // Force a fresh login with credentials
-      const freshToken = await login('Outix@thebend.co', 'Scan$9841');
-      
-      if (freshToken && freshToken !== authToken) {
-        console.log("Got fresh token, retrying request...");
-        authToken = freshToken;
-        
-        try {
-          // Create another dedicated instance for retry
-          const retryAxios = axios.create({
-            baseURL: BASE_URL,
-            timeout: 15000,
-          });
-          
-          const retryResponse = await retryAxios.get('/events', {
-            headers: {
-              'Auth-Token': freshToken,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          });
-          
-          console.log("Retry response status:", retryResponse.status);
-          
-          if (retryResponse.data && retryResponse.data.msg && Array.isArray(retryResponse.data.msg)) {
-            const formattedEvents = retryResponse.data.msg.map((event: any) => ({
-              ...event,
-              image: event.image ? `${BASE_URL}${event.image}` : null
-            }));
-            
-            console.log(`Retry successful - fetched ${formattedEvents.length} events`);
-            return formattedEvents;
-          }
-        } catch (retryError: any) {
-          console.error("Retry request also failed:", retryError.message);
-          console.error("Retry error response:", retryError.response?.data);
-        }
-      }
+
       
       console.log("All attempts failed, returning empty array");
       return [];

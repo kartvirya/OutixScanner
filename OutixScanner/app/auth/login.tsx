@@ -1,18 +1,18 @@
+import { router } from 'expo-router';
+import { Eye, EyeOff, Lock, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from 'react-native';
-import { router } from 'expo-router';
-import { Lock, User, Eye, EyeOff } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { login } from '../../services/api';
 
@@ -82,7 +82,7 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>OutixScan</Text>
             <Text style={[styles.subtitle, { color: colors.secondary }]}>
-              Event Management System
+              Guest Management System
             </Text>
           </View>
 

@@ -1,27 +1,26 @@
-import React from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  StyleSheet,
-  Text,
-  View,
-  SafeAreaView,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { 
   ArrowLeft,
-  User,
-  Mail,
-  Phone,
   Calendar,
-  CreditCard,
-  MapPin,
-  FileText,
-  Ticket,
   CheckCircle,
   Clock,
-  DollarSign
+  CreditCard,
+  DollarSign,
+  FileText,
+  Mail,
+  Phone,
+  Ticket,
+  User
 } from 'lucide-react-native';
+import React from 'react';
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { feedback } from '../../../services/feedback';
 
@@ -128,7 +127,11 @@ export default function GuestDetailsPage() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Guest Status Card */}
         <View style={[styles.statusCard, { backgroundColor: colors.card }]}>
           <View style={styles.statusHeader}>
@@ -246,27 +249,6 @@ export default function GuestDetailsPage() {
             </View>
           </View>
         )}
-
-        {/* Debug Information (only in development) */}
-        {__DEV__ && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Debug Info
-            </Text>
-            
-            <View style={[styles.debugContainer, { backgroundColor: colors.card }]}>
-              <Text style={[styles.debugText, { color: colors.secondary }]}>
-                Guest ID: {guestData.id}
-              </Text>
-              <Text style={[styles.debugText, { color: colors.secondary }]}>
-                Booking ID: {guestData.booking_id || guestData.rawData?.booking_id || 'N/A'}
-              </Text>
-              <Text style={[styles.debugText, { color: colors.secondary }]}>
-                Ticket ID: {guestData.ticket_identifier || guestData.rawData?.ticket_identifier || 'N/A'}
-              </Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -325,6 +307,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  scrollContent: {
+    paddingBottom: 120, // Space for tab bar + extra padding
   },
   statusCard: {
     padding: 20,

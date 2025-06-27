@@ -1,9 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
     ArrowLeft,
-    CheckCircle,
     ChevronDown,
-    QrCode,
     Search,
     User,
     UserCheck,
@@ -200,11 +198,22 @@ export default function GuestListPage() {
       let syncedOutCount = 0;
       const updated = prevGuests.map(guest => {
         // Check if this guest is in the checked-in list
-        const checkedInGuest = checkedInList.find(checkedInGuest => 
-          checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() ||
-          checkedInGuest.email.toLowerCase() === guest.email.toLowerCase() ||
-          (checkedInGuest.id === guest.id && guest.id !== 'N/A')
-        );
+        // Priority: ticket_identifier > id > name+email combination
+        const checkedInGuest = checkedInList.find(checkedInGuest => {
+          // First, try to match by ticket_identifier (most specific)
+          if (checkedInGuest.ticket_identifier && guest.ticket_identifier) {
+            return checkedInGuest.ticket_identifier === guest.ticket_identifier;
+          }
+          
+          // Second, try to match by unique ID
+          if (checkedInGuest.id === guest.id && guest.id !== 'N/A' && guest.id) {
+            return true;
+          }
+          
+          // Last resort: match by name AND email combination (both must match)
+          return checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() &&
+                 checkedInGuest.email.toLowerCase() === guest.email.toLowerCase();
+        });
         
         if (checkedInGuest && !guest.scannedIn) {
           // Guest is checked-in on API but not locally - sync to checked-in
@@ -357,11 +366,21 @@ export default function GuestListPage() {
           setTimeout(() => {
             setSearchResults(prevResults => 
               prevResults.map(guest => {
-                const checkedInGuest = checkedInGuests.find(checkedInGuest => 
-                  checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() ||
-                  checkedInGuest.email.toLowerCase() === guest.email.toLowerCase() ||
-                  (checkedInGuest.id === guest.id && guest.id !== 'N/A')
-                );
+                const checkedInGuest = checkedInGuests.find(checkedInGuest => {
+                  // First, try to match by ticket_identifier (most specific)
+                  if (checkedInGuest.ticket_identifier && guest.ticket_identifier) {
+                    return checkedInGuest.ticket_identifier === guest.ticket_identifier;
+                  }
+                  
+                  // Second, try to match by unique ID
+                  if (checkedInGuest.id === guest.id && guest.id !== 'N/A' && guest.id) {
+                    return true;
+                  }
+                  
+                  // Last resort: match by name AND email combination (both must match)
+                  return checkedInGuest.name.toLowerCase() === guest.name.toLowerCase() &&
+                         checkedInGuest.email.toLowerCase() === guest.email.toLowerCase();
+                });
                 
                 if (checkedInGuest) {
                   return {
@@ -551,10 +570,21 @@ export default function GuestListPage() {
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     const ticketInfo = validationResult.msg.info;
-    let guestIndex = displayedGuests.findIndex(a => 
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
+    let guestIndex = displayedGuests.findIndex(a => {
+      // First, try to match by ticket_identifier (most specific)
+      if (ticketInfo.ticket_identifier && a.ticket_identifier) {
+        return a.ticket_identifier === ticketInfo.ticket_identifier;
+      }
+      
+      // Second, try to match by unique ID
+      if (ticketInfo.id && a.id && a.id !== 'N/A') {
+        return a.id === ticketInfo.id;
+      }
+      
+      // Last resort: match by name AND email combination (both must match)
+      return a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() &&
+             a.email.toLowerCase() === ticketInfo.email.toLowerCase();
+    });
     
     if (guestIndex < 0) {
       const newAttendee: Attendee = {
@@ -952,12 +982,6 @@ export default function GuestListPage() {
             <Text style={[styles.simpleTitle, { color: colors.text }]}>Guest List</Text>
             <Text style={[styles.simpleSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.simpleScanButton}
-            onPress={handleOpenScanner}
-          >
-            <QrCode size={20} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
         
         {/* Simple Stats */}
@@ -1023,7 +1047,7 @@ export default function GuestListPage() {
               styles.simpleFilterText,
               { color: filterStatus === 'checked-in' ? '#FFFFFF' : colors.text }
             ]}>
-              Present
+              Checked In
             </Text>
           </TouchableOpacity>
           
@@ -1041,7 +1065,7 @@ export default function GuestListPage() {
               styles.simpleFilterText,
               { color: filterStatus === 'not-arrived' ? '#FFFFFF' : colors.text }
             ]}>
-              Absent
+              Pending...
             </Text>
           </TouchableOpacity>
         </View>
@@ -1089,8 +1113,6 @@ export default function GuestListPage() {
                         <Text style={styles.modernCheckOutText}>Check Out</Text>
                       </TouchableOpacity>
                   <View style={styles.modernStatusPresent}>
-                    <CheckCircle size={12} color="#22C55E" />
-                    <Text style={styles.modernStatusTextPresent}>Present</Text>
                       </View>
                   </View>
                 ) : (
@@ -1105,10 +1127,6 @@ export default function GuestListPage() {
                       <UserCheck size={12} color="#FFFFFF" />
                       <Text style={styles.modernCheckInText}>Check In</Text>
                     </TouchableOpacity>
-                    <View style={styles.modernStatusAbsent}>
-                      <User size={12} color="#FF6B35" />
-                      <Text style={styles.modernStatusTextAbsent}>Absent</Text>
-                    </View>
                   </View>
                 )}
               </View>

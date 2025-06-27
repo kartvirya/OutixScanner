@@ -3,6 +3,8 @@ import { router } from "expo-router";
 import { Calendar, CalendarX, ChevronRight, Clock, MapPin } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EventImagePlaceholder } from "../../components/EventImagePlaceholder";
 import { useRefresh } from "../../context/RefreshContext";
 import { useTheme } from "../../context/ThemeContext";
 import { getEvents, login } from "../../services/api";
@@ -53,132 +55,56 @@ const mockEvents: Event[] = [
   },
 ];
 
-export default function Index() {
-  const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
-  const { setAutoRefreshInterval } = useRefresh();
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchEvents = async (isRefresh = false) => {
-    if (!isRefresh) {
-      setLoading(true);
-    }
-    setError(null);
-    
-    try {
-      let token = null;
-      // Try to get token from storage
-      try {
-        const tokenResult = await login();
-        if (tokenResult) {
-          token = tokenResult;
-        }
-      } catch (loginErr) {
-        console.error("Authentication error:", loginErr);
-        setError("Authentication failed. Using cached data.");
-      }
-
-      // Fetch events from API
-      let eventsData;
-      try {
-        eventsData = await getEvents();
-        
-        // Clear error if we successfully got data
-        if (Array.isArray(eventsData) && eventsData.length > 0) {
-          setError(null);
-        }
-      } catch (eventsErr) {
-        console.error("Error fetching events:", eventsErr);
-        setError("Error loading events. Using cached data.");
-      }
-      
-      if (Array.isArray(eventsData) && eventsData.length > 0) {
-        // Map the API response to our Event interface
-        const formattedEvents = eventsData.map(event => ({
-          id: event.id || event.eventId || event.EventId || String(event._id || '0'),
-          title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
-          date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
-          time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
-          location: event.location || event.venue || event.VenueName || 'TBD',
-          imageUrl: event.imageUrl || event.image || event.EventImage || 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'
-        }));
-        setEvents(formattedEvents);
-      } else {
-        // If for some reason eventsData is empty, use mock data
-        console.log("No events found in response, using default data");
-        setEvents(mockEvents);
-        if (!error) {
-          setError("No events found. Showing sample data.");
-        }
-      }
-    } catch (err: any) {
-      console.error("Unexpected error:", err);
-      setEvents(mockEvents);
-      setError("An unexpected error occurred. Showing sample data.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
+// Event Item Component with proper image error handling
+const EventItem: React.FC<{ 
+  item: Event; 
+  colors: any; 
+  onPress: () => void; 
+}> = ({ item, colors, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  // Reset image error when item changes
   useEffect(() => {
-    fetchEvents();
-    
-    // Enable auto-refresh with 60-second interval for events list
-    setAutoRefreshInterval(true, 60000);
-    
-    return () => {
-      // Disable auto-refresh when component unmounts
-      setAutoRefreshInterval(false);
-    };
-  }, [setAutoRefreshInterval]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchEvents(true);
-  };
-
-  // Helper function to format date from API 
-  const formatDateFromAPI = (dateString: string): string => {
-    if (dateString === 'TBD') return 'TBD';
-    try {
-      const date = new Date(dateString);
-      return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
-    } catch (e) {
-      return dateString;
-    }
-  };
-
-  // Helper function to format time from API
-  const formatTimeFromAPI = (timeString: string): string => {
-    if (timeString === 'TBD') return 'TBD';
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return timeString;
-    }
-  };
-
-  const renderEventItem = ({ item }: { item: Event }) => (
+    setImageError(false);
+  }, [item.imageUrl]);
+  
+  // Check if we have a valid image URL from Outix
+  const hasImageUrl = Boolean(item.imageUrl);
+  const isOutixUrl = hasImageUrl && item.imageUrl.startsWith('https://www.outix.co');
+  const isNotUnsplash = hasImageUrl && !item.imageUrl.includes('images.unsplash.com');
+  const hasValidImage = hasImageUrl && isOutixUrl && isNotUnsplash && !imageError;
+  
+  console.log(`Event: ${item.title}`);
+  console.log(`- Has imageUrl: ${hasImageUrl}`);
+  console.log(`- ImageUrl: ${item.imageUrl}`);
+  console.log(`- Is Outix URL: ${isOutixUrl}`);
+  console.log(`- Is not Unsplash: ${isNotUnsplash}`);
+  console.log(`- Image error: ${imageError}`);
+  console.log(`- Final hasValidImage: ${hasValidImage}`);
+  
+  return (
     <TouchableOpacity 
       style={[styles.eventCard, { backgroundColor: colors.card }]}
-      onPress={() => {
-        // Set selected event in context
-        setSelectedEventId(item.id);
-        setSelectedEventName(item.title);
-        // Navigate to event detail
-        router.push(`/(tabs)/${item.id}`);
-      }}
+      onPress={onPress}
       activeOpacity={0.8}
     >
-      <Image 
-        source={{ uri: item.imageUrl }} 
-        style={styles.eventImage}
-        resizeMode="cover"
-      />
+      {hasValidImage ? (
+        <Image 
+          source={{ uri: item.imageUrl }} 
+          style={styles.eventImage}
+          resizeMode="cover"
+          onError={() => {
+            console.log(`Image failed to load: ${item.imageUrl}`);
+            setImageError(true);
+          }}
+          onLoad={() => {
+            console.log(`Image loaded successfully: ${item.imageUrl}`);
+          }}
+        />
+      ) : (
+        <EventImagePlaceholder style={styles.eventImage} />
+      )}
+      
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)']}
         style={styles.gradientOverlay}
@@ -239,9 +165,148 @@ export default function Index() {
       </View>
     </TouchableOpacity>
   );
+};
+
+export default function Index() {
+  const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
+  const { setAutoRefreshInterval } = useRefresh();
+  const insets = useSafeAreaInsets();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchEvents = async (isRefresh = false) => {
+    if (!isRefresh) {
+      setLoading(true);
+    }
+    setError(null);
+    
+    try {
+      let token = null;
+      // Try to get token from storage
+      try {
+        const tokenResult = await login();
+        if (tokenResult) {
+          token = tokenResult;
+        }
+      } catch (loginErr) {
+        console.error("Authentication error:", loginErr);
+        setError("Authentication failed. Using cached data.");
+      }
+
+      // Fetch events from API
+      let eventsData;
+      try {
+        eventsData = await getEvents();
+        
+        // Clear error if we successfully got data
+        if (Array.isArray(eventsData) && eventsData.length > 0) {
+          setError(null);
+        }
+      } catch (eventsErr) {
+        console.error("Error fetching events:", eventsErr);
+        setError("Error loading events. Using cached data.");
+      }
+      
+      if (Array.isArray(eventsData) && eventsData.length > 0) {
+        // Map the API response to our Event interface
+        const formattedEvents = eventsData.map(event => {
+          console.log("Event mapping - original event:", JSON.stringify(event, null, 2));
+          let imageUrl = event.imageUrl || event.image || event.EventImage || null;
+          
+          // Ensure the image URL is absolute and not relative
+          if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+            // If it's a relative URL, prepend the correct base URL
+            const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
+            imageUrl = `https://www.outix.co/uploads/images/events/${cleanImageUrl}`;
+          }
+          
+          console.log("Event mapping - final imageUrl:", imageUrl);
+          
+          return {
+          id: event.id || event.eventId || event.EventId || String(event._id || '0'),
+          title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
+          date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
+          time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
+          location: event.location || event.venue || event.VenueName || 'TBD',
+            imageUrl: imageUrl
+          };
+        });
+        setEvents(formattedEvents);
+      } else {
+        // If for some reason eventsData is empty, use mock data
+        console.log("No events found in response, using default data");
+        setEvents(mockEvents);
+        if (!error) {
+          setError("No events found. Showing sample data.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Unexpected error:", err);
+      setEvents(mockEvents);
+      setError("An unexpected error occurred. Showing sample data.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    
+    // Enable auto-refresh with 60-second interval for events list
+    setAutoRefreshInterval(true, 60000);
+    
+    return () => {
+      // Disable auto-refresh when component unmounts
+      setAutoRefreshInterval(false);
+    };
+  }, [setAutoRefreshInterval]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchEvents(true);
+  };
+
+  // Helper function to format date from API 
+  const formatDateFromAPI = (dateString: string): string => {
+    if (dateString === 'TBD') return 'TBD';
+    try {
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  // Helper function to format time from API
+  const formatTimeFromAPI = (timeString: string): string => {
+    if (timeString === 'TBD') return 'TBD';
+    try {
+      const date = new Date(timeString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return timeString;
+    }
+  };
+
+  const renderEventItem = ({ item }: { item: Event }) => (
+    <EventItem 
+      item={item}
+      colors={colors}
+      onPress={() => {
+        // Set selected event in context
+        setSelectedEventId(item.id);
+        setSelectedEventName(item.title);
+        // Navigate to event detail
+        router.push(`/(tabs)/${item.id}`);
+      }}
+    />
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 20 }]}> 
       <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
       {loading ? (
         <View style={styles.centerContainer}>

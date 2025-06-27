@@ -1,4 +1,4 @@
-package com.anonymous.OutixScanner
+package co.outix.scanner
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

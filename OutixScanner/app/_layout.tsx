@@ -1,11 +1,11 @@
-import React, { useEffect, useCallback } from "react";
 import { Stack } from "expo-router";
-import { ThemeProvider, useTheme } from "../context/ThemeContext";
-import { StorageProvider } from "../context/StorageContext";
-import { RefreshProvider } from "../context/RefreshContext";
-import { StatusBar, View } from "react-native";
 import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
+import React, { useCallback, useEffect } from "react";
+import { StatusBar, View } from "react-native";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { RefreshProvider } from "../context/RefreshContext";
+import { StorageProvider } from "../context/StorageContext";
+import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -13,7 +13,13 @@ SplashScreen.preventAutoHideAsync();
 // StatusBar component that changes with theme
 function ThemedStatusBar() {
   const { isDarkMode } = useTheme();
-  return <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />;
+  return (
+    <StatusBar 
+      barStyle={isDarkMode ? "light-content" : "dark-content"} 
+      backgroundColor="transparent"
+      translucent={true}
+    />
+  );
 }
 
 export default function RootLayout() {
@@ -48,30 +54,32 @@ export default function RootLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <StorageProvider>
-        <ThemeProvider>
-          <RefreshProvider>
-            <ThemedStatusBar />
-            <Stack
-              screenOptions={{
-                headerStyle: {
-                  backgroundColor: '#FFFFFF', 
-                },
-                headerTintColor: '#000000',
-                headerTitleStyle: {
-                  fontWeight: 'bold',
-                },
-              }}
-            >
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-          </RefreshProvider>
-        </ThemeProvider>
-      </StorageProvider>
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <StorageProvider>
+          <ThemeProvider>
+            <RefreshProvider>
+              <ThemedStatusBar />
+              <Stack
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: '#FFFFFF', 
+                  },
+                  headerTintColor: '#000000',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                }}
+              >
+                <Stack.Screen name="auth" options={{ headerShown: false }} />
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+            </RefreshProvider>
+          </ThemeProvider>
+        </StorageProvider>
+      </View>
+    </SafeAreaProvider>
   );
 }
 

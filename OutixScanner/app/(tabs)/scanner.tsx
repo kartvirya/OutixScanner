@@ -180,7 +180,15 @@ export default function ScannerScreen() {
 
   const handleClose = () => {
     feedback.buttonPress();
-    router.back();
+    
+    // Check if we have a selected event (came from event detail page)
+    // If so, navigate back to that specific event detail page
+    if (selectedEventId && selectedEventId !== '') {
+      router.push(`/(tabs)/${selectedEventId}`);
+    } else {
+      // Otherwise, just go back to previous screen
+      router.back();
+    }
   };
 
   const handleSelectEvent = () => {
@@ -903,7 +911,7 @@ export default function ScannerScreen() {
       <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>
-            Group {scanMode === 'scan-in' ? 'Check-in' : 'Check-out'} Detected
+            Group {scanMode === 'scan-in' ? 'Check-in' : 'Check-out'}
         </Text>
           <Text style={[styles.modalSubtitle, { color: colors.secondary }]}>
             {groupScanData?.tickets.length} tickets found for {groupScanData?.purchaser.name}
@@ -969,7 +977,7 @@ export default function ScannerScreen() {
                   <Text style={[styles.ticketName, { color: colors.text }]}>{ticket.name}</Text>
                   <Text style={[styles.ticketEmail, { color: colors.secondary }]}>{ticket.email}</Text>
                   <Text style={[styles.ticketType, { color: colors.secondary }]}>{ticket.ticketType}</Text>
-                  <Text style={[styles.ticketIdentifier, { color: colors.secondary }]}>ID: {ticket.ticketIdentifier}</Text>
+                  <Text style={[styles.ticketIdentifier, {opacity: 5}, { color: colors.secondary }]}>ID: {ticket.ticketIdentifier}</Text>
                 </View>
                 
                 <UserCheck 

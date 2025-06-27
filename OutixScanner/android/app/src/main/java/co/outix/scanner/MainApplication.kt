@@ -1,4 +1,4 @@
-package com.anonymous.OutixScanner
+package co.outix.scanner
 
 import android.app.Application
 import android.content.res.Configuration
