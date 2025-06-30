@@ -1,6 +1,8 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar, Clock, DollarSign, TrendingUp, UserCheck, Users } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
@@ -16,6 +18,7 @@ interface AnalyticsData {
 
 export default function Analytics() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { onAnalyticsRefresh, triggerAnalyticsRefresh } = useRefresh();
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,9 +124,11 @@ export default function Analytics() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.text }]}>Loading analytics...</Text>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading analytics...</Text>
+        </View>
       </View>
     );
   }
@@ -142,121 +147,211 @@ export default function Analytics() {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Analytics</Text>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}>
+      {/* Header */}
+      <View style={styles.headerContainer}>
+        <Text style={[styles.header, { color: colors.text }]}>Analytics</Text>
         <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>
           Track your event performance
         </Text>
       </View>
-
-      <View style={styles.statsContainer}>
-        {/* Total Events Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(0,122,255,0.1)' }]}>
-            <Calendar size={24} color="#007AFF" />
+      
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* Overview Stats */}
+        <View style={[styles.overviewCard, { backgroundColor: colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
+            <View style={[styles.titleAccent, { backgroundColor: colors.primary }]} />
           </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {analyticsData?.totalEvents || 0}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Events</Text>
+          
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <LinearGradient
+                colors={[`${colors.primary}20`, `${colors.primary}10`]}
+                style={styles.statIconGradient}
+              >
+                <Calendar size={22} color={colors.primary} />
+              </LinearGradient>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {analyticsData?.totalEvents || 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.secondary }]}>Events</Text>
+            </View>
+
+            <View style={styles.statItem}>
+              <LinearGradient
+                colors={[`${colors.primary}20`, `${colors.primary}10`]}
+                style={styles.statIconGradient}
+              >
+                <Users size={22} color={colors.primary} />
+              </LinearGradient>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {analyticsData?.totalTickets.toLocaleString() || 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.secondary }]}>Tickets</Text>
+            </View>
+
+            <View style={styles.statItem}>
+              <LinearGradient
+                colors={['#34C75920', '#34C75910']}
+                style={styles.statIconGradient}
+              >
+                <UserCheck size={22} color="#34C759" />
+              </LinearGradient>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {analyticsData?.totalCheckedIn.toLocaleString() || 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
+            </View>
+
+            <View style={styles.statItem}>
+              <LinearGradient
+                colors={['#FF950020', '#FF950010']}
+                style={styles.statIconGradient}
+              >
+                <TrendingUp size={22} color="#FF9500" />
+              </LinearGradient>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {formatPercentage(analyticsData?.averageAttendanceRate || 0)}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.secondary }]}>Attendance</Text>
+            </View>
+          </View>
         </View>
 
-        {/* Total Tickets Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(88,86,214,0.1)' }]}>
-            <Users size={24} color="#5856D6" />
+        {/* Financial Stats */}
+        <View style={[styles.financialCard, { backgroundColor: colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Financial</Text>
+            <View style={[styles.titleAccent, { backgroundColor: '#34C759' }]} />
           </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {analyticsData?.totalTickets.toLocaleString() || 0}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Tickets</Text>
-        </View>
-
-        {/* Checked In Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
-            <UserCheck size={24} color="#34C759" />
-          </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {analyticsData?.totalCheckedIn.toLocaleString() || 0}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Checked In</Text>
-        </View>
-
-        {/* Attendance Rate Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,149,0,0.1)' }]}>
-            <TrendingUp size={24} color="#FF9500" />
-          </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {formatPercentage(analyticsData?.averageAttendanceRate || 0)}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Attendance Rate</Text>
-        </View>
-
-        {/* Total Revenue Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(52,199,89,0.1)' }]}>
-            <DollarSign size={24} color="#34C759" />
-          </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {formatCurrency(analyticsData?.totalRevenue || 0)}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Total Revenue</Text>
-        </View>
-
-        {/* Pending Check-ins Card */}
-        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,59,48,0.1)' }]}>
-            <Clock size={24} color="#FF3B30" />
-          </View>
-          <Text style={[styles.statValue, { color: colors.text }]}>
-            {((analyticsData?.totalTickets || 0) - (analyticsData?.totalCheckedIn || 0)).toLocaleString()}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.secondary }]}>Pending Check-ins</Text>
-        </View>
-      </View>
-
-      {/* Recent Events Section */}
-      {analyticsData?.recentEvents && analyticsData.recentEvents.length > 0 && (
-        <View style={styles.recentEventsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Events</Text>
-          {analyticsData.recentEvents.map((event, index) => (
-            <View key={event.id || index} style={[styles.eventCard, { backgroundColor: colors.card }]}>
-              <View style={styles.eventInfo}>
-                <Text style={[styles.eventName, { color: colors.text }]} numberOfLines={1}>
-                  {event.EventName || event.title || event.name || 'Unnamed Event'}
-                </Text>
-                <Text style={[styles.eventDate, { color: colors.secondary }]}>
-                  {event.showStart ? new Date(event.showStart).toLocaleDateString() : 'No date'}
-                </Text>
-                <Text style={[styles.eventVenue, { color: colors.secondary }]} numberOfLines={1}>
-                  {event.VenueName || event.venue || 'No venue'}
-                </Text>
+          
+          <View style={styles.financialContent}>
+            <LinearGradient
+              colors={['#34C75925', '#34C75915']}
+              style={styles.financialIconContainer}
+            >
+              <DollarSign size={28} color="#34C759" />
+            </LinearGradient>
+            <View style={styles.financialInfo}>
+              <Text style={[styles.financialValue, { color: colors.text }]}>
+                {formatCurrency(analyticsData?.totalRevenue || 0)}
+              </Text>
+              <Text style={[styles.financialLabel, { color: colors.secondary }]}>Total Revenue</Text>
+              <View style={styles.financialBadge}>
+                <Text style={styles.financialBadgeText}>All Events</Text>
               </View>
             </View>
-          ))}
+          </View>
         </View>
-      )}
-    </ScrollView>
+
+        {/* Pending Check-ins */}
+        <View style={[styles.pendingCard, { backgroundColor: colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Pending</Text>
+            <View style={[styles.titleAccent, { backgroundColor: '#FF9500' }]} />
+          </View>
+          
+          <View style={styles.pendingContent}>
+            <LinearGradient
+              colors={['#FF950025', '#FF950015']}
+              style={styles.pendingIconContainer}
+            >
+              <Clock size={28} color="#FF9500" />
+            </LinearGradient>
+            <View style={styles.pendingInfo}>
+              <Text style={[styles.pendingValue, { color: colors.text }]}>
+                {((analyticsData?.totalTickets || 0) - (analyticsData?.totalCheckedIn || 0)).toLocaleString()}
+              </Text>
+              <Text style={[styles.pendingLabel, { color: colors.secondary }]}>Awaiting Check-in</Text>
+              <View style={styles.pendingProgress}>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { 
+                        backgroundColor: '#FF9500',
+                        width: `${Math.min(((analyticsData?.totalCheckedIn || 0) / Math.max(analyticsData?.totalTickets || 1, 1)) * 100, 100)}%`
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Recent Events */}
+        {analyticsData?.recentEvents && analyticsData.recentEvents.length > 0 && (
+          <View style={[styles.recentEventsCard, { backgroundColor: colors.card }]}>
+            <View style={styles.cardHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Events</Text>
+              <View style={[styles.titleAccent, { backgroundColor: colors.primary }]} />
+            </View>
+            
+            {analyticsData.recentEvents.map((event, index) => (
+              <View key={event.id || index} style={[styles.eventItem, { borderBottomColor: colors.border }, index === analyticsData.recentEvents.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[styles.eventDot, { backgroundColor: colors.primary }]} />
+                <View style={styles.eventInfo}>
+                  <Text style={[styles.eventName, { color: colors.text }]} numberOfLines={1}>
+                    {event.EventName || event.title || event.name || 'Unnamed Event'}
+                  </Text>
+                  <Text style={[styles.eventDate, { color: colors.secondary }]}>
+                    {event.showStart ? new Date(event.showStart).toLocaleDateString() : 'No date'}
+                  </Text>
+                  <Text style={[styles.eventVenue, { color: colors.secondary }]} numberOfLines={1}>
+                    {event.VenueName || event.venue || 'No venue'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  headerContainer: {
+    marginBottom: 20,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    opacity: 0.8,
+  },
+  scrollContainer: {
+    flex: 1,
   },
   scrollContent: {
-    paddingBottom: 120, // Space for navigation bar + extra padding
+    paddingBottom: 120,
   },
   loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -265,93 +360,195 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  header: {
-    padding: 20,
-    paddingTop: 24,
+  overviewCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  financialCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  pendingCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  recentEventsCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  cardHeader: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "800",
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
-  headerSubtitle: {
-    fontSize: 16,
+  titleAccent: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
   },
-  statsContainer: {
+  statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 12,
-    gap: 12,
+    gap: 20,
   },
-  statCard: {
+  statItem: {
     flex: 1,
-    minWidth: '45%',
-    padding: 20,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
+    minWidth: '40%',
+    alignItems: 'center',
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  statIconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
   statValue: {
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontWeight: '800',
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  recentEventsSection: {
-    padding: 20,
-    paddingTop: 0,
+  financialContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
+  financialIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
   },
-  eventCard: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
+  financialInfo: {
+    flex: 1,
+  },
+  financialValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  financialLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  financialBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#34C75915',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  financialBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#34C759',
+  },
+  pendingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  pendingInfo: {
+    flex: 1,
+  },
+  pendingValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  pendingLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  pendingProgress: {
+    marginTop: 4,
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  eventItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  eventDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 16,
   },
   eventInfo: {
     flex: 1,
   },
   eventName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 4,
+    letterSpacing: -0.2,
   },
   eventDate: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
     marginBottom: 2,
   },
   eventVenue: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '500',
+    opacity: 0.8,
   },
 }); 

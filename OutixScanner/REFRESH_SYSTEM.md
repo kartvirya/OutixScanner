@@ -1,53 +1,48 @@
-# Auto-Refresh System
+# Manual Refresh System
 
-The OutixScanner app now includes a comprehensive auto-refresh system that keeps all data synchronized across different screens after every action.
+The OutixScanner app includes a targeted refresh system that updates specific components after check-in/check-out operations only.
 
 ## Features
 
-### 1. **Real-time Data Synchronization**
-- After every scan operation (check-in/check-out), all related screens automatically refresh
-- Guest lists, attendance counts, and analytics update instantly
-- No need to manually refresh or navigate away and back
+### 1. **Targeted Data Refresh**
+- After every scan operation (check-in/check-out), only related components refresh
+- Guest lists, attendance counts, and analytics update after user actions
+- No automatic periodic refreshing - only manual refresh available
 
 ### 2. **Cross-Component Communication**
 - Uses a centralized refresh context (`RefreshContext`) to coordinate updates
 - Components register listeners for specific events and data types
-- Triggers propagate updates across the entire app
+- Triggers propagate updates only after check-in/check-out operations
 
-### 3. **Automatic Periodic Refresh**
-- Events list refreshes every 60 seconds
-- Analytics and other data refreshes every 30 seconds (configurable)
-- Ensures data stays current even without user interaction
-
-### 4. **Manual Refresh Support**
+### 3. **Manual Refresh Only**
 - Pull-to-refresh functionality on all list screens
 - Refresh buttons where appropriate
-- User can force immediate data updates
+- User controls when data updates occur
 
-## Components with Auto-Refresh
+## Components with Manual Refresh
 
 ### Events List (`/(tabs)/index.tsx`)
-- **Triggers**: Periodic refresh every 60 seconds
+- **Triggers**: Manual only
 - **Manual**: Pull-to-refresh gesture
 - **Updates**: Event list from API
 
 ### Event Detail (`/(tabs)/[id].tsx`)
-- **Triggers**: After individual scan operations, auto-refresh from context
+- **Triggers**: After individual scan operations only
 - **Manual**: Manual refresh buttons
 - **Updates**: Guest counts, attendance statistics
 
 ### Guest List (`/(tabs)/guest-list/[id].tsx`)
-- **Triggers**: After scan operations, context-based refresh
+- **Triggers**: After scan operations only
 - **Manual**: Pull-to-refresh, manual check-in buttons
 - **Updates**: Guest list, check-in status, attendance counts
 
 ### Attendance (`/(tabs)/attendance/[id].tsx`)
-- **Triggers**: After scan operations, context-based refresh
+- **Triggers**: After scan operations only
 - **Manual**: Pull-to-refresh
 - **Updates**: Checked-in guest list, attendance statistics
 
 ### Analytics (`/(tabs)/analytics.tsx`)
-- **Triggers**: After any scan operation, periodic refresh
+- **Triggers**: After any scan operation only
 - **Manual**: Pull-to-refresh gesture
 - **Updates**: All analytics data, attendance rates, revenue
 
@@ -65,19 +60,19 @@ The OutixScanner app now includes a comprehensive auto-refresh system that keeps
 
 ### RefreshContext
 ```typescript
-// Central refresh management
+// Manual refresh management
 const { 
   triggerGuestListRefresh,
   triggerAttendanceRefresh, 
   triggerAnalyticsRefresh,
   onGuestListRefresh,
-  setAutoRefreshInterval 
+  refreshAll 
 } = useRefresh();
 ```
 
 ### Usage Pattern
 ```typescript
-// Register for auto-refresh
+// Register for manual refresh
 useEffect(() => {
   const unsubscribe = onGuestListRefresh(eventId, () => {
     fetchData(); // Refresh component data
@@ -85,7 +80,7 @@ useEffect(() => {
   return unsubscribe; // Cleanup on unmount
 }, [eventId]);
 
-// Trigger refresh after action
+// Trigger refresh after scan action only
 const handleScanSuccess = () => {
   // Perform scan...
   triggerGuestListRefresh(eventId);
@@ -93,29 +88,21 @@ const handleScanSuccess = () => {
 };
 ```
 
-### Auto-Refresh Intervals
-- **Events**: 60 seconds
-- **Analytics**: 30 seconds (default)
-- **Event-specific data**: On-demand via context triggers
-
 ## Benefits
 
-1. **Real-time Updates**: Users see immediate results after scanning
-2. **Consistent Data**: All screens show the same current information
-3. **Better UX**: No need to manually refresh or navigate between screens
-4. **Performance**: Smart triggering prevents unnecessary API calls
-5. **Reliability**: Periodic refresh ensures data doesn't get stale
+1. **Battery Efficiency**: No background auto-refresh saves device battery
+2. **Network Efficiency**: Reduces unnecessary API calls
+3. **User Control**: Users decide when to refresh data
+4. **Targeted Updates**: Only updates after actual user actions (scan operations)
+5. **Performance**: Smart triggering prevents unnecessary API calls
 
-## Configuration
+## Refresh Triggers
 
-Auto-refresh intervals can be adjusted in the RefreshContext:
+Data refreshes occur only in these scenarios:
 
-```typescript
-// Enable auto-refresh with custom interval
-setAutoRefreshInterval(true, 45000); // 45 seconds
+1. **After Check-in/Check-out Operations**: Via scanner or manual buttons
+2. **Manual Pull-to-Refresh**: User-initiated refresh gestures
+3. **Manual Refresh Buttons**: Explicit user actions
+4. **Initial Load**: When screens first load
 
-// Disable auto-refresh
-setAutoRefreshInterval(false);
-```
-
-The system is designed to be efficient and only updates when necessary, providing a seamless user experience while keeping data fresh and synchronized across all app components. 
+The system is designed to be efficient and only updates when necessary, providing user control while ensuring data accuracy after scan operations. 

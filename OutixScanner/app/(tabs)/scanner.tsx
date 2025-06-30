@@ -2,30 +2,30 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Check, LogIn, Square, UserCheck } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-  QRValidationResponse,
-  getEvents,
-  getGroupTickets,
-  scanGroupTickets,
-  scanQRCode,
-  unscanGroupTickets,
-  unscanQRCode,
-  validateQRCode
+    QRValidationResponse,
+    getEvents,
+    getGroupTickets,
+    scanGroupTickets,
+    scanQRCode,
+    unscanGroupTickets,
+    unscanQRCode,
+    validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -187,7 +187,7 @@ export default function ScannerScreen() {
       router.push(`/(tabs)/${selectedEventId}`);
     } else {
       // Otherwise, just go back to previous screen
-      router.back();
+    router.back();
     }
   };
 

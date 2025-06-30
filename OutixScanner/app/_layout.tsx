@@ -55,30 +55,30 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <StorageProvider>
-          <ThemeProvider>
-            <RefreshProvider>
-              <ThemedStatusBar />
-              <Stack
-                screenOptions={{
-                  headerStyle: {
-                    backgroundColor: '#FFFFFF', 
-                  },
-                  headerTintColor: '#000000',
-                  headerTitleStyle: {
-                    fontWeight: 'bold',
-                  },
-                }}
-              >
-                <Stack.Screen name="auth" options={{ headerShown: false }} />
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              </Stack>
-            </RefreshProvider>
-          </ThemeProvider>
-        </StorageProvider>
-      </View>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <StorageProvider>
+        <ThemeProvider>
+          <RefreshProvider>
+            <ThemedStatusBar />
+            <Stack
+              screenOptions={{
+                headerStyle: {
+                  backgroundColor: '#FFFFFF', 
+                },
+                headerTintColor: '#000000',
+                headerTitleStyle: {
+                  fontWeight: 'bold',
+                },
+              }}
+            >
+              <Stack.Screen name="auth" options={{ headerShown: false }} />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+          </RefreshProvider>
+        </ThemeProvider>
+      </StorageProvider>
+    </View>
     </SafeAreaProvider>
   );
 }

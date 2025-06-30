@@ -12,12 +12,13 @@ import {
     Alert,
     FlatList,
     Modal,
+    RefreshControl,
     SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
 import { useRefresh } from '../../../context/RefreshContext';
@@ -51,6 +52,7 @@ export default function AttendancePage() {
   const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]);
   const [filteredAttendees, setFilteredAttendees] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [eventTitle, setEventTitle] = useState('');
@@ -460,6 +462,19 @@ export default function AttendancePage() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchEventAndAttendanceData();
+      // Also trigger refresh for other components
+      triggerAttendanceRefresh(eventId);
+      triggerGuestListRefresh(eventId);
+      triggerAnalyticsRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const checkedInCount = checkedInGuests.length;
   const attendancePercentage = totalGuestsFromAPI ? Math.round((checkedInCount / totalGuestsFromAPI) * 100) : 0;
 
@@ -554,6 +569,14 @@ export default function AttendancePage() {
         <FlatList
           data={filteredAttendees}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
           renderItem={({ item }) => (
             <View style={[styles.attendeeCard, { backgroundColor: colors.card }]}>
               <View style={styles.attendeeRow}>
@@ -593,7 +616,6 @@ export default function AttendancePage() {
               : 'Guests will appear here once they check in.'
             }
           </Text>
-d
         </View>
       )}
       

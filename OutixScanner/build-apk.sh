@@ -11,7 +11,7 @@ fi
 
 # Check if logged in
 if ! eas whoami &> /dev/null; then
-    echo "🔐 Please login to EAS:"
+1    echo "🔐 Please login to EAS:"
     eas login
 fi
 
@@ -25,4 +25,3 @@ eas build --platform android --profile preview
 
 echo ""
 echo "✅ Build complete! Check the link above to download your APK."
-echo "📱 Send the APK file to your boss!" 

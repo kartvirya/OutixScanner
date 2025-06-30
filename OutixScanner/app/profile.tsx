@@ -1,6 +1,6 @@
-import React from "react";
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
+import React from "react";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface SettingsOption {
   id: number;
@@ -10,25 +10,6 @@ interface SettingsOption {
 }
 
 export default function Profile() {
-  // Mock user data
-  const user = {
-    name: "John Doe",
-    email: "john.doe@example.com",
-    role: "Event Manager",
-    eventsCreated: 12,
-    eventsAttended: 8,
-    profileImage: null, // In a real app, this would be a URL or require statement
-  };
-
-  // Mock settings options
-  const settingsOptions: SettingsOption[] = [
-    { id: 1, icon: "bell", label: "Notifications", badge: "On" },
-    { id: 2, icon: "palette", label: "Appearance", badge: "Light" },
-    { id: 3, icon: "lock", label: "Privacy", badge: null },
-    { id: 4, icon: "question-circle", label: "Help & Support", badge: null },
-    { id: 5, icon: "info-circle", label: "About", badge: "v1.0.0" },
-  ];
-
   const renderSettingsItem = (item: SettingsOption) => (
     <TouchableOpacity key={item.id} style={styles.settingsItem}>
       <View style={styles.settingsItemLeft}>

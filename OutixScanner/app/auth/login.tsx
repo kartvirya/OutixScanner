@@ -80,7 +80,7 @@ export default function LoginScreen() {
         <View style={styles.content}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>OutixScan</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Outix Check-In</Text>
             <Text style={[styles.subtitle, { color: colors.secondary }]}>
               Guest Management System
             </Text>
@@ -112,7 +112,7 @@ export default function LoginScreen() {
                 placeholder="Password"
                 placeholderTextColor={colors.secondary}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={setPassword} 
                 secureTextEntry={!showPassword}
                 editable={!isLoading}
               />

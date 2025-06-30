@@ -5,7 +5,6 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EventImagePlaceholder } from "../../components/EventImagePlaceholder";
-import { useRefresh } from "../../context/RefreshContext";
 import { useTheme } from "../../context/ThemeContext";
 import { getEvents, login } from "../../services/api";
 
@@ -123,7 +122,7 @@ const EventItem: React.FC<{
         <View style={styles.eventDetails}>
           <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
-                <Calendar size={14} color="#FFFFFF" />
+                <Calendar size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
                 {item.date}
@@ -132,7 +131,7 @@ const EventItem: React.FC<{
             
           <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
-                <Clock size={14} color="#FFFFFF" />
+                <Clock size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.detailText, { color: '#FFFFFF' }]} numberOfLines={1} ellipsizeMode="tail">
                 {item.time}
@@ -141,7 +140,7 @@ const EventItem: React.FC<{
             
           <View style={styles.detailRow}>
               <View style={styles.iconWrapper}>
-                <MapPin size={14} color="#FFFFFF" />
+                <MapPin size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.detailText, { color: '#FFFFFF', flex: 1 }]}>
                 {item.location}
@@ -169,7 +168,6 @@ const EventItem: React.FC<{
 
 export default function Index() {
   const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
-  const { setAutoRefreshInterval } = useRefresh();
   const insets = useSafeAreaInsets();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,15 +252,7 @@ export default function Index() {
 
   useEffect(() => {
     fetchEvents();
-    
-    // Enable auto-refresh with 60-second interval for events list
-    setAutoRefreshInterval(true, 60000);
-    
-    return () => {
-      // Disable auto-refresh when component unmounts
-      setAutoRefreshInterval(false);
-    };
-  }, [setAutoRefreshInterval]);
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -306,7 +296,7 @@ export default function Index() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 20 }]}> 
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}> 
       <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
       {loading ? (
         <View style={styles.centerContainer}>
@@ -355,12 +345,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2F2F7",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   header: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 12,
     color: "#000000",
   },
   listContainer: {
@@ -369,11 +360,6 @@ const styles = StyleSheet.create({
   eventCard: {
     borderRadius: 16,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
     overflow: 'hidden',
     height: 200,
     position: 'relative',
@@ -387,7 +373,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 0.8,
+    opacity: 0.4,
   },
   gradientOverlay: {
     position: 'absolute',
@@ -412,12 +398,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   eventTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    lineHeight: 26,
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 24,
   },
   eventDetails: {
     gap: 8,
@@ -428,21 +411,18 @@ const styles = StyleSheet.create({
     minHeight: 20,
   },
   iconWrapper: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   detailText: {
-    fontSize: 15,
-    fontWeight: "600",
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 16,
   },
   emptyState: {
     flex: 1,

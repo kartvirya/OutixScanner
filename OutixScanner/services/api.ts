@@ -1671,4 +1671,134 @@ export const unscanGroupTickets = async (eventId: string, ticketIds: string[]): 
   }
 };
 
+// Registration interface - matches actual API response
+export interface Registration {
+  id: string;
+  EventName: string;
+  EventSubtitle: string;
+  EventDuration: string;
+  organizerName: string;
+  urlShortName: string;
+  EventLogo: string;
+  EventImage: string;
+  showStart: string;
+  VenueName: string;
+  VenueAddress: string;
+  City: string;
+  PostCode: string;
+}
+
+// Waiver interface - matches actual API response  
+export interface Waiver {
+  Ref: string;
+  RegisteredDate: string;
+  Category: string;
+  ItemName: string;
+  'Client Name': string;
+  Email: string;
+  Mobile: string;
+  'Contact Name': string;
+  Address: string;
+  CrewNames: string;
+  Amount: string;
+  'Driver Rider Name': string;
+  Manufacturer: string;
+  Model: string;
+  'Engine Capacity': string;
+  Year: string;
+  Sponsors?: string;
+  'Quickest ET': string;
+  'Quickest MPH': string;
+  'ANDRA License Number': string;
+  'IHRA License Number'?: string;
+  'License Expiry Date'?: string;
+  'Drivers License Number'?: string;
+  'Emergency Contact Name': string;
+  'Emergency Contact Number': string;
+  'Racing Number': string;
+  WaiverSigned: string;
+  CheckedIn: string;
+  WaiverLink: string;
+}
+
+// Get list of registrations
+export const getRegistrations = async (): Promise<Registration[]> => {
+  try {
+    console.log('Fetching registrations list');
+    
+    if (!authToken) {
+      console.error('No auth token available for registrations');
+      throw new Error('Authentication required');
+    }
+
+    const response = await api.get('/registrations');
+    console.log('Registrations response:', response.data);
+    
+    // The API returns data in { msg: [...], error: false, status: 200 } format
+    if (response.data && !response.data.error && Array.isArray(response.data.msg)) {
+      return response.data.msg;
+    } else if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      return response.data.data;
+    } else {
+      console.warn('Unexpected registrations response format:', response.data);
+      return [];
+    }
+  } catch (error: any) {
+    console.error('Error fetching registrations:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Authentication failed');
+    } else if (error.response?.status === 404) {
+      console.log('No registrations found');
+      return [];
+    } else {
+      throw new Error(error.response?.data?.message || 'Failed to fetch registrations');
+    }
+  }
+};
+
+// Get list of waivers for a specific event
+export const getWaivers = async (eventId: string): Promise<Waiver[]> => {
+  try {
+    console.log('Fetching waivers for event:', eventId);
+    
+    if (!authToken) {
+      console.error('No auth token available for waivers');
+      throw new Error('Authentication required');
+    }
+
+    if (!eventId) {
+      throw new Error('Event ID is required');
+    }
+
+    const response = await api.get(`/listwaivers/${eventId}`);
+    console.log('Waivers response:', response.data);
+    
+    // The API returns data in { msg: [...], error: false, status: 200 } format
+    if (response.data && !response.data.error && Array.isArray(response.data.msg)) {
+      return response.data.msg;
+    } else if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      return response.data.data;
+    } else {
+      console.warn('Unexpected waivers response format:', response.data);
+      return [];
+    }
+  } catch (error: any) {
+    console.error('Error fetching waivers:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Authentication failed');
+    } else if (error.response?.status === 404) {
+      console.log('No waivers found for event:', eventId);
+      return [];
+    } else {
+      throw new Error(error.response?.data?.message || 'Failed to fetch waivers');
+    }
+  }
+};
+
 export default api; 

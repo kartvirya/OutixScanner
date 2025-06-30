@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useRef } from 'react';
 
 interface RefreshContextType {
   // Refresh triggers
@@ -13,9 +13,6 @@ interface RefreshContextType {
   onAnalyticsRefresh: (callback: () => void) => () => void;
   onEventRefresh: (eventId: string, callback: () => void) => () => void;
   
-  // Auto-refresh controls
-  setAutoRefreshInterval: (enabled: boolean, intervalMs?: number) => void;
-  
   // Manual refresh
   refreshAll: () => void;
 }
@@ -23,17 +20,12 @@ interface RefreshContextType {
 const RefreshContext = createContext<RefreshContextType | undefined>(undefined);
 
 export function RefreshProvider({ children }: { children: React.ReactNode }) {
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds default
-  
   const listeners = useRef({
     guestList: new Map<string, Set<() => void>>(),
     attendance: new Map<string, Set<() => void>>(),
     analytics: new Set<() => void>(),
     events: new Map<string, Set<() => void>>(),
   });
-  
-  const autoRefreshTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Trigger refresh functions
   const triggerGuestListRefresh = useCallback((eventId: string) => {
@@ -149,36 +141,6 @@ export function RefreshProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Auto-refresh control
-  const setAutoRefreshInterval = useCallback((enabled: boolean, intervalMs: number = 30000) => {
-    setAutoRefreshEnabled(enabled);
-    setRefreshInterval(intervalMs);
-    
-    if (autoRefreshTimer.current) {
-      clearInterval(autoRefreshTimer.current);
-      autoRefreshTimer.current = null;
-    }
-    
-    if (enabled) {
-      autoRefreshTimer.current = setInterval(() => {
-        console.log('Auto-refresh triggered');
-        // Trigger refresh for all active listeners
-        triggerAnalyticsRefresh();
-        
-        // Refresh all event-specific data
-        listeners.current.guestList.forEach((_, eventId) => {
-          triggerGuestListRefresh(eventId);
-        });
-        listeners.current.attendance.forEach((_, eventId) => {
-          triggerAttendanceRefresh(eventId);
-        });
-        listeners.current.events.forEach((_, eventId) => {
-          triggerEventRefresh(eventId);
-        });
-      }, intervalMs);
-    }
-  }, [triggerAnalyticsRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerEventRefresh]);
-
   // Manual refresh all
   const refreshAll = useCallback(() => {
     console.log('Manual refresh all triggered');
@@ -207,7 +169,6 @@ export function RefreshProvider({ children }: { children: React.ReactNode }) {
     onAttendanceRefresh,
     onAnalyticsRefresh,
     onEventRefresh,
-    setAutoRefreshInterval,
     refreshAll,
   };
 

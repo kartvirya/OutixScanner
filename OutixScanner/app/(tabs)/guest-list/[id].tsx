@@ -13,12 +13,13 @@ import {
     Alert,
     FlatList,
     Modal,
+    RefreshControl,
     SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
 import { useRefresh } from '../../../context/RefreshContext';
@@ -65,6 +66,7 @@ export default function GuestListPage() {
   // Updated state for pagination
   const [displayedGuests, setDisplayedGuests] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -450,6 +452,23 @@ export default function GuestListPage() {
     
     await fetchPaginatedGuests(currentPage + 1, false);
   }, [hasMore, loadingMore, isSearchMode, fetchPaginatedGuests, currentPage]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Reset pagination and fetch fresh data
+      await Promise.all([
+        fetchPaginatedGuests(1, true),
+        fetchCheckedInGuests()
+      ]);
+      // Also trigger refresh for other components
+      triggerGuestListRefresh(eventId);
+      triggerAttendanceRefresh(eventId);
+      triggerAnalyticsRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleOpenScanner = () => {
     feedback.buttonPress();
@@ -1077,6 +1096,14 @@ export default function GuestListPage() {
         <FlatList
           data={filteredGuestList}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
             renderItem={({ item }) => {
               console.log(`📋 Rendering guest: ${item.name}, scannedIn: ${item.scannedIn}`);
               return (

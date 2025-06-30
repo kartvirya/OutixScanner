@@ -1,12 +1,14 @@
 import { router } from "expo-router";
-import { Building2, LogOut, Mail, Moon, Settings, Sun, User, UserCheck } from "lucide-react-native";
+import { Building2, LogOut, Mail, Moon, Sun, User } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import { getUserProfile, logout, UserProfile } from "../../services/api";
 
 export default function Profile() {
   const { colors, isDarkMode, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -18,13 +20,13 @@ export default function Profile() {
       setRefreshing(true);
     }
     
-      try {
+    try {
       console.log("Fetching user profile...");
-        const userData = await getUserProfile();
+      const userData = await getUserProfile();
       console.log("User profile data received:", JSON.stringify(userData, null, 2));
-        setUser(userData);
-      } catch (err) {
-        console.error("Error fetching user profile:", err);
+      setUser(userData);
+    } catch (err) {
+      console.error("Error fetching user profile:", err);
       // Set default user data on error
       setUser({
         id: 'fallback',
@@ -35,11 +37,11 @@ export default function Profile() {
         eventsAttended: 0,
         profileImage: null
       });
-      } finally {
-        setLoading(false);
+    } finally {
+      setLoading(false);
       setRefreshing(false);
-      }
-    };
+    }
+  };
 
   useEffect(() => {
     fetchUserProfile();
@@ -90,20 +92,24 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}>
         <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
-      </View>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading profile...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}>
+      {/* Header */}
+      <Text style={[styles.header, { color: colors.text }]}>Profile</Text>
+      
       <ScrollView 
         style={styles.scrollContainer} 
-        contentContainerStyle={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -113,27 +119,11 @@ export default function Profile() {
           />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>
-            Manage your account and preferences
-          </Text>
-        </View>
-
         {/* Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={styles.profileHeader}>
-            <View style={[styles.profileAvatar, { backgroundColor: '#FF9500' }]}>
-              {user?.profileImage ? (
-                <Image 
-                  source={{ uri: user.profileImage }} 
-                  style={styles.profileImage}
-                  resizeMode="cover"
-                />
-              ) : (
-              <User size={32} color="#FFFFFF" />
-              )}
+            <View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
+              <User size={28} color="#FFFFFF" />
             </View>
             <View style={styles.profileInfo}>
               <Text style={[styles.userName, { color: colors.text }]}>
@@ -142,101 +132,67 @@ export default function Profile() {
               <Text style={[styles.userEmail, { color: colors.secondary }]}>
                 {user?.email || "outix@thebend.co"}
               </Text>
+              <View style={[styles.roleBadge, { backgroundColor: `${colors.primary}15` }]}>
+                <Text style={[styles.roleText, { color: colors.primary }]}>
+                  {user?.role || "Event Manager"}
+                </Text>
+              </View>
             </View>
-          </View>
-          
-          <View style={[styles.roleBadge, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
-            <Text style={[styles.roleText, { color: '#FF9500' }]}>
-              {user?.role || "Event Manager"}
-            </Text>
           </View>
         </View>
 
-        {/* User Details Card */}
+        {/* Account Details */}
         <View style={[styles.detailsCard, { backgroundColor: colors.card }]}>
-          <View style={styles.detailsHeader}>
-            <UserCheck size={20} color="#FF9500" />
-            <Text style={[styles.detailsTitle, { color: colors.text }]}>Account Details</Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Details</Text>
           
-          {/* User Name */}
           <View style={[styles.detailItem, { borderBottomColor: colors.border }]}>
-            <View style={styles.detailLeft}>
-              <View style={[styles.detailIcon, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
-                <User size={18} color="#34C759" />
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={[styles.detailLabel, { color: colors.text }]}>Display Name</Text>
-                <Text style={[styles.detailValue, { color: colors.secondary }]}>
-                  {user?.name || "Outix Test"}
-                </Text>
-              </View>
+            <View style={[styles.detailIcon, { backgroundColor: `${colors.primary}15` }]}>
+              <User size={18} color={colors.primary} />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={[styles.detailLabel, { color: colors.text }]}>Display Name</Text>
+              <Text style={[styles.detailValue, { color: colors.secondary }]}>
+                {user?.name || "Outix Test"}
+              </Text>
             </View>
           </View>
 
-          {/* Email */}
           <View style={[styles.detailItem, { borderBottomColor: colors.border }]}>
-            <View style={styles.detailLeft}>
-              <View style={[styles.detailIcon, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
-                <Mail size={18} color="#007AFF" />
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={[styles.detailLabel, { color: colors.text }]}>Email Address</Text>
-                <Text style={[styles.detailValue, { color: colors.secondary }]}>
-                  {user?.email || "outix@thebend.co"}
-                </Text>
-              </View>
+            <View style={[styles.detailIcon, { backgroundColor: `${colors.primary}15` }]}>
+              <Mail size={18} color={colors.primary} />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={[styles.detailLabel, { color: colors.text }]}>Email Address</Text>
+              <Text style={[styles.detailValue, { color: colors.secondary }]}>
+                {user?.email || "outix@thebend.co"}
+              </Text>
             </View>
           </View>
 
-          {/* Client Name */}
-          <View style={[styles.detailItem, { borderBottomColor: colors.border }]}>
-            <View style={styles.detailLeft}>
-              <View style={[styles.detailIcon, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
-                <Building2 size={18} color="#FF9500" />
-              </View>
-              <View style={styles.detailInfo}>
-                <Text style={[styles.detailLabel, { color: colors.text }]}>Organization</Text>
-                <Text style={[styles.detailValue, { color: colors.secondary }]}>
-                  The Bend Motorsport Park Pty Ltd
-                </Text>
-              </View>
+          <View style={[styles.detailItem, { borderBottomWidth: 0 }]}>
+            <View style={[styles.detailIcon, { backgroundColor: `${colors.primary}15` }]}>
+              <Building2 size={18} color={colors.primary} />
+            </View>
+            <View style={styles.detailInfo}>
+              <Text style={[styles.detailLabel, { color: colors.text }]}>Organization</Text>
+              <Text style={[styles.detailValue, { color: colors.secondary }]}>
+                The Bend Motorsport Park Pty Ltd
+              </Text>
             </View>
           </View>
-
-          {/* Alias (if available) */}
-          {user?.role && user.role !== "Event Manager" && (
-            <View style={[styles.detailItem, { borderBottomWidth: 0 }]}>
-              <View style={styles.detailLeft}>
-                <View style={[styles.detailIcon, { backgroundColor: 'rgba(255, 59, 48, 0.1)' }]}>
-                  <UserCheck size={18} color="#FF3B30" />
-                </View>
-                <View style={styles.detailInfo}>
-                  <Text style={[styles.detailLabel, { color: colors.text }]}>Alias</Text>
-                  <Text style={[styles.detailValue, { color: colors.secondary }]}>
-                    {user.role}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
         </View>
 
-        {/* Settings Card */}
+        {/* Settings */}
         <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
-          <View style={styles.settingsHeader}>
-            <Settings size={20} color="#FF9500" />
-            <Text style={[styles.settingsTitle, { color: colors.text }]}>Settings</Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
           
-          {/* Theme Setting */}
-          <TouchableOpacity style={[styles.settingItem, { borderBottomWidth: 0 }]}>
+          <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
             <View style={styles.settingLeft}>
-              <View style={[styles.settingIcon, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+              <View style={[styles.settingIcon, { backgroundColor: `${colors.primary}15` }]}>
                 {isDarkMode ? (
-                  <Moon size={18} color="#FF9500" />
+                  <Moon size={18} color={colors.primary} />
                 ) : (
-                  <Sun size={18} color="#FF9500" />
+                  <Sun size={18} color={colors.primary} />
                 )}
               </View>
               <View style={styles.settingInfo}>
@@ -249,35 +205,56 @@ export default function Profile() {
             <Switch 
               value={isDarkMode}
               onValueChange={toggleTheme}
-              trackColor={{ false: '#E5E5EA', true: '#FF9500' }}
+              trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
-          </TouchableOpacity>
+          </View>
         </View>
-        
+               {/* Settings */}
+               <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Help</Text>
+          
+          <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: `${colors.primary}15` }]}>
+                {isDarkMode ? (
+                  <Moon size={18} color={colors.primary} />
+                ) : (
+                  <Sun size={18} color={colors.primary} />
+                )}
+              </View>
+            </View>
+          </View>
+        </View> 
         {/* Logout Button */}
         <TouchableOpacity 
-          style={[styles.logoutButton, { backgroundColor: colors.card }]}
+          style={[styles.logoutButton, { backgroundColor: colors.card, borderColor: '#FF3B30' }]}
           onPress={handleLogout}
           activeOpacity={0.7}
         >
           <LogOut size={18} color="#FF3B30" />
-            <Text style={styles.logoutText}>Log Out</Text>
+          <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 12,
   },
   scrollContainer: {
     flex: 1,
   },
-  content: {
-    padding: 20,
+  scrollContent: {
     paddingBottom: 120,
   },
   loadingContainer: {
@@ -290,166 +267,107 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  header: {
-    marginBottom: 32,
-    paddingTop: 10,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 8,
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    opacity: 0.8,
-  },
   profileCard: {
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 24,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
   profileHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'flex-start',
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
-    shadowColor: "#FF9500",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    overflow: 'hidden',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
   },
   profileInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
     marginBottom: 4,
-    letterSpacing: -0.3,
   },
   userEmail: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
-    opacity: 0.8,
-    marginBottom: 2,
+    marginBottom: 12,
   },
   roleBadge: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   roleText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.3,
   },
   detailsCard: {
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 24,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#34C759',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  detailsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+  settingsCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  detailsTitle: {
-    fontSize: 20,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: "700",
-    marginLeft: 12,
-    letterSpacing: -0.3,
+    marginBottom: 16,
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  detailLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
   detailIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
   },
   detailInfo: {
     flex: 1,
   },
   detailLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 2,
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    opacity: 0.8,
-  },
-  settingsCard: {
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
-  },
-  settingsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  settingsTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginLeft: 12,
-    letterSpacing: -0.3,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
   settingLeft: {
@@ -458,36 +376,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
   },
   settingInfo: {
     flex: 1,
   },
   settingLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 2,
   },
   settingDescription: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    opacity: 0.7,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.2)',
-    backgroundColor: 'rgba(255, 59, 48, 0.05)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
   logoutText: {
     fontSize: 16,

@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -168,6 +169,7 @@ export default function EventDetail() {
   
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate'); // Track scan mode
   const [guestList, setGuestList] = useState<Attendee[]>([]); // Separate guest list state
@@ -786,6 +788,15 @@ export default function EventDetail() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadEventData();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleScanIn = async (attendeeId: string, attendeeName: string) => {
     if (!event) return;
     
@@ -1167,7 +1178,19 @@ export default function EventDetail() {
       return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
           {renderEventHeader()}
-        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollContainer} 
+          contentContainerStyle={styles.scrollContent} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+        >
           {renderMergedContent()}
         </ScrollView>
       </View>
@@ -1180,7 +1203,7 @@ export default function EventDetail() {
       <Stack.Screen 
         options={{ 
           title: "",
-          headerShown: true,
+          headerShown: false,
           headerRight: () => null,
         }}
       />

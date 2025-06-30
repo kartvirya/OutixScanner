@@ -1,5 +1,5 @@
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { BarChart, Bell, Calendar, QrCode, User } from "lucide-react-native";
+import { BarChart, Calendar, QrCode, User, Users } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -96,7 +96,7 @@ function CustomTabBar() {
     pathname !== '/' &&
     !pathname.includes('/analytics') && 
     !pathname.includes('/scanner') && 
-    !pathname.includes('/notifications') && 
+    !pathname.includes('/registrants') && 
     !pathname.includes('/profile') &&
     (pathname.match(/\/\(tabs\)\/[^\/]+$/) || pathname.match(/\/[0-9]+$/) || pathname.match(/\/[a-zA-Z0-9]+$/) && pathname.length > 8)
   );
@@ -151,7 +151,7 @@ function CustomTabBar() {
     { name: 'index', title: 'Events', icon: Calendar, route: '/(tabs)' },
     { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics' },
     ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true }] : []),
-    { name: 'notifications', title: 'Updates', icon: Bell, route: '/(tabs)/notifications' },
+    { name: 'registrants', title: 'Registrants', icon: Users, route: '/(tabs)/registrants' },
     { name: 'profile', title: 'Profile', icon: User, route: '/(tabs)/profile' },
   ];
 
@@ -167,8 +167,8 @@ function CustomTabBar() {
     if (route === '/(tabs)/scanner') {
       return pathname.includes('/scanner');
     }
-    if (route === '/(tabs)/notifications') {
-      return pathname.includes('/notifications');
+    if (route === '/(tabs)/registrants') {
+      return pathname.includes('/registrants');
     }
     if (route === '/(tabs)/profile') {
       return pathname.includes('/profile');
@@ -362,14 +362,14 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Events",
-          headerShown: true,
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="analytics"
         options={{
           title: "Analytics",
-          headerShown: true,
+          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -380,10 +380,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="registrants"
         options={{
-          title: "Updates",
-          headerShown: true,
+          title: "Registrants",
+          headerShown: false,
         }}
       />
       <Tabs.Screen
