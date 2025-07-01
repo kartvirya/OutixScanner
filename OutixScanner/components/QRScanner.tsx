@@ -25,12 +25,18 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   const [scanned, setScanned] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraKey, setCameraKey] = useState(0); // Add key to force camera remount
+  const [lastScannedData, setLastScannedData] = useState<string>('');
+  const [lastScanTime, setLastScanTime] = useState<number>(0);
 
   useEffect(() => {
     // Reset camera state when component mounts
     setScanned(false);
     setCameraReady(false);
-    setCameraKey(prev => prev + 1); // Force camera remount
+    // Clear duplicate prevention on mount
+    setLastScannedData('');
+    setLastScanTime(0);
+    // Only increment camera key if needed for a fresh start
+    setCameraKey(prev => prev + 1);
   }, []);
 
   useEffect(() => {
@@ -59,31 +65,55 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   }, [permission, requestPermission, onClose]);
 
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
-    if (scanned || pauseScanning) return;
+    const currentTime = Date.now();
     
-    console.log('QR Code scanned:', { type, data });
+    // Prevent any scans within 4 seconds of the last scan (regardless of QR code content)
+    if ((currentTime - lastScanTime) < 4000) {
+      // Silently ignore - no logging to reduce noise
+      return;
+    }
+    
+    console.log('📱 QR Code scanned from camera:', { 
+      type, 
+      data, 
+      dataLength: data.length,
+      scanMode: scanMode || 'unknown',
+      timestamp: new Date().toISOString()
+    });
+    
+    // Immediately prevent further scans and record this scan
     setScanned(true);
+    setLastScannedData(data);
+    setLastScanTime(currentTime);
     
     // Provide immediate feedback for successful scan
     feedback.qrScanSuccess();
     
-    // Call the parent's scan handler
-    onScan(data);
+    // Call the parent's scan handler with a slight delay to ensure state is set
+    console.log('📱 Calling parent onScan handler with data:', data);
+    setTimeout(() => {
+      onScan(data);
+    }, 50); // Small delay to ensure scan state is properly set
     
     // Don't auto-reset - let parent control when to resume scanning
   };
 
   const handleCameraReady = () => {
-    console.log('Camera is ready');
-    setCameraReady(true);
-    
-    // Light haptic feedback when camera is ready
-    feedback.buttonPress();
+    if (!cameraReady) {
+      console.log('Camera is ready');
+      setCameraReady(true);
+      
+      // Light haptic feedback when camera is ready (only once)
+      feedback.buttonPress();
+    }
   };
 
   // Add function to resume scanning
   const resumeScanning = () => {
     setScanned(false);
+    // Clear duplicate prevention when resuming
+    setLastScannedData('');
+    setLastScanTime(0);
     if (onRequestResume) {
       onRequestResume();
     }
@@ -151,7 +181,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
         barcodeScannerSettings={{
           barcodeTypes: ['qr'],
         }}
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        onBarcodeScanned={scanned || pauseScanning ? undefined : handleBarCodeScanned}
       >
         <View style={styles.overlay}>
           {/* Header */}

@@ -1,223 +1,323 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import { validateQRCode, scanQRCode, unscanQRCode, QRValidationResponse } from '../services/api';
-import { feedback } from '../services/feedback';
+import { getGroupTickets, scanGroupTickets, scanQRCode, unscanGroupTickets, unscanQRCode, validateQRCode } from '../services/api';
 
-interface QRValidationDemoProps {
-  eventId: string;
+interface TestResult {
+  success: boolean;
+  message: string;
+  details?: any;
 }
 
-export default function QRValidationDemo({ eventId }: QRValidationDemoProps) {
+const QRValidationDemo: React.FC = () => {
   const { colors } = useTheme();
+  const [eventId, setEventId] = useState('145'); // Default event ID for The Bend 500
   const [scanCode, setScanCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [lastResult, setLastResult] = useState<QRValidationResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastResult, setLastResult] = useState<string>('');
 
-  const handleValidate = async () => {
-    if (!scanCode.trim()) {
-      feedback.warning();
-      Alert.alert('Error', 'Please enter a scan code');
-      return;
+  // Test ticket identifiers from the provided tickets
+  const testTickets = [
+    '120650044ARUME5E',   // Ticket 1
+    '12065004TYLEMERE',   // Ticket 2  
+    '12065004NEBA6ESU'    // Ticket 3 (CORRECTED)
+  ];
+
+  const logResult = (operation: string, result: TestResult) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const status = result.success ? '✅' : '❌';
+    const message = `[${timestamp}] ${status} ${operation}: ${result.message}`;
+    
+    console.log(message);
+    if (result.details) {
+      console.log('Details:', JSON.stringify(result.details, null, 2));
     }
+    
+    setLastResult(message + (result.details ? '\nDetails: ' + JSON.stringify(result.details, null, 2) : ''));
+  };
 
-    feedback.buttonPress();
-    setLoading(true);
+  const validateTicket = async (ticketId: string): Promise<TestResult> => {
     try {
-      const result = await validateQRCode(eventId, scanCode.trim());
-      setLastResult(result);
-      
+      const result = await validateQRCode(eventId, ticketId);
       if (result) {
-        if (result.error) {
-          feedback.error();
-          Alert.alert('Validation Failed', result.msg?.message || 'Invalid QR code');
-        } else {
-          feedback.success();
-          Alert.alert('Validation Success', `Valid ticket for ${result.msg.info.fullname}`);
-        }
-      } else {
-        feedback.error();
-        Alert.alert('Error', 'Failed to validate QR code');
+        return {
+          success: !result.error,
+          message: typeof result.msg === 'string' ? result.msg : result.msg.message,
+          details: result
+        };
       }
+      return { success: false, message: 'No response from validation API' };
     } catch (error) {
-      console.error('Validation error:', error);
-      feedback.error();
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Validation failed' 
+      };
     }
   };
 
-  const handleScan = async () => {
-    if (!scanCode.trim()) {
-      feedback.warning();
-      Alert.alert('Error', 'Please enter a scan code');
-      return;
-    }
-
-    feedback.buttonPressHeavy();
-    setLoading(true);
+  const scanTicket = async (ticketId: string): Promise<TestResult> => {
     try {
-      const result = await scanQRCode(eventId, scanCode.trim());
-      setLastResult(result);
-      
+      const result = await scanQRCode(eventId, ticketId);
       if (result) {
-        if (result.error) {
-          feedback.error();
-          Alert.alert('Scan Failed', result.msg?.message || 'Failed to scan QR code');
-        } else {
-          feedback.checkIn();
-          Alert.alert('Scan Success', `${result.msg.info.fullname} has been admitted`);
-        }
-      } else {
-        feedback.error();
-        Alert.alert('Error', 'Failed to scan QR code');
+        return {
+          success: !result.error,
+          message: typeof result.msg === 'string' ? result.msg : result.msg.message,
+          details: result
+        };
       }
+      return { success: false, message: 'No response from scan API' };
     } catch (error) {
-      console.error('Scan error:', error);
-      feedback.error();
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Scan failed' 
+      };
     }
   };
 
-  const handleUnscan = async () => {
+  const unscanTicket = async (ticketId: string): Promise<TestResult> => {
+    try {
+      const result = await unscanQRCode(eventId, ticketId);
+      if (result) {
+        return {
+          success: !result.error,
+          message: typeof result.msg === 'string' ? result.msg : result.msg.message,
+          details: result
+        };
+      }
+      return { success: false, message: 'No response from unscan API' };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Unscan failed' 
+      };
+    }
+  };
+
+  const testGroupTickets = async (): Promise<TestResult> => {
+    try {
+      const firstTicket = testTickets[0];
+      const result = await getGroupTickets(eventId, firstTicket);
+      
+      if (result.error) {
+        return {
+          success: false,
+          message: result.msg || 'Group tickets fetch failed',
+          details: result
+        };
+      }
+
+      return {
+        success: true,
+        message: `Found ${result.tickets?.length || 0} tickets in group`,
+        details: result
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Group tickets test failed' 
+      };
+    }
+  };
+
+  const runComprehensiveTest = async () => {
+    setIsLoading(true);
+    setLastResult('Starting comprehensive test...\n');
+    
+    try {
+      // Test 1: Validate all tickets
+      console.log('\n=== VALIDATION TESTS ===');
+      for (let i = 0; i < testTickets.length; i++) {
+        const ticket = testTickets[i];
+        const result = await validateTicket(ticket);
+        logResult(`Validate Ticket ${i + 1} (${ticket})`, result);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Delay between requests
+      }
+
+      // Test 2: Group ticket detection
+      console.log('\n=== GROUP TICKET TEST ===');
+      const groupResult = await testGroupTickets();
+      logResult('Group Tickets', groupResult);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Test 3: Individual check-ins
+      console.log('\n=== CHECK-IN TESTS ===');
+      for (let i = 0; i < testTickets.length; i++) {
+        const ticket = testTickets[i];
+        const result = await scanTicket(ticket);
+        logResult(`Check-in Ticket ${i + 1} (${ticket})`, result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Test 4: Try to check in already checked tickets (should fail)
+      console.log('\n=== DUPLICATE CHECK-IN TESTS ===');
+      for (let i = 0; i < testTickets.length; i++) {
+        const ticket = testTickets[i];
+        const result = await scanTicket(ticket);
+        logResult(`Duplicate Check-in Ticket ${i + 1} (${ticket})`, result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Test 5: Check-outs
+      console.log('\n=== CHECK-OUT TESTS ===');
+      for (let i = 0; i < testTickets.length; i++) {
+        const ticket = testTickets[i];
+        const result = await unscanTicket(ticket);
+        logResult(`Check-out Ticket ${i + 1} (${ticket})`, result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Test 6: Try to check out already checked out tickets (should fail)
+      console.log('\n=== DUPLICATE CHECK-OUT TESTS ===');
+      for (let i = 0; i < testTickets.length; i++) {
+        const ticket = testTickets[i];
+        const result = await unscanTicket(ticket);
+        logResult(`Duplicate Check-out Ticket ${i + 1} (${ticket})`, result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Test 7: Group scanning (check-in all at once)
+      console.log('\n=== GROUP SCAN TESTS ===');
+      try {
+        const groupScanResult = await scanGroupTickets(eventId, testTickets);
+        logResult('Group Check-in', {
+          success: !groupScanResult.error,
+          message: groupScanResult.msg || 'Group scan completed',
+          details: groupScanResult
+        });
+      } catch (error) {
+        logResult('Group Check-in', {
+          success: false,
+          message: error instanceof Error ? error.message : 'Group scan failed'
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Test 8: Group unscan (check-out all at once)
+      try {
+        const groupUnscanResult = await unscanGroupTickets(eventId, testTickets);
+        logResult('Group Check-out', {
+          success: !groupUnscanResult.error,
+          message: groupUnscanResult.msg || 'Group unscan completed',
+          details: groupUnscanResult
+        });
+      } catch (error) {
+        logResult('Group Check-out', {
+          success: false,
+          message: error instanceof Error ? error.message : 'Group unscan failed'
+        });
+      }
+
+      console.log('\n=== TEST COMPLETED ===');
+      Alert.alert('Test Completed', 'Check console logs for detailed results');
+
+    } catch (error) {
+      console.error('Test suite error:', error);
+      Alert.alert('Test Error', error instanceof Error ? error.message : 'Unknown error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const runSingleTicketTest = async () => {
     if (!scanCode.trim()) {
-      feedback.warning();
       Alert.alert('Error', 'Please enter a scan code');
       return;
     }
 
-    feedback.buttonPressHeavy();
-    setLoading(true);
+    setIsLoading(true);
+    
     try {
-      const result = await unscanQRCode(eventId, scanCode.trim());
-      setLastResult(result);
+      // Test sequence: Validate -> Scan -> Unscan
+      const validateResult = await validateTicket(scanCode.trim());
+      logResult(`Validate ${scanCode}`, validateResult);
       
-      if (result) {
-        if (result.error) {
-          feedback.error();
-          Alert.alert('Unscan Failed', result.msg?.message || 'Failed to unscan QR code');
-        } else {
-          feedback.success();
-          Alert.alert('Unscan Success', `${result.msg.info.fullname} has been un-admitted`);
-        }
-      } else {
-        feedback.error();
-        Alert.alert('Error', 'Failed to unscan QR code');
-      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const scanResult = await scanTicket(scanCode.trim());
+      logResult(`Scan ${scanCode}`, scanResult);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const unscanResult = await unscanTicket(scanCode.trim());
+      logResult(`Unscan ${scanCode}`, unscanResult);
+      
     } catch (error) {
-      console.error('Unscan error:', error);
-      feedback.error();
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Single ticket test error:', error);
+      Alert.alert('Test Error', error instanceof Error ? error.message : 'Unknown error occurred');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <Text style={[styles.title, { color: colors.text }]}>QR Code Validation Demo</Text>
+        <Text style={[styles.title, { color: colors.text }]}>QR Code Ticket Testing</Text>
         
-        <Text style={[styles.label, { color: colors.text }]}>Event ID: {eventId}</Text>
-        
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-          placeholder="Enter scan code"
-          placeholderTextColor={colors.secondary}
-          value={scanCode}
-          onChangeText={setScanCode}
-          editable={!loading}
-        />
-        
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Configuration</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+            placeholder="Event ID"
+            value={eventId}
+            onChangeText={setEventId}
+          />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+            placeholder="Scan Code (for single test)"
+            value={scanCode}
+            onChangeText={setScanCode}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Test Tickets</Text>
+          {testTickets.map((ticket, index) => (
+            <Text key={ticket} style={[styles.ticketText, { color: colors.text }]}>
+              Ticket {index + 1}: {ticket}
+            </Text>
+          ))}
+        </View>
+
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.disabled]}
-            onPress={handleValidate}
-            disabled={loading}
+            style={[styles.button, styles.primaryButton, { backgroundColor: colors.primary }, isLoading && styles.disabled]}
+            onPress={runComprehensiveTest}
+            disabled={isLoading}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Validate</Text>
-            )}
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
+              {isLoading ? 'Testing...' : 'Run Full Test Suite'}
+            </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: '#28a745' }, loading && styles.disabled]}
-            onPress={handleScan}
-            disabled={loading}
+            style={[styles.button, styles.secondaryButton, { backgroundColor: '#28a745' }, isLoading && styles.disabled]}
+            onPress={runSingleTicketTest}
+            disabled={isLoading || !scanCode.trim()}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Scan</Text>
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: '#dc3545' }, loading && styles.disabled]}
-            onPress={handleUnscan}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Unscan</Text>
-            )}
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Test Single Ticket</Text>
           </TouchableOpacity>
         </View>
       </View>
       
-      {lastResult && (
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Last Result</Text>
-          <Text style={[styles.resultText, { color: lastResult.error ? '#dc3545' : '#28a745' }]}>
-            {lastResult.error ? 'ERROR' : 'SUCCESS'}
-          </Text>
-          <Text style={[styles.message, { color: colors.text }]}>
-            {lastResult.msg?.message || 'No message'}
-          </Text>
-          
-          {!lastResult.error && lastResult.msg?.info && (
-            <View style={styles.infoContainer}>
-              <Text style={[styles.infoTitle, { color: colors.text }]}>Ticket Information:</Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Name: {lastResult.msg.info.fullname}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Email: {lastResult.msg.info.email}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Ticket: {lastResult.msg.info.ticket_title}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Admits: {lastResult.msg.info.available}/{lastResult.msg.info.admits}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Price: ${lastResult.msg.info.price}
-              </Text>
-              <Text style={[styles.infoText, { color: colors.secondary }]}>
-                Checked In: {lastResult.msg.info.checkedin ? 'Yes' : 'No'}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Last Result</Text>
+        <ScrollView style={[styles.resultContainer, { backgroundColor: colors.background }]}>
+          <Text style={[styles.resultText, { color: colors.text }]}>{lastResult}</Text>
+        </ScrollView>
+      </View>
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -239,17 +339,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
-  label: {
+  section: {
+    marginBottom: 15,
+  },
+  sectionTitle: {
     fontSize: 14,
-    marginBottom: 8,
     fontWeight: '500',
+    marginBottom: 10,
   },
   input: {
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: 10,
+  },
+  ticketText: {
+    fontSize: 14,
+    marginBottom: 5,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -264,6 +371,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
+  primaryButton: {
+    backgroundColor: '#007AFF',
+  },
+  secondaryButton: {
+    backgroundColor: '#34C759',
+  },
   disabled: {
     opacity: 0.6,
   },
@@ -272,25 +385,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  resultContainer: {
+    maxHeight: 300,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+  },
   resultText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#333',
   },
-  message: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  infoContainer: {
-    marginTop: 8,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-}); 
+});
+
+export default QRValidationDemo; 

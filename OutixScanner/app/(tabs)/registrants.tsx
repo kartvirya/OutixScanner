@@ -186,7 +186,7 @@ export default function Registrants() {
     if (activeTab !== 'waivers' || registrations.length === 0) return null;
 
     const selectedEvent = registrations.find(event => event.id === selectedEventId);
-
+    
     return (
       <View style={styles.eventSelector}>
         <Text style={[styles.selectorLabel, { color: colors.text }]}>Select Event:</Text>
@@ -207,15 +207,15 @@ export default function Registrants() {
           animationType="fade"
           onRequestClose={() => setShowEventDropdown(false)}
         >
-          <TouchableOpacity 
+      <TouchableOpacity 
             style={styles.modalOverlay}
             activeOpacity={1}
             onPress={() => setShowEventDropdown(false)}
-          >
+      >
             <View style={[styles.dropdownModal, { backgroundColor: colors.card }]}>
               <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
                 <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Event</Text>
-              </View>
+        </View>
               
               <FlatList
                 data={registrations}
@@ -249,8 +249,8 @@ export default function Registrants() {
                 showsVerticalScrollIndicator={false}
                 style={styles.dropdownList}
               />
-            </View>
-          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
         </Modal>
       </View>
     );
@@ -387,7 +387,7 @@ export default function Registrants() {
                 { color: item.CheckedIn === 'YES' ? '#10B981' : '#F59E0B' }
               ]}>
                 {item.CheckedIn === 'YES' ? '✓ Checked In' : '⏳ Check-in Pending'}
-              </Text>
+      </Text>
             </View>
           </View>
           
@@ -440,12 +440,12 @@ export default function Registrants() {
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Registrants</Text>
       </View>
-      
+
       {renderTabs()}
       {renderEventSelector()}
       
       {activeTab === 'registrations' ? (
-        <FlatList
+      <FlatList
           data={registrations}
           keyExtractor={(item) => item.id}
           renderItem={renderRegistrationItem}
@@ -458,21 +458,21 @@ export default function Registrants() {
             />
           }
           contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
         />
       ) : (
         <FlatList
           data={waivers}
           keyExtractor={(item) => item.Ref}
           renderItem={renderWaiverItem}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
-            />
-          }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />

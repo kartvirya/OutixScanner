@@ -67,6 +67,7 @@ export default function ScannerScreen() {
   const [isValidatingEvent, setIsValidatingEvent] = useState(true);
   const [isScanning, setIsScanning] = useState(true); // Add scanning control state
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Add header expansion state
+  const [showCamera, setShowCamera] = useState(true); // Control camera visibility - start with camera open
   
   // Group scan modal states
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -199,6 +200,8 @@ export default function ScannerScreen() {
   const handleRequestResume = () => {
     setIsScanning(true);
   };
+
+
 
   const handleScanResult = useCallback(async (data: string) => {
     // IMMEDIATE FAIL-SAFE: Resume scanning after 8 seconds no matter what
@@ -497,9 +500,9 @@ export default function ScannerScreen() {
     } finally {
       // Clear the emergency timeout since we're done
       clearTimeout(emergencyResumeTimeout);
-      // Ensure scanning is resumed
-      console.log('🔄 handleScanResult finally: Ensuring scanning is resumed');
-      setTimeout(() => setIsScanning(true), 1000);
+      // Stop scanning after processing
+      console.log('🔄 handleScanResult finally: Stopping scan');
+      setIsScanning(false);
     }
   }, [currentEventId, scanMode]);
 

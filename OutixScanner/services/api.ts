@@ -1253,10 +1253,8 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
       timeout: 30000
     });
     
-    console.log('QR validation response:', response.data);
     return response.data;
   } catch (error: any) {
-    console.error(`Error validating QR code for event ${eventId}:`, error);
     
     // Enhanced error handling - check if we have a response with data
     if (error.response) {
