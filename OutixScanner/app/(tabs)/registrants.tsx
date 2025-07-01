@@ -1,4 +1,4 @@
-import { Calendar, Car, ChevronDown, ClipboardList, DollarSign, ExternalLink, FileCheck, Hash, Mail, MapPin, Phone, User } from 'lucide-react-native';
+import { Calendar, Car, ChevronDown, ClipboardList, ExternalLink, FileCheck, Hash, Mail, MapPin, Phone, User } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -338,13 +338,6 @@ export default function Registrants() {
             <Car size={16} color={colors.secondary} />
             <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
               {item.Manufacturer} {item.Model} ({item.Year})
-            </Text>
-          </View>
-          
-          <View style={styles.detailItem}>
-            <DollarSign size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]}>
-              ${item.Amount}
             </Text>
           </View>
           

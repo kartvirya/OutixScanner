@@ -1799,4 +1799,39 @@ export const getWaivers = async (eventId: string): Promise<Waiver[]> => {
   }
 };
 
+export interface WaiverSigningData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  dateOfBirth: string;
+  signature?: string; // Optional since we won't send it
+  acknowledged: boolean;
+  campaign_token?: string;
+  stoken?: string;
+}
+
+export const signWaiver = async (data: WaiverSigningData): Promise<any> => {
+  try {
+    const formData = new URLSearchParams();
+    
+    // Add all fields except signature
+    Object.entries(data).forEach(([key, value]) => {
+      if (key !== 'signature' && value) { // Skip signature and undefined values
+        formData.append(key, value.toString());
+      }
+    });
+
+    const response = await axios.post('https://www.outix.co/services/waiver/sign', formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }
+    });
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Error signing waiver:', error.message || error);
+    throw error;
+  }
+};
+
 export default api; 

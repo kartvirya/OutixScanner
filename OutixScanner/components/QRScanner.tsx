@@ -13,8 +13,8 @@ interface QRScannerProps {
   headerTitle?: string;
   pauseScanning?: boolean;
   onRequestResume?: () => void;
-  scanMode?: 'scan-in' | 'scan-out';
-  onScanModeChange?: (mode: 'scan-in' | 'scan-out') => void;
+  scanMode?: 'scan-in' | 'passout';
+  onScanModeChange?: (mode: 'scan-in' | 'passout') => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -228,17 +228,17 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
                   <TouchableOpacity 
                     style={[
                       styles.scanModeButton,
-                      scanMode === 'scan-out' && styles.scanModeButtonActive,
-                      { backgroundColor: scanMode === 'scan-out' ? '#F72585' : 'rgba(0,0,0,0.6)' }
+                      scanMode === 'passout' && styles.scanModeButtonActive,
+                      { backgroundColor: scanMode === 'passout' ? '#F72585' : 'rgba(0,0,0,0.6)' }
                     ]}
-                    onPress={() => onScanModeChange('scan-out')}
+                    onPress={() => onScanModeChange && onScanModeChange('passout')}
                     activeOpacity={0.8}
                   >
                     <Text style={[
                       styles.scanModeButtonText, 
-                      { color: scanMode === 'scan-out' ? '#FFFFFF' : '#FFFFFF' }
+                      { color: scanMode === 'passout' ? '#FFFFFF' : '#FFFFFF' }
                     ]}>
-                      Check Out
+                      Passout
                     </Text>
                   </TouchableOpacity>
                 </View>

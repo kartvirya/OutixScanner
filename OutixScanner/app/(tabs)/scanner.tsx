@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Check, LogIn, Square, UserCheck } from 'lucide-react-native';
+import { Check, LogIn, QrCode, Square, UserCheck } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -67,7 +67,7 @@ export default function ScannerScreen() {
   const [isValidatingEvent, setIsValidatingEvent] = useState(true);
   const [isScanning, setIsScanning] = useState(true); // Add scanning control state
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Add header expansion state
-  const [showCamera, setShowCamera] = useState(true); // Control camera visibility - start with camera open
+  const [showCamera, setShowCamera] = useState(false); // Control camera visibility
   
   // Group scan modal states
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -199,9 +199,13 @@ export default function ScannerScreen() {
 
   const handleRequestResume = () => {
     setIsScanning(true);
+    setShowCamera(true);
   };
 
-
+  const handleStartScanning = () => {
+    setShowCamera(true);
+    setIsScanning(true);
+  };
 
   const handleScanResult = useCallback(async (data: string) => {
     // IMMEDIATE FAIL-SAFE: Resume scanning after 8 seconds no matter what
@@ -500,8 +504,9 @@ export default function ScannerScreen() {
     } finally {
       // Clear the emergency timeout since we're done
       clearTimeout(emergencyResumeTimeout);
-      // Stop scanning after processing
-      console.log('🔄 handleScanResult finally: Stopping scan');
+      // Close camera after scanning
+      console.log('🔄 handleScanResult finally: Closing camera');
+      setShowCamera(false);
       setIsScanning(false);
     }
   }, [currentEventId, scanMode]);
@@ -1090,17 +1095,48 @@ export default function ScannerScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      <QRScanner
-        onScan={handleScanResult}
-        onClose={handleClose} 
-        customHeader={customHeader}
-        showCloseButton={false}
-        headerTitle={scanMode === 'scan-in' ? 'Smart Check In' : 'Smart Check Out'}
-        pauseScanning={!isScanning}
-        onRequestResume={handleRequestResume}
-        scanMode={scanMode}
-        onScanModeChange={(mode) => setScanMode(mode)}
-      />
+      {showCamera ? (
+        <QRScanner
+          onScan={handleScanResult}
+          onClose={() => setShowCamera(false)} 
+          customHeader={customHeader}
+          showCloseButton={true}
+          headerTitle={scanMode === 'scan-in' ? 'Smart Check In' : 'Smart Check Out'}
+          pauseScanning={!isScanning}
+          onRequestResume={handleRequestResume}
+          scanMode={scanMode}
+          onScanModeChange={(mode) => setScanMode(mode)}
+        />
+      ) : (
+        <View style={[styles.scannerControlContainer, { backgroundColor: colors.background }]}>
+          {customHeader}
+          
+          <View style={styles.scannerControlContent}>
+            <View style={[styles.scanIconContainer, { backgroundColor: colors.primary + '20' }]}>
+              <QrCode size={80} color={colors.primary} />
+            </View>
+            
+            <Text style={[styles.scannerTitle, { color: colors.text }]}>
+              {scanMode === 'scan-in' ? 'Ready to Check In' : 'Ready to Check Out'}
+            </Text>
+            
+            <Text style={[styles.scannerDescription, { color: colors.text }]}>
+              Tap the button below to open the camera and scan QR codes
+            </Text>
+            
+            <TouchableOpacity 
+              style={[styles.startScanButton, { backgroundColor: colors.primary }]}
+              onPress={handleStartScanning}
+              activeOpacity={0.8}
+            >
+              <QrCode size={24} color="#FFFFFF" />
+              <Text style={styles.startScanButtonText}>
+                Start Scanning
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       
       {renderGroupScanModal()}
     </SafeAreaView>
@@ -1404,5 +1440,54 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     textAlign: 'center',
     marginTop: 4,
+  },
+  // Scanner Control Styles
+  scannerControlContainer: {
+    flex: 1,
+  },
+  scannerControlContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  scanIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  scannerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  scannerDescription: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 40,
+    opacity: 0.8,
+  },
+  startScanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  startScanButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 12,
   },
 });
