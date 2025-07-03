@@ -149,9 +149,9 @@ function CustomTabBar() {
 
   const tabs = [
     { name: 'index', title: 'Events', icon: Calendar, route: '/(tabs)' },
-    { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics' },
-    ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true }] : []),
     { name: 'registrants', title: 'Registrants', icon: Users, route: '/(tabs)/registrants' },
+    ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true }] : []),
+    { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics' },
     { name: 'profile', title: 'Profile', icon: User, route: '/(tabs)/profile' },
   ];
 

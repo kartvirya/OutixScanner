@@ -1,13 +1,14 @@
+import { Image } from 'expo-image';
 import {
     AlertTriangle,
     Check,
     FileText,
     PenTool,
     User,
-    Users,
-    X
+    X,
+    AlertCircle
 } from 'lucide-react-native';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,8 +21,10 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    useWindowDimensions
 } from 'react-native';
+import RenderHtml from 'react-native-render-html';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 import { useTheme } from '../context/ThemeContext';
 import { signWaiver, Waiver } from '../services/api';
@@ -73,6 +76,9 @@ interface WaiverSigningModalProps {
   waiver?: Waiver; // Waiver data for auto-fill
   eventName: string;
   eventDate: string;
+  waiverLink?: string; // Dynamic waiver link
+  waiverLogo?: string; // Dynamic waiver logo
+  waiverBgImage?: string; // Dynamic waiver background image
 }
 
 export default function WaiverSigningModal({
@@ -81,57 +87,85 @@ export default function WaiverSigningModal({
   onSubmit,
   waiver,
   eventName,
-  eventDate
+  eventDate,
+  waiverLink,
+  waiverLogo,
+  waiverBgImage
 }: WaiverSigningModalProps) {
-  const { colors } = useTheme();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const signaturePadRef = useRef<SignatureViewRef>(null);
-  const witnessSignaturePadRef = useRef<SignatureViewRef>(null);
+  // Theme and window dimensions
+  const { colors, colorScheme } = useTheme();
+  const { width } = useWindowDimensions();
   
-  // Initialize form data with waiver info if available
-  const [formData, setFormData] = useState<WaiverData>(() => ({
-    // Participant Info
-    firstName: waiver?.['Client Name']?.split(' ')[0] || '',
-    lastName: waiver?.['Client Name']?.split(' ').slice(1).join(' ') || '',
-    email: waiver?.Email || '',
-    mobile: waiver?.Mobile || '',
-    dateOfBirth: '',
-    address: waiver?.Address || '',
-    signature: '',
+  // Step management
+  const [currentStep, setCurrentStep] = useState(0);
+  
+  // Loading states
+  const [loading, setLoading] = useState(false);
+  const [waiverLoading, setWaiverLoading] = useState(false);
+  const [waiverError, setWaiverError] = useState<string | null>(null);
+  
+  // Content states
+  const [waiverContent, setWaiverContent] = useState<string>("");
+  const [signature, setSignature] = useState<string>("");
+  const [witnessSignature, setWitnessSignature] = useState<string>("");
+  
+  // Date picker state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
+  // Form data
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    mobile: "",
+    dateOfBirth: "",
+    address: "",
     acknowledged: false,
-    
-    // Witness Info
-    witnessName: '',
-    witnessEmail: '',
-    witnessPhone: '',
-    witnessSignature: '',
-    
-    // Additional Info from Waiver
-    driverRiderName: waiver?.['Driver Rider Name'] || '',
-    manufacturer: waiver?.Manufacturer || '',
-    model: waiver?.Model || '',
-    engineCapacity: waiver?.['Engine Capacity'] || '',
-    year: waiver?.Year || '',
-    sponsors: waiver?.Sponsors || '',
-    quickestET: waiver?.['Quickest ET'] || '',
-    quickestMPH: waiver?.['Quickest MPH'] || '',
-    andraLicenseNumber: waiver?.['ANDRA License Number'] || '',
-    ihraLicenseNumber: waiver?.['IHRA License Number'] || '',
-    licenseExpiryDate: waiver?.['License Expiry Date'] || '',
-    driversLicenseNumber: waiver?.['Drivers License Number'] || '',
-    emergencyContactName: waiver?.['Emergency Contact Name'] || '',
-    emergencyContactNumber: waiver?.['Emergency Contact Number'] || '',
-    racingNumber: waiver?.['Racing Number'] || ''
-  }));
+    witnessName: "",
+    witnessEmail: "",
+    witnessPhone: "",
+    signature: "",
+    witnessSignature: ""
+  });
+  
+  // Refs
+  const signatureRef = useRef<SignatureViewRef>(null);
+  const witnessSignatureRef = useRef<SignatureViewRef>(null);
+
+  // Effects
+  useEffect(() => {
+    if (visible && waiverLink) {
+      fetchWaiverContent(waiverLink);
+    }
+  }, [visible, waiverLink]);
+
+  // Function to fetch waiver content from the waiver link
+  const fetchWaiverContent = async (url: string) => {
+    try {
+      setWaiverLoading(true);
+      setWaiverError(null);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch waiver content: ${response.status}`);
+      }
+      
+      const htmlContent = await response.text();
+      setWaiverContent(htmlContent);
+    } catch (error) {
+      console.error('Error fetching waiver content:', error);
+      setWaiverError(error instanceof Error ? error.message : 'Failed to load waiver content');
+    } finally {
+      setWaiverLoading(false);
+    }
+  };
 
   const steps = [
     { id: 0, title: 'Welcome', icon: FileText },
     { id: 1, title: 'Your Info', icon: User },
-    { id: 2, title: 'Vehicle Info', icon: FileText },
-    { id: 3, title: 'Terms & Conditions', icon: AlertTriangle },
-    { id: 4, title: 'Your Signature', icon: PenTool },
-    { id: 5, title: 'Witness Info', icon: Users }
+    { id: 2, title: 'Terms & Conditions', icon: AlertTriangle },
+    { id: 3, title: 'Signatures', icon: PenTool }
   ];
 
   const resetForm = () => {
@@ -143,27 +177,12 @@ export default function WaiverSigningModal({
       mobile: waiver?.Mobile || '',
       dateOfBirth: '',
       address: waiver?.Address || '',
-      signature: '',
       acknowledged: false,
       witnessName: '',
       witnessEmail: '',
       witnessPhone: '',
-      witnessSignature: '',
-      driverRiderName: waiver?.['Driver Rider Name'] || '',
-      manufacturer: waiver?.Manufacturer || '',
-      model: waiver?.Model || '',
-      engineCapacity: waiver?.['Engine Capacity'] || '',
-      year: waiver?.Year || '',
-      sponsors: waiver?.Sponsors || '',
-      quickestET: waiver?.['Quickest ET'] || '',
-      quickestMPH: waiver?.['Quickest MPH'] || '',
-      andraLicenseNumber: waiver?.['ANDRA License Number'] || '',
-      ihraLicenseNumber: waiver?.['IHRA License Number'] || '',
-      licenseExpiryDate: waiver?.['License Expiry Date'] || '',
-      driversLicenseNumber: waiver?.['Drivers License Number'] || '',
-      emergencyContactName: waiver?.['Emergency Contact Name'] || '',
-      emergencyContactNumber: waiver?.['Emergency Contact Number'] || '',
-      racingNumber: waiver?.['Racing Number'] || ''
+      signature: '',
+      witnessSignature: ''
     });
   };
 
@@ -213,31 +232,16 @@ export default function WaiverSigningModal({
           formData.dateOfBirth.trim()
         );
       case 2:
-        return !!(
-          formData.driverRiderName &&
-          formData.manufacturer &&
-          formData.model &&
-          formData.engineCapacity &&
-          formData.year
-        );
-      case 3:
         return formData.acknowledged;
-      case 4:
-        return !!formData.signature;
-      case 5:
-        return !!(
-          formData.witnessName.trim() &&
-          formData.witnessEmail.trim() &&
-          formData.witnessPhone.trim() &&
-          formData.witnessSignature.trim()
-        );
+      case 3:
+        return !!(formData.signature && formData.witnessSignature);
       default:
         return false;
     }
   };
 
   const handleSubmit = async () => {
-    if (!canProceedFromStep(5)) {
+    if (!canProceedFromStep(3)) {
       Alert.alert('Incomplete', 'Please complete all required fields and sign the waiver.');
       return;
     }
@@ -265,22 +269,7 @@ export default function WaiverSigningModal({
         witnessName: formData.witnessName,
         witnessEmail: formData.witnessEmail,
         witnessPhone: formData.witnessPhone,
-        witnessSignature: formData.witnessSignature,
-        driverRiderName: formData.driverRiderName,
-        manufacturer: formData.manufacturer,
-        model: formData.model,
-        engineCapacity: formData.engineCapacity,
-        year: formData.year,
-        sponsors: formData.sponsors,
-        quickestET: formData.quickestET,
-        quickestMPH: formData.quickestMPH,
-        andraLicenseNumber: formData.andraLicenseNumber,
-        ihraLicenseNumber: formData.ihraLicenseNumber,
-        licenseExpiryDate: formData.licenseExpiryDate,
-        driversLicenseNumber: formData.driversLicenseNumber,
-        emergencyContactName: formData.emergencyContactName,
-        emergencyContactNumber: formData.emergencyContactNumber,
-        racingNumber: formData.racingNumber
+        witnessSignature: formData.witnessSignature
       };
 
       // Call the API but don't send signature
@@ -328,7 +317,7 @@ export default function WaiverSigningModal({
               {index < currentStep ? (
                 <Check size={16} color="#FFFFFF" />
               ) : (
-                <step.icon size={16} color={index === currentStep ? "#FFFFFF" : colors.secondary} />
+                <step.icon size={16} color={index === currentStep ? "#FFFFFF" : colors.text} style={{ opacity: index === currentStep ? 1 : 0.6 }} />
               )}
             </View>
             {index < steps.length - 1 && (
@@ -347,35 +336,49 @@ export default function WaiverSigningModal({
   );
 
   const renderWelcomeStep = () => (
-    <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <View style={[styles.welcomeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {/* THE BEND Logo Area */}
-        <View style={styles.logoContainer}>
-          <View style={[styles.logoPlaceholder, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
-            <Text style={[styles.logoText, { color: colors.primary }]}>THE BEND</Text>
-          </View>
-        </View>
-        
-        <View style={styles.welcomeContent}>
-          <Text style={[styles.welcomeTitle, { color: colors.text }]}>
-            Hi, Welcome to ANDRA - DRAGWAY AT THE BEND!
-          </Text>
-          <Text style={[styles.welcomeSubtitle, { color: colors.text }]}>
-            You are completing a waiver for the event: {eventName}!
-          </Text>
-          <Text style={[styles.welcomeDescription, { color: colors.secondary }]}>
-            Please kindly complete all the requests.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.proceedButton, { backgroundColor: '#F59E0B' }]}
-          onPress={nextStep}
-        >
-          <Text style={styles.proceedButtonText}>PROCEED</Text>
-        </TouchableOpacity>
+    <View style={styles.stepContent}>
+      {/* Dynamic Background Image */}
+      {waiverBgImage && (
+        <Image
+          source={{ uri: waiverBgImage }}
+          style={styles.backgroundImage}
+          contentFit="cover"
+        />
+      )}
+      
+      <View style={styles.logoContainer}>
+        {/* Dynamic Waiver Logo */}
+        {waiverLogo ? (
+          <Image
+            source={{ uri: waiverLogo }}
+            style={styles.logo}
+            contentFit="contain"
+          />
+        ) : (
+        <Image
+          source={
+            colorScheme === 'dark' 
+              ? require('../assets/bendlogo/darkmode.svg')
+              : require('../assets/bendlogo/lighmode.svg')
+          }
+          style={styles.logo}
+          contentFit="contain"
+        />
+        )}
       </View>
-    </ScrollView>
+      <Text style={[styles.title, { color: colors.text }]}>
+        Digital Waiver
+      </Text>
+      <Text style={[styles.description, { color: colors.text }]}>
+        Please complete this digital waiver form to participate in the event.
+      </Text>
+      <Text style={[styles.eventDetails, { color: colors.text }]}>
+        Event: {eventName}
+      </Text>
+      <Text style={[styles.eventDetails, { color: colors.text }]}>
+        Date: {eventDate}
+      </Text>
+    </View>
   );
 
   const renderPersonalInfo = () => (
@@ -386,7 +389,7 @@ export default function WaiverSigningModal({
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.formSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Info!</Text>
-          <Text style={[styles.description, { color: colors.secondary }]}>
+          <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
             Please enter your details.
           </Text>
           
@@ -394,7 +397,7 @@ export default function WaiverSigningModal({
             <TextInput
               style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="First Name"
-              placeholderTextColor={colors.secondary}
+              placeholderTextColor={`${colors.text}80`}
               value={formData.firstName}
               onChangeText={(text) => setFormData({ ...formData, firstName: text })}
             />
@@ -404,7 +407,7 @@ export default function WaiverSigningModal({
             <TextInput
               style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="Last Name"
-              placeholderTextColor={colors.secondary}
+              placeholderTextColor={`${colors.text}80`}
               value={formData.lastName}
               onChangeText={(text) => setFormData({ ...formData, lastName: text })}
             />
@@ -414,7 +417,7 @@ export default function WaiverSigningModal({
             <TextInput
               style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="Email Address"
-              placeholderTextColor={colors.secondary}
+              placeholderTextColor={`${colors.text}80`}
               value={formData.email}
               onChangeText={(text) => setFormData({ ...formData, email: text })}
               keyboardType="email-address"
@@ -425,289 +428,150 @@ export default function WaiverSigningModal({
           <View style={styles.inputGroup}>
             <TextInput
               style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="DOB"
-              placeholderTextColor={colors.secondary}
-              value={formData.dateOfBirth}
-              onChangeText={(text) => setFormData({ ...formData, dateOfBirth: text })}
-            />
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-
-  const renderVehicleInfo = () => (
-    <KeyboardAvoidingView 
-      style={styles.stepContent} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.formSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Vehicle Info</Text>
-          <Text style={[styles.description, { color: colors.secondary }]}>
-            Please enter your vehicle details.
-          </Text>
-          
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Driver/Rider Name"
-              placeholderTextColor={colors.secondary}
-              value={formData.driverRiderName}
-              onChangeText={(text) => setFormData({ ...formData, driverRiderName: text })}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Manufacturer"
-              placeholderTextColor={colors.secondary}
-              value={formData.manufacturer}
-              onChangeText={(text) => setFormData({ ...formData, manufacturer: text })}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Model"
-              placeholderTextColor={colors.secondary}
-              value={formData.model}
-              onChangeText={(text) => setFormData({ ...formData, model: text })}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Engine Capacity"
-              placeholderTextColor={colors.secondary}
-              value={formData.engineCapacity}
-              onChangeText={(text) => setFormData({ ...formData, engineCapacity: text })}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Year"
-              placeholderTextColor={colors.secondary}
-              value={formData.year}
-              onChangeText={(text) => setFormData({ ...formData, year: text })}
-            />
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-
-  const renderTermsAndConditions = () => (
-    <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.formSection}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Terms & Conditions</Text>
-        <Text style={[styles.description, { color: colors.secondary }]}>
-          Please carefully read all the terms and conditions and proceed.
-        </Text>
-
-        <View style={[styles.termsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.termsTitle, { color: colors.text }]}>
-            ANDRA DRAG RACING RISK STATEMENT
-          </Text>
-          
-          <ScrollView style={styles.termsScrollView} nestedScrollEnabled={true}>
-            <Text style={[styles.termsText, { color: colors.text }]}>
-              Online exclusion of risk systems can, when used correctly, remove the need to obtain a Participant or Entrant's physical signature on a form when they enter an Event. However, it is critical that these systems meet certain legal requirements so that they are effective in obtaining each Participant and Entrant's agreement to ANDRA's Disclaimer.
-              {'\n\n'}
-              Obtaining their agreement to ANDRA's Disclaimer is not only a requirement of ANDRA's insurer, but it also assists in reducing Event Organisers, Venues, ANDRA and others legal liability arising from an Event.
-              {'\n\n'}
-              Completing this online Disclaimer is designed for the participant to acknowledge their agreement to ANDRA's Disclaimer.
-              {'\n\n'}
-              This is an important document, which affects your legal rights and obligations. Read it carefully and do not sign it unless you are satisfied that you understand it. If you have any questions, please ask a representative of the Business.
-              {'\n\n'}
-              <Text style={{ fontWeight: 'bold' }}>The Business</Text>
-              {'\n'}
-              Australian National Drag Racing Association Limited (ANDRA) and ANDRA Member Tracks organising events and permitted activities recognised by ANDRA.
-              {'\n\n'}
-              <Text style={{ fontWeight: 'bold' }}>The Activity</Text>
-              {'\n'}
-              Administration, organisation and promotion of, and participation in, drag racing and related permitted activities.
-              {'\n\n'}
-              <Text style={{ fontWeight: 'bold' }}>Acknowledgements</Text>
-              {'\n'}
-              I acknowledge that:
-              {'\n'}
-              • I am the Participant.
-              {'\n'}
-              • I am being supplied with a recreational service by the Business.
-              {'\n'}
-              • The Activity is a dangerous recreational activity, which involves a significant risk of physical harm.
-              {'\n'}
-              • I may be injured as a result of my participation in the Activity.
-              {'\n'}
-              • Other people may cause me injury in the course of my participation in the Activity.
-              {'\n'}
-              • I may cause injury to myself or other persons in the course of my participation in the Activity.
-              {'\n'}
-              • The natural conditions in which the Activity is conducted may vary without warning.
-              {'\n'}
-              • My participation in the Activity is voluntary and I have not been required by the Business to engage in the Activity.
-              {'\n\n'}
-              <Text style={{ fontWeight: 'bold' }}>Risk Warning</Text>
-              {'\n'}
-              • I acknowledge that I have been warned of the Risks of the Activity.
-              {'\n'}
-              • I acknowledge that participation in the Activity may also involve other risks not noted in the Risks of the Activity listed in Section 3.
-              {'\n'}
-              • The Business has placed signs around the site on which the Activity is to be performed warning of the risk of injury. I have read the signs and understand the warnings provided.
-              {'\n'}
-              • The Business has provided me with warnings of the Risks associated with the Activity and the risks of physical or psychological harm in participating in the Activity.
-              {'\n\n'}
-              <Text style={{ fontWeight: 'bold' }}>Assumption Of Risk</Text>
-              {'\n'}
-              Notwithstanding the significant risk of physical harm and injury inherent in the Activity, some of which are noted above, I agree to participate in the Activity at my own risk.
-            </Text>
-          </ScrollView>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.checkboxItem, { borderColor: colors.border }]}
-          onPress={() => setFormData({ ...formData, acknowledged: !formData.acknowledged })}
-        >
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: formData.acknowledged ? colors.primary : 'transparent',
-              borderColor: formData.acknowledged ? colors.primary : colors.border
-            }
-          ]}>
-            {formData.acknowledged && (
-              <Check size={16} color="#FFFFFF" />
-            )}
-          </View>
-          <Text style={[styles.checkboxText, { color: colors.text }]}>
-            I/We have carefully read/understood and accept all terms and conditions.
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
-  );
-
-  const renderDigitalSignature = () => {
-    const windowWidth = Dimensions.get('window').width;
-    const signaturePadWidth = windowWidth - 40;
-    const signaturePadHeight = 200;
-
-    return (
-      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.formSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Signature</Text>
-          <Text style={[styles.description, { color: colors.secondary }]}>
-            Please sign in the box below using your finger or stylus.
-          </Text>
-
-          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
-            <SignatureScreen
-              ref={signaturePadRef}
-              onOK={handleSignature}
-              webStyle={`
-                .m-signature-pad {
-                  width: ${signaturePadWidth}px;
-                  height: ${signaturePadHeight}px;
-                  margin: 0;
-                  box-shadow: none;
-                  border: none;
-                }
-                .m-signature-pad--body {
-                  border: none;
-                }
-                .m-signature-pad--footer {
-                  display: none;
-                }
-                canvas {
-                  width: ${signaturePadWidth}px;
-                  height: ${signaturePadHeight}px;
-                }
-              `}
-              autoClear={true}
-              imageType="image/svg+xml"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.clearButton, { borderColor: colors.border }]}
-            onPress={() => {
-              if (signaturePadRef.current) {
-                signaturePadRef.current.clearSignature();
-                setFormData(prev => ({ ...prev, signature: '' }));
-              }
-            }}
-          >
-            <Text style={[styles.clearButtonText, { color: colors.text }]}>Clear Signature</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    );
-  };
-
-  const renderWitnessInfo = () => {
-    const windowWidth = Dimensions.get('window').width;
-    const signaturePadWidth = windowWidth - 40;
-    const signaturePadHeight = 200;
-
-    return (
-      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.formSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Witness Information</Text>
-          <Text style={[styles.description, { color: colors.secondary }]}>
-            Please provide witness details and signature.
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Witness Full Name"
-              placeholderTextColor={colors.secondary}
-              value={formData.witnessName}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, witnessName: text }))}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Witness Email"
-              placeholderTextColor={colors.secondary}
-              value={formData.witnessEmail}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, witnessEmail: text }))}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Witness Phone"
-              placeholderTextColor={colors.secondary}
-              value={formData.witnessPhone}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, witnessPhone: text }))}
+              placeholder="Mobile"
+              placeholderTextColor={`${colors.text}80`}
+              value={formData.mobile}
+              onChangeText={(text) => setFormData({ ...formData, mobile: text })}
               keyboardType="phone-pad"
             />
           </View>
 
-          <Text style={[styles.sectionSubtitle, { color: colors.text, marginTop: 20 }]}>Witness Signature</Text>
-          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
+          <View style={styles.inputGroup}>
+            <TouchableOpacity
+              style={[styles.textInput, styles.datePickerButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={[styles.datePickerText, { color: formData.dateOfBirth ? colors.text : colors.text }]}>
+                {formData.dateOfBirth || 'Select Date of Birth'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
+  const renderTermsAndConditions = () => {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+          Please carefully read all the terms and conditions and proceed.
+        </Text>
+
+        <View style={[styles.termsContainer, { backgroundColor: colors.card }]}>
+          {waiverLogo && (
+            <View style={styles.logoContainer}>
+              <Image
+                source={{ uri: waiverLogo }}
+                style={styles.waiverLogo}
+                contentFit="contain"
+              />
+            </View>
+          )}
+          
+          {waiverLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : waiverError ? (
+            <View style={styles.errorContainer}>
+              <AlertCircle size={32} color="#EF4444" />
+              <Text style={[styles.errorText, { color: "#EF4444" }]}>
+                {waiverError}
+            </Text>
+              <TouchableOpacity 
+                style={[styles.retryButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (waiverLink) {
+                    fetchWaiverContent(waiverLink);
+                  }
+                }}
+              >
+                <Text style={[styles.retryButtonText, { color: colors.background }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView 
+              style={styles.termsScrollView}
+              contentContainerStyle={styles.termsScrollContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.htmlContainer}>
+                <RenderHtml
+                  contentWidth={width - 72} // Account for padding and margins
+                  source={{ html: waiverContent }}
+                  tagsStyles={{
+                    body: {
+                      color: colors.text,
+                      fontSize: 14,
+                      lineHeight: 20,
+                    },
+                    p: {
+                      marginBottom: 16,
+                    },
+                    h3: {
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      marginBottom: 8,
+                      marginTop: 16,
+                    },
+                    ul: {
+                      marginBottom: 16,
+                      paddingLeft: 16,
+                    },
+                    li: {
+                      marginBottom: 8,
+                    },
+                  }}
+                />
+              </View>
+          </ScrollView>
+          )}
+        </View>
+
+        <View style={styles.acknowledgementContainer}>
+        <TouchableOpacity
+            style={styles.checkbox}
+          onPress={() => setFormData({ ...formData, acknowledged: !formData.acknowledged })}
+        >
+          <View style={[
+              styles.checkboxInner,
+              { borderColor: colors.primary },
+              formData.acknowledged && { backgroundColor: colors.primary }
+          ]}>
+              {formData.acknowledged && <Check size={16} color="#FFF" />}
+          </View>
+        </TouchableOpacity>
+          <Text style={[styles.acknowledgementText, { color: colors.text }]}>
+            I have read and agree to the terms and conditions
+          </Text>
+      </View>
+      </View>
+  );
+  };
+
+  const renderSignature = () => {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+          Please sign below to acknowledge your agreement.
+        </Text>
+        
+        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
+          <View style={styles.signaturePadContainer}>
             <SignatureScreen
-              ref={witnessSignaturePadRef}
-              onOK={handleWitnessSignature}
+              ref={signatureRef}
+              onOK={(signature) => setSignature(signature)}
+              onEmpty={() => setSignature("")}
               webStyle={`
                 .m-signature-pad {
-                  width: ${signaturePadWidth}px;
-                  height: ${signaturePadHeight}px;
-                  margin: 0;
                   box-shadow: none;
                   border: none;
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  right: 0;
+                  bottom: 0;
                 }
                 .m-signature-pad--body {
                   border: none;
@@ -716,28 +580,82 @@ export default function WaiverSigningModal({
                   display: none;
                 }
                 canvas {
-                  width: ${signaturePadWidth}px;
-                  height: ${signaturePadHeight}px;
+                  touch-action: none;
                 }
               `}
               autoClear={true}
               imageType="image/svg+xml"
+              onBegin={() => {
+                // Disable scrolling when starting to sign
+                if (Platform.OS === 'web') {
+                  document.body.style.overflow = 'hidden';
+                }
+              }}
+              onEnd={() => {
+                // Re-enable scrolling after signing
+                if (Platform.OS === 'web') {
+                  document.body.style.overflow = 'auto';
+                }
+              }}
             />
           </View>
-
-          <TouchableOpacity
-            style={[styles.clearButton, { borderColor: colors.border }]}
-            onPress={() => {
-              if (witnessSignaturePadRef.current) {
-                witnessSignaturePadRef.current.clearSignature();
-                setFormData(prev => ({ ...prev, witnessSignature: '' }));
-              }
-            }}
-          >
-            <Text style={[styles.clearButtonText, { color: colors.text }]}>Clear Witness Signature</Text>
-          </TouchableOpacity>
+          
+          <View style={[styles.signatureButtons, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.signatureButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (signatureRef.current) {
+                  signatureRef.current.clearSignature();
+                  setSignature("");
+                }
+              }}
+            >
+              <Text style={[styles.signatureButtonText, { color: colors.background }]}>
+                Clear
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
+      </View>
+    );
+  };
+
+  const renderWitnessSignature = () => {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+          Please have a witness sign below.
+        </Text>
+        
+        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
+              <SignatureScreen
+            ref={witnessSignatureRef}
+            onOK={(signature) => setWitnessSignature(signature)}
+            onEmpty={() => setWitnessSignature("")}
+                webStyle={`
+                  .m-signature-pad {
+                    box-shadow: none;
+                    border: none;
+                  }
+                  .m-signature-pad--body {
+                    border: none;
+                  }
+                  .m-signature-pad--footer {
+                    display: none;
+                  }
+                `}
+              />
+            </View>
+
+        <View style={styles.signatureActions}>
+            <TouchableOpacity
+              style={[styles.clearButton, { borderColor: colors.border }]}
+            onPress={() => witnessSignatureRef.current?.clearSignature()}
+            >
+            <Text style={[styles.clearButtonText, { color: colors.text }]}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
     );
   };
 
@@ -748,13 +666,11 @@ export default function WaiverSigningModal({
       case 1:
         return renderPersonalInfo();
       case 2:
-        return renderVehicleInfo();
-      case 3:
         return renderTermsAndConditions();
+      case 3:
+        return renderSignature();
       case 4:
-        return renderDigitalSignature();
-      case 5:
-        return renderWitnessInfo();
+        return renderWitnessSignature();
       default:
         return null;
     }
@@ -764,123 +680,296 @@ export default function WaiverSigningModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="fullScreen"
+      transparent={true}
       onRequestClose={handleClose}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={[styles.modalContainer, { backgroundColor: colors.background }]}
+      >
+        <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-            <X size={24} color={colors.text} />
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <X color={colors.text} size={24} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Digital Waiver</Text>
-          <View style={styles.headerRight} />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Sign Waiver</Text>
+            <View style={{ width: 32 }} />
         </View>
 
-        {/* Progress Bar */}
-        {renderProgressBar()}
+          {/* Progress Indicator */}
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              {[0, 1, 2, 3, 4].map((step) => (
+                <View
+                  key={step}
+                  style={[
+                    styles.progressStep,
+                    { backgroundColor: step <= currentStep ? colors.primary : colors.border }
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={[styles.progressText, { color: colors.text }]}>
+              Step {currentStep + 1} of 5
+            </Text>
+          </View>
 
         {/* Content */}
-        <View style={styles.content}>
-          {renderStepContent()}
+          <View style={styles.contentContainer}>
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={true}
+            >
+              {currentStep === 0 && renderTermsAndConditions()}
+              {currentStep === 1 && renderPersonalInfo()}
+              {currentStep === 2 && renderSignature()}
+              {currentStep === 3 && renderWitnessSignature()}
+            </ScrollView>
         </View>
 
-        {/* Navigation */}
-        <View style={[styles.navigation, { borderTopColor: colors.border }]}>
+          {/* Footer */}
+          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+            {currentStep > 0 && (
           <TouchableOpacity
-            style={[
-              styles.navButton,
-              styles.secondaryButton,
-              { 
-                backgroundColor: 'transparent',
-                borderColor: colors.border,
-                opacity: currentStep === 0 ? 0.5 : 1
-              }
-            ]}
+                style={[styles.footerButton, styles.backButton]}
             onPress={prevStep}
-            disabled={currentStep === 0}
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Previous
+                <Text style={[styles.footerButtonText, { color: colors.primary }]}>
+                  Back
             </Text>
           </TouchableOpacity>
-
-          {currentStep < steps.length - 1 ? (
+            )}
             <TouchableOpacity
               style={[
-                styles.navButton,
-                styles.primaryButton,
-                { 
-                  backgroundColor: canProceedFromStep(currentStep) ? '#F59E0B' : colors.border
-                }
+                styles.footerButton,
+                styles.nextButton,
+                { backgroundColor: colors.primary },
+                !canProceedFromStep(currentStep) && styles.disabledButton
               ]}
-              onPress={nextStep}
-              disabled={!canProceedFromStep(currentStep)}
-            >
-              <Text style={styles.primaryButtonText}>PROCEED</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.navButton,
-                styles.primaryButton,
-                { 
-                  backgroundColor: canProceedFromStep(currentStep) ? '#F59E0B' : colors.border
-                }
-              ]}
-              onPress={handleSubmit}
+              onPress={currentStep === steps.length - 1 ? handleSubmit : nextStep}
               disabled={!canProceedFromStep(currentStep) || loading}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Check size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.primaryButtonText}>PROCEED</Text>
-                </>
-              )}
+              <Text style={[styles.footerButtonText, { color: '#FFFFFF' }]}>
+                {currentStep === steps.length - 1 ? 'Submit' : 'Next'}
+              </Text>
             </TouchableOpacity>
-          )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.datePickerModalOverlay}>
+          <View style={[styles.datePickerModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.datePickerTitle, { color: colors.text }]}>Select Date of Birth</Text>
+            </View>
+            
+            <View style={styles.datePickerContent}>
+              <View style={styles.dateInputsContainer}>
+                <View style={styles.dateInputGroup}>
+                  <Text style={[styles.dateLabel, { color: colors.text }]}>Day</Text>
+                  <TextInput
+                    style={[styles.dateInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                    placeholder="DD"
+                    value={selectedDate.getDate().toString().padStart(2, '0')}
+                    onChangeText={(text) => {
+                      const day = parseInt(text) || 1;
+                      const newDate = new Date(selectedDate);
+                      newDate.setDate(day);
+                      setSelectedDate(newDate);
+                    }}
+                    keyboardType="numeric"
+                    maxLength={2}
+                  />
+                </View>
+                
+                <View style={styles.dateInputGroup}>
+                  <Text style={[styles.dateLabel, { color: colors.text }]}>Month</Text>
+                  <TextInput
+                    style={[styles.dateInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                    placeholder="MM"
+                    value={(selectedDate.getMonth() + 1).toString().padStart(2, '0')}
+                    onChangeText={(text) => {
+                      const month = parseInt(text) || 1;
+                      const newDate = new Date(selectedDate);
+                      newDate.setMonth(month - 1);
+                      setSelectedDate(newDate);
+                    }}
+                    keyboardType="numeric"
+                    maxLength={2}
+                  />
+                </View>
+                
+                <View style={styles.dateInputGroup}>
+                  <Text style={[styles.dateLabel, { color: colors.text }]}>Year</Text>
+                  <TextInput
+                    style={[styles.dateInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                    placeholder="YYYY"
+                    value={selectedDate.getFullYear().toString()}
+                    onChangeText={(text) => {
+                      const year = parseInt(text) || new Date().getFullYear();
+                      const newDate = new Date(selectedDate);
+                      newDate.setFullYear(year);
+                      setSelectedDate(newDate);
+                    }}
+                    keyboardType="numeric"
+                    maxLength={4}
+                  />
+                </View>
+              </View>
+            </View>
+            
+            <View style={styles.datePickerActions}>
+            <TouchableOpacity
+                style={[styles.datePickerButton, { borderColor: colors.border }]}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={[styles.datePickerButtonText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.datePickerButton, styles.datePickerPrimaryButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  const formattedDate = `${selectedDate.getDate().toString().padStart(2, '0')}/${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}/${selectedDate.getFullYear()}`;
+                  setFormData({ ...formData, dateOfBirth: formattedDate });
+                  setShowDatePicker(false);
+                }}
+              >
+                <Text style={styles.datePickerPrimaryButtonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
         </View>
       </View>
+      </Modal>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  modalContainer: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
-  header: {
+  modalContent: {
+    height: '90%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingTop: 50,
+    paddingBottom: 16,
+    marginBottom: 16,
     borderBottomWidth: 1,
   },
   closeButton: {
-    padding: 8,
+    padding: 4,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  modalTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginRight: 32,
   },
-  headerRight: {
-    width: 40,
+  stepContent: {
+    flex: 1,
+  },
+  description: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  termsContainer: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  waiverLogo: {
+    width: '100%',
+    height: 60,
+    maxWidth: 200,
+  },
+  termsScrollView: {
+    flex: 1,
+  },
+  termsScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 16,
+  },
+  htmlContainer: {
+    flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  signatureContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  signaturePadContainer: {
+    flex: 1,
+    position: 'relative',
+    minHeight: 200,
+  },
+  signatureButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  signatureButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  signatureButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   progressContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    alignItems: 'center',
+    marginTop: 'auto',
+    paddingTop: 16,
   },
   progressBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    width: '100%',
-    maxWidth: 400,
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   progressStep: {
     flex: 1,
@@ -905,91 +994,69 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  content: {
+  contentContainer: {
     flex: 1,
   },
-  stepContent: {
+  scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  welcomeCard: {
-    borderRadius: 15,
-    padding: 20,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    borderWidth: 1,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
-  logoContainer: {
-    marginBottom: 24,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
   },
-  logoPlaceholder: {
-    width: 120,
-    height: 80,
-    borderRadius: 12,
-    borderWidth: 2,
+  footerButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 8,
   },
-  logoText: {
-    fontSize: 18,
-    fontWeight: '700',
+  backButton: {
+    backgroundColor: 'transparent',
   },
-  welcomeContent: {
-    alignItems: 'center',
-    marginBottom: 32,
+  nextButton: {
+    flex: 2,
   },
-  welcomeTitle: {
+  disabledButton: {
+    opacity: 0.5,
+  },
+  footerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logo: {
+    width: '100%',
+    height: 60,
+    marginBottom: 8,
+  },
+  title: {
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 16,
   },
-  welcomeSubtitle: {
+  eventDetails: {
     fontSize: 16,
-    fontWeight: '600',
+    marginTop: 8,
     textAlign: 'center',
-    marginBottom: 12,
-  },
-  welcomeDescription: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  proceedButton: {
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  proceedButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textTransform: 'uppercase',
   },
   formSection: {
-    marginBottom: 24,
+    marginBottom: 20,
+    width: '100%',
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 12,
     textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    marginBottom: 20,
-    lineHeight: 22,
   },
   legalNotice: {
     fontSize: 14,
@@ -1008,21 +1075,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 15,
   },
-  termsContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    maxHeight: 400,
+  termsContentContainer: {
+    padding: 20,
   },
   termsTitle: {
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 12,
     textAlign: 'center',
-  },
-  termsScrollView: {
-    maxHeight: 320,
   },
   termsText: {
     fontSize: 13,
@@ -1036,38 +1096,35 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
-  },
   checkboxText: {
     fontSize: 14,
     lineHeight: 20,
     flex: 1,
     fontWeight: '600',
   },
-  signaturePadContainer: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  clearButton: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
+  acknowledgementContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 16,
+    gap: 12,
   },
-  clearButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    padding: 2,
+  },
+  checkboxInner: {
+    width: '100%',
+    height: '100%',
+    borderWidth: 2,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acknowledgementText: {
+    flex: 1,
+    fontSize: 14,
   },
   signatureNote: {
     fontSize: 12,
@@ -1106,44 +1163,115 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
   },
-  navigation: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingBottom: 34,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  navButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  primaryButton: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   sectionSubtitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 10,
+  },
+  witnessSection: {
+    marginTop: 30,
+    paddingTop: 20,
+    borderTopWidth: 1,
+  },
+  backgroundImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    top: 0,
+    left: 0,
+    opacity: 0.1,
+    zIndex: -1,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  datePickerButton: {
+    justifyContent: 'center',
+  },
+  datePickerText: {
+    fontSize: 16,
+    opacity: 0.8,
+  },
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerModal: {
+    width: '90%',
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    alignItems: 'center',
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  datePickerContent: {
+    padding: 20,
+  },
+  dateInputsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  dateInputGroup: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  dateInput: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    textAlign: 'center',
+    width: '100%',
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+  },
+  datePickerPrimaryButton: {
+    flex: 1,
+  },
+  datePickerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  datePickerPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 }); 

@@ -1684,6 +1684,9 @@ export interface Registration {
   VenueAddress: string;
   City: string;
   PostCode: string;
+  WaiverLink?: string;
+  WaiverLogo?: string;
+  WaiverBgImage?: string;
 }
 
 // Waiver interface - matches actual API response  
@@ -1830,6 +1833,33 @@ export const signWaiver = async (data: WaiverSigningData): Promise<any> => {
     return response.data;
   } catch (error: any) {
     console.error('Error signing waiver:', error.message || error);
+    throw error;
+  }
+};
+
+export interface WaiverSubmissionData {
+  fullName: string;
+  email: string;
+  signature: string;
+  witnessName: string;
+  witnessEmail: string;
+  witnessSignature: string;
+  waiverLink: string;
+}
+
+export interface WaiverSubmissionResponse {
+  success: boolean;
+  message: string;
+  waiverUrl?: string;
+}
+
+export const submitWaiver = async (data: WaiverSubmissionData): Promise<WaiverSubmissionResponse> => {
+  try {
+    // For demo purposes, using a mock API endpoint
+    const response = await axios.post('https://api.example.com/waivers/submit', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting waiver:', error);
     throw error;
   }
 };

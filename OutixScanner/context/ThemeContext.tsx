@@ -1,5 +1,7 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DarkTheme, DefaultTheme, Theme } from '@react-navigation/native';
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { useColorScheme } from 'react-native';
 
 type ThemeType = 'light' | 'dark';
 
@@ -48,17 +50,18 @@ const darkColors: ThemeColors = {
 };
 
 // Define theme context interface
-interface ThemeContextType {
-  theme: ThemeType;
-  colors: ThemeColors;
-  isDarkMode: boolean;
+export type ThemeContextType = {
+  theme: Theme;
+  colors: Theme['colors'];
+  isDark: boolean;
+  colorScheme: 'light' | 'dark';
   toggleTheme: () => void;
   // Event context
   selectedEventId: string | null;
   setSelectedEventId: (eventId: string) => void;
   selectedEventName: string | null;
   setSelectedEventName: (eventName: string) => void;
-}
+};
 
 // Create the context
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -69,7 +72,9 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
-  const [theme, setTheme] = useState<ThemeType>('light');
+  const systemColorScheme = useColorScheme();
+  const [isDark, setIsDark] = useState(systemColorScheme === 'dark');
+  const theme = isDark ? DarkTheme : DefaultTheme;
   const [selectedEventId, setSelectedEventId] = useState<string | null>('77809'); // Default to event 77809
   const [selectedEventName, setSelectedEventName] = useState<string | null>(null);
 
@@ -112,7 +117,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     const loadTheme = async () => {
       try {
         const savedTheme = await getStorageValue('theme', 'light');
-        setTheme(savedTheme as ThemeType);
+        setIsDark(savedTheme === 'dark');
       } catch (error) {
         console.error('Error loading theme:', error);
       }
@@ -136,11 +141,10 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   }, []);
 
   const toggleTheme = async () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
+    setIsDark(!isDark);
     
     // Save theme preference to storage
-    setStorageValue('theme', newTheme);
+    setStorageValue('theme', isDark ? 'dark' : 'light');
   };
 
   const updateSelectedEventId = async (eventId: string) => {
@@ -161,20 +165,22 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     }
   };
 
-  const colors = theme === 'light' ? lightColors : darkColors;
-  const isDarkMode = theme === 'dark';
+  const colors = isDark ? darkColors : lightColors;
+
+  const value: ThemeContextType = {
+    theme,
+    colors,
+    isDark,
+    colorScheme: isDark ? 'dark' : 'light',
+    toggleTheme,
+    selectedEventId,
+    setSelectedEventId: updateSelectedEventId,
+    selectedEventName,
+    setSelectedEventName: updateSelectedEventName,
+  };
 
   return (
-    <ThemeContext.Provider value={{
-      theme,
-      colors,
-      isDarkMode,
-      toggleTheme,
-      selectedEventId,
-      setSelectedEventId: updateSelectedEventId,
-      selectedEventName,
-      setSelectedEventName: updateSelectedEventName,
-    }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );
@@ -187,4 +193,6 @@ export const useTheme = () => {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
-}; 
+};
+
+export default ThemeContext; 

@@ -1,25 +1,19 @@
-import { Calendar, Car, ChevronDown, ClipboardList, ExternalLink, FileCheck, Hash, Mail, MapPin, Phone, User } from 'lucide-react-native';
+import { Calendar, ChevronDown, ClipboardList, FileCheck, Mail, MapPin, Phone, User } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
-import { getRegistrations, getWaivers, isAuthenticated, login, Registration, Waiver } from '../../services/api';
-
-type TabType = 'registrations' | 'waivers';
+import { getRegistrations, isAuthenticated, login, Registration } from '../../services/api';
 
 export default function Registrants() {
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<TabType>('registrations');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [waivers, setWaivers] = useState<Waiver[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showEventDropdown, setShowEventDropdown] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [showWaiverModal, setShowWaiverModal] = useState(false);
-  const [selectedWaiverUrl, setSelectedWaiverUrl] = useState<string>('');
+  const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
 
   // Check authentication and auto-login if needed
   const checkAuthAndLogin = async () => {
@@ -64,42 +58,11 @@ export default function Registrants() {
       const data = await getRegistrations();
       console.log('Registrations loaded:', data.length, 'items');
       setRegistrations(data);
-      
-      // Auto-select first event for waivers if available
-      if (data.length > 0 && !selectedEventId) {
-        console.log('Auto-selecting first event:', data[0].id);
-        setSelectedEventId(data[0].id);
-        await loadWaivers(data[0].id);
-      }
     } catch (error) {
       console.error('Error loading registrations:', error);
       // Show some user feedback
       setError(error instanceof Error ? error.message : 'Failed to load registrations');
       setRegistrations([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWaivers = async (eventId: string) => {
-    try {
-      console.log('Starting to load waivers for event:', eventId);
-      setLoading(true);
-      setError(null);
-      
-      // Ensure we're authenticated first
-      const authenticated = await checkAuthAndLogin();
-      if (!authenticated) {
-        return;
-      }
-      
-      const data = await getWaivers(eventId);
-      console.log('Waivers loaded:', data.length, 'items');
-      setWaivers(data);
-    } catch (error) {
-      console.error('Error loading waivers:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load waivers');
-      setWaivers([]);
     } finally {
       setLoading(false);
     }
@@ -114,147 +77,27 @@ export default function Registrants() {
     setError(null);
     
     try {
-      if (activeTab === 'registrations') {
-        await loadRegistrations();
-      } else if (selectedEventId) {
-        await loadWaivers(selectedEventId);
-      }
+      await loadRegistrations();
     } catch (error) {
       console.error('Refresh error:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [activeTab, selectedEventId]);
+  }, []);
 
-  const handleEventSelect = async (eventId: string) => {
-    setSelectedEventId(eventId);
-    setShowEventDropdown(false);
-    await loadWaivers(eventId);
-  };
-
-  const handleSignWaiver = (waiverUrl: string) => {
-    setSelectedWaiverUrl(waiverUrl);
+  const handleSignWaiver = (registration: Registration) => {
+    setSelectedRegistration(registration);
     setShowWaiverModal(true);
   };
 
   const closeWaiverModal = () => {
     setShowWaiverModal(false);
-    setSelectedWaiverUrl('');
-    // Refresh waivers to get updated status
-    if (selectedEventId) {
-      loadWaivers(selectedEventId);
-    }
+    setSelectedRegistration(null);
+    // Refresh registrations to get updated status
+    loadRegistrations();
   };
 
-  const renderTabs = () => (
-    <View style={styles.tabContainer}>
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          { backgroundColor: activeTab === 'registrations' ? colors.primary : 'transparent' }
-        ]}
-        onPress={() => setActiveTab('registrations')}
-      >
-        <ClipboardList size={20} color={activeTab === 'registrations' ? '#fff' : colors.text} />
-        <Text style={[
-          styles.tabText,
-          { color: activeTab === 'registrations' ? '#fff' : colors.text }
-        ]}>
-          Registrations
-        </Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          { backgroundColor: activeTab === 'waivers' ? colors.primary : 'transparent' }
-        ]}
-        onPress={() => setActiveTab('waivers')}
-      >
-        <FileCheck size={20} color={activeTab === 'waivers' ? '#fff' : colors.text} />
-        <Text style={[
-          styles.tabText,
-          { color: activeTab === 'waivers' ? '#fff' : colors.text }
-        ]}>
-          Waivers
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
 
-  const renderEventSelector = () => {
-    if (activeTab !== 'waivers' || registrations.length === 0) return null;
-
-    const selectedEvent = registrations.find(event => event.id === selectedEventId);
-    
-    return (
-      <View style={styles.eventSelector}>
-        <Text style={[styles.selectorLabel, { color: colors.text }]}>Select Event:</Text>
-        
-        <TouchableOpacity
-          style={[styles.dropdownButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => setShowEventDropdown(true)}
-        >
-          <Text style={[styles.dropdownButtonText, { color: colors.text }]} numberOfLines={1}>
-            {selectedEvent ? selectedEvent.EventName : 'Select an event'}
-          </Text>
-          <ChevronDown size={20} color={colors.text} />
-        </TouchableOpacity>
-
-        <Modal
-          visible={showEventDropdown}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowEventDropdown(false)}
-        >
-      <TouchableOpacity 
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowEventDropdown(false)}
-      >
-            <View style={[styles.dropdownModal, { backgroundColor: colors.card }]}>
-              <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Event</Text>
-        </View>
-              
-              <FlatList
-                data={registrations}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.dropdownItem,
-                      { borderBottomColor: colors.border },
-                      selectedEventId === item.id && { backgroundColor: colors.primary + '20' }
-                    ]}
-                    onPress={() => {
-                      handleEventSelect(item.id);
-                      setShowEventDropdown(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        { color: selectedEventId === item.id ? colors.primary : colors.text }
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {item.EventName}
-                    </Text>
-                    <Text style={[styles.dropdownItemDate, { color: colors.secondary }]}>
-                      {new Date(item.showStart).toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                showsVerticalScrollIndicator={false}
-                style={styles.dropdownList}
-              />
-        </View>
-      </TouchableOpacity>
-        </Modal>
-      </View>
-    );
-  };
 
   const renderRegistrationItem = ({ item }: { item: Registration }) => (
     <View style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -265,7 +108,7 @@ export default function Registrants() {
             <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={2}>
               {item.EventName}
             </Text>
-            <Text style={[styles.itemDate, { color: colors.secondary }]}>
+            <Text style={[styles.itemDate, { color: colors.text }]}>
               {new Date(item.showStart).toLocaleDateString()}
             </Text>
           </View>
@@ -273,127 +116,48 @@ export default function Registrants() {
       </View>
       
       <View style={styles.itemDetails}>
-        <Text style={[styles.itemSubtitle, { color: colors.secondary }]} numberOfLines={1}>
+        <Text style={[styles.itemSubtitle, { color: colors.text }]} numberOfLines={1}>
           {item.EventSubtitle || 'No subtitle'}
         </Text>
         <View style={styles.detailsGrid}>
           <View style={styles.detailItem}>
-            <MapPin size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
+            <MapPin size={16} color={colors.text} />
+            <Text style={[styles.itemInfo, { color: colors.text }]} numberOfLines={1}>
               {item.VenueName}
             </Text>
           </View>
           
           <View style={styles.detailItem}>
-            <User size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
+            <User size={16} color={colors.text} />
+            <Text style={[styles.itemInfo, { color: colors.text }]} numberOfLines={1}>
               {item.organizerName}
             </Text>
           </View>
           
           <View style={styles.detailItem}>
-            <MapPin size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
+            <MapPin size={16} color={colors.text} />
+            <Text style={[styles.itemInfo, { color: colors.text }]} numberOfLines={1}>
               {item.City}, {item.PostCode}
             </Text>
           </View>
         </View>
-      </View>
-    </View>
-  );
-
-  const renderWaiverItem = ({ item }: { item: Waiver }) => (
-    <View style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.itemHeader}>
-        <View style={styles.itemTitleContainer}>
-          <FileCheck size={24} color={colors.primary} />
-          <View style={styles.participantInfo}>
-            <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
-              {item['Driver Rider Name']}
-            </Text>
-            <Text style={[styles.itemSubtitle, { color: colors.secondary }]} numberOfLines={1}>
-              {item.Category} - {item.ItemName}
-            </Text>
-          </View>
-        </View>
-      </View>
-      
-      <View style={styles.itemDetails}>
-        <View style={styles.detailsGrid}>
-          <View style={styles.detailItem}>
-            <Mail size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
-              {item.Email}
-            </Text>
-          </View>
-          
-          <View style={styles.detailItem}>
-            <Phone size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
-              {item.Mobile}
-            </Text>
-          </View>
-          
-          <View style={styles.detailItem}>
-            <Car size={16} color={colors.secondary} />
-            <Text style={[styles.itemInfo, { color: colors.secondary }]} numberOfLines={1}>
-              {item.Manufacturer} {item.Model} ({item.Year})
-            </Text>
-          </View>
-          
-          {item['Racing Number'] && item['Racing Number'] !== 'NA' && (
-            <View style={styles.detailItem}>
-              <Hash size={16} color={colors.secondary} />
-              <Text style={[styles.itemInfo, { color: colors.secondary }]}>
-                Racing #{item['Racing Number']}
-              </Text>
-            </View>
-          )}
-        </View>
         
-        <View style={styles.waiverActions}>
-          <View style={styles.waiverStatus}>
-            <View style={[
-              styles.statusBadge,
-              { 
-                backgroundColor: item.WaiverSigned === 'YES' ? '#10B98120' : '#EF444420',
-                borderColor: item.WaiverSigned === 'YES' ? '#10B981' : '#EF4444',
-              }
-            ]}>
-              <Text style={[
-                styles.statusBadgeText, 
-                { color: item.WaiverSigned === 'YES' ? '#10B981' : '#EF4444' }
-              ]}>
-                {item.WaiverSigned === 'YES' ? '✓ Waiver Signed' : '✗ Waiver Pending'}
-              </Text>
+        {/* Waiver Information */}
+        {item.WaiverLink && (
+          <View style={styles.waiverSection}>
+            <View style={styles.waiverHeader}>
+              <FileCheck size={20} color={colors.primary} />
+              <Text style={[styles.waiverTitle, { color: colors.text }]}>Waiver Required</Text>
             </View>
-            
-            <View style={[
-              styles.statusBadge,
-              { 
-                backgroundColor: item.CheckedIn === 'YES' ? '#10B98120' : '#F59E0B20',
-                borderColor: item.CheckedIn === 'YES' ? '#10B981' : '#F59E0B',
-              }
-            ]}>
-              <Text style={[
-                styles.statusBadgeText, 
-                { color: item.CheckedIn === 'YES' ? '#10B981' : '#F59E0B' }
-              ]}>
-                {item.CheckedIn === 'YES' ? '✓ Checked In' : '⏳ Check-in Pending'}
-      </Text>
-            </View>
-          </View>
-          
-          {item.WaiverSigned !== 'YES' && (
             <TouchableOpacity
-              style={[styles.signWaiverButton, { backgroundColor: colors.primary }]}
-              onPress={() => handleSignWaiver(item.WaiverLink)}
+              style={[styles.signButton, { backgroundColor: '#F59E0B' }]}
+              onPress={() => handleSignWaiver(item)}
             >
-              <ExternalLink size={18} color="#FFFFFF" />
-              <Text style={styles.signWaiverButtonText}>Sign Waiver</Text>
+              <FileCheck size={16} color="#FFFFFF" />
+              <Text style={styles.signButtonText}>Sign Waiver</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -434,30 +198,10 @@ export default function Registrants() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>Registrants</Text>
       </View>
 
-      {renderTabs()}
-      {renderEventSelector()}
-      
-      {activeTab === 'registrations' ? (
       <FlatList
-          data={registrations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRegistrationItem}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
-            />
-          }
-          contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <FlatList
-          data={waivers}
-          keyExtractor={(item) => item.Ref}
-          renderItem={renderWaiverItem}
+        data={registrations}
+        keyExtractor={(item) => item.id}
+        renderItem={renderRegistrationItem}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -466,44 +210,57 @@ export default function Registrants() {
             tintColor={colors.primary}
           />
         }
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+      />
+      
+      {/* WaiverSigningModal */}
+      {selectedRegistration && selectedRegistration.WaiverLink && (
+        <WaiverSigningModal
+          visible={showWaiverModal}
+          onClose={closeWaiverModal}
+          waiver={{
+            Ref: selectedRegistration.id,
+            WaiverLink: selectedRegistration.WaiverLink,
+            'Driver Rider Name': selectedRegistration.EventName,
+            Category: 'Event Registration',
+            ItemName: selectedRegistration.EventName,
+            'Client Name': selectedRegistration.organizerName,
+            Email: '',
+            Mobile: '',
+            'Contact Name': selectedRegistration.organizerName,
+            Address: selectedRegistration.VenueAddress,
+            CrewNames: '',
+            Amount: '',
+            Manufacturer: '',
+            Model: '',
+            'Engine Capacity': '',
+            Year: '',
+            'Quickest ET': '',
+            'Quickest MPH': '',
+            'ANDRA License Number': '',
+            'Emergency Contact Name': '',
+            'Emergency Contact Number': '',
+            'Racing Number': '',
+            WaiverSigned: 'No',
+            CheckedIn: 'No',
+            RegisteredDate: new Date().toISOString()
+          }}
+          eventName={selectedRegistration.EventName}
+          eventDate={selectedRegistration.showStart}
+          waiverLink={selectedRegistration.WaiverLink}
+          waiverLogo={selectedRegistration.WaiverLogo}
+          waiverBgImage={selectedRegistration.WaiverBgImage}
+          onSubmit={async (waiverData) => {
+            try {
+              // Handle waiver submission
+              closeWaiverModal();
+            } catch (error) {
+              console.error('Error submitting waiver:', error);
+            }
+          }}
         />
       )}
-      
-      {/* WebView Modal for Waiver Signing */}
-      <Modal
-        visible={showWaiverModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeWaiverModal}
-      >
-        <View style={[styles.waiverModalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.waiverModalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.waiverModalTitle, { color: colors.text }]}>Sign Waiver</Text>
-            <TouchableOpacity
-              style={[styles.closeWaiverButton, { backgroundColor: colors.card }]}
-              onPress={closeWaiverModal}
-            >
-              <Text style={[styles.closeWaiverButtonText, { color: colors.text }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {selectedWaiverUrl ? (
-            <WebView
-              source={{ uri: selectedWaiverUrl }}
-              style={styles.webView}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={[styles.webViewLoading, { backgroundColor: colors.background }]}>
-                  <ActivityIndicator size="large" color={colors.primary} />
-                  <Text style={[styles.loadingText, { color: colors.text }]}>Loading waiver...</Text>
-                </View>
-              )}
-            />
-          ) : null}
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -516,7 +273,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerTitle: {
     fontSize: 28,
@@ -548,7 +304,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
     marginBottom: 12,
   },
   selectorLabel: {
@@ -738,63 +493,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  waiverModalContainer: {
-    flex: 1,
-  },
-  waiverModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  waiverModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'center',
-  },
-  closeWaiverButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  closeWaiverButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  webView: {
-    flex: 1,
-  },
-  webViewLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   participantInfo: {
     flexDirection: 'column',
     flex: 1,
     marginLeft: 12,
   },
   detailsGrid: {
-    flexDirection: 'column',
     gap: 8,
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  signButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
+    marginTop: 12,
+    gap: 8,
   },
-  statusBadgeText: {
-    fontSize: 12,
+  signButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  waiverSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  waiverHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  waiverTitle: {
+    fontSize: 16,
     fontWeight: '600',
   },
 }); 
