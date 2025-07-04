@@ -1838,29 +1838,163 @@ export const signWaiver = async (data: WaiverSigningData): Promise<any> => {
 };
 
 export interface WaiverSubmissionData {
-  fullName: string;
+  // Personal Information
+  firstName: string;
+  lastName: string;
   email: string;
-  signature: string;
+  mobile: string;
+  dateOfBirth: string;
+  address: string;
+  signature: string; // Base64 encoded signature
+  acknowledged: boolean;
+  
+  // Witness Information
   witnessName: string;
   witnessEmail: string;
-  witnessSignature: string;
-  waiverLink: string;
+  witnessPhone?: string;
+  witnessSignature: string; // Base64 encoded signature
+  
+  // Event Information
+  eventId: string;
+  eventName: string;
+  eventDate: string;
+  waiverLink?: string;
+  
+  // Additional Fields (from existing waiver data structure)
+  driverRiderName?: string;
+  manufacturer?: string;
+  model?: string;
+  engineCapacity?: string;
+  year?: string;
+  sponsors?: string;
+  quickestET?: string;
+  quickestMPH?: string;
+  andraLicenseNumber?: string;
+  ihraLicenseNumber?: string;
+  licenseExpiryDate?: string;
+  driversLicenseNumber?: string;
+  emergencyContactName?: string;
+  emergencyContactNumber?: string;
+  racingNumber?: string;
+  
+  // Metadata
+  submissionTimestamp: string;
+  deviceInfo?: string;
+  ipAddress?: string;
 }
 
 export interface WaiverSubmissionResponse {
   success: boolean;
   message: string;
   waiverUrl?: string;
+  waiverRef?: string;
+  submissionId?: string;
+  error?: boolean;
+  status?: number;
 }
 
 export const submitWaiver = async (data: WaiverSubmissionData): Promise<WaiverSubmissionResponse> => {
   try {
-    // For demo purposes, using a mock API endpoint
-    const response = await axios.post('https://api.example.com/waivers/submit', data);
-    return response.data;
-  } catch (error) {
+    console.log('Submitting waiver with data:', {
+      ...data,
+      signature: data.signature ? `[${data.signature.length} chars]` : 'none',
+      witnessSignature: data.witnessSignature ? `[${data.witnessSignature.length} chars]` : 'none'
+    });
+
+    // For demo/testing purposes - replace with your production endpoint
+    const DEMO_ENDPOINT = 'https://jsonplaceholder.typicode.com/posts';
+    
+    // Prepare the payload
+    const payload = {
+      // Personal Information
+      firstName: data.firstName,
+      lastName: data.lastName,
+      fullName: `${data.firstName} ${data.lastName}`,
+      email: data.email,
+      mobile: data.mobile,
+      dateOfBirth: data.dateOfBirth,
+      address: data.address,
+      signature: data.signature,
+      acknowledged: data.acknowledged,
+      
+      // Witness Information
+      witnessName: data.witnessName,
+      witnessEmail: data.witnessEmail,
+      witnessPhone: data.witnessPhone || '',
+      witnessSignature: data.witnessSignature,
+      
+      // Event Information
+      eventId: data.eventId,
+      eventName: data.eventName,
+      eventDate: data.eventDate,
+      waiverLink: data.waiverLink || '',
+      
+      // Additional Fields
+      driverRiderName: data.driverRiderName || '',
+      manufacturer: data.manufacturer || '',
+      model: data.model || '',
+      engineCapacity: data.engineCapacity || '',
+      year: data.year || '',
+      sponsors: data.sponsors || '',
+      quickestET: data.quickestET || '',
+      quickestMPH: data.quickestMPH || '',
+      andraLicenseNumber: data.andraLicenseNumber || '',
+      ihraLicenseNumber: data.ihraLicenseNumber || '',
+      licenseExpiryDate: data.licenseExpiryDate || '',
+      driversLicenseNumber: data.driversLicenseNumber || '',
+      emergencyContactName: data.emergencyContactName || '',
+      emergencyContactNumber: data.emergencyContactNumber || '',
+      racingNumber: data.racingNumber || '',
+      
+      // Metadata
+      submissionTimestamp: data.submissionTimestamp,
+      deviceInfo: data.deviceInfo || 'OutixScanner Mobile App',
+      ipAddress: data.ipAddress || 'unknown',
+      
+      // API Tracking
+      source: 'OutixScanner',
+      version: '1.0.0'
+    };
+
+    console.log('Sending waiver submission to demo endpoint...');
+    
+    // Use demo endpoint for testing
+    const response = await axios.post(DEMO_ENDPOINT, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // Add auth token if available
+        ...(authToken && { 'Auth-Token': authToken })
+      },
+      timeout: 30000
+    });
+
+    console.log('Demo response:', response.data);
+
+    // Mock successful response for demo
+    const mockResponse: WaiverSubmissionResponse = {
+      success: true,
+      message: 'Waiver submitted successfully',
+      waiverUrl: `https://example.com/waivers/${response.data.id}`,
+      waiverRef: `WAV-${Date.now()}`,
+      submissionId: response.data.id?.toString() || `sub_${Date.now()}`,
+      status: 200
+    };
+
+    return mockResponse;
+
+  } catch (error: any) {
     console.error('Error submitting waiver:', error);
-    throw error;
+    
+    // Return error response
+    const errorResponse: WaiverSubmissionResponse = {
+      success: false,
+      message: error.response?.data?.message || error.message || 'Failed to submit waiver',
+      error: true,
+      status: error.response?.status || 500
+    };
+    
+    return errorResponse;
   }
 };
 

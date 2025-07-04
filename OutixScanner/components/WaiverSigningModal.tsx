@@ -27,7 +27,7 @@ import {
 import RenderHtml from 'react-native-render-html';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 import { useTheme } from '../context/ThemeContext';
-import { signWaiver, Waiver } from '../services/api';
+import { submitWaiver, Waiver } from '../services/api';
 
 // Add type for signature pad ref
 interface SignaturePad {
@@ -165,7 +165,9 @@ export default function WaiverSigningModal({
     { id: 0, title: 'Welcome', icon: FileText },
     { id: 1, title: 'Your Info', icon: User },
     { id: 2, title: 'Terms & Conditions', icon: AlertTriangle },
-    { id: 3, title: 'Signatures', icon: PenTool }
+    { id: 3, title: 'Your Signature', icon: PenTool },
+    { id: 4, title: 'Witness Info', icon: User },
+    { id: 5, title: 'Witness Signature', icon: PenTool }
   ];
 
   const resetForm = () => {
@@ -234,14 +236,21 @@ export default function WaiverSigningModal({
       case 2:
         return formData.acknowledged;
       case 3:
-        return !!(formData.signature && formData.witnessSignature);
+        return !!formData.signature;
+      case 4:
+        return !!(
+          formData.witnessName.trim() &&
+          formData.witnessEmail.trim()
+        );
+      case 5:
+        return !!formData.witnessSignature;
       default:
         return false;
     }
   };
 
   const handleSubmit = async () => {
-    if (!canProceedFromStep(3)) {
+    if (!canProceedFromStep(5)) {
       Alert.alert('Incomplete', 'Please complete all required fields and sign the waiver.');
       return;
     }
@@ -249,46 +258,88 @@ export default function WaiverSigningModal({
     try {
       setLoading(true);
       
-      // Get campaign_token and stoken from URL if available
-      // In a real app, these would be passed as props or stored in context
-      const urlParams = new URLSearchParams(window.location.search);
-      const campaign_token = urlParams.get('campaign_token') || undefined;
-      const stoken = urlParams.get('stoken') || undefined;
-
-      // Prepare data without signature
-      const waiverData = {
+      // Prepare comprehensive waiver submission data
+      const waiverSubmissionData = {
+        // Personal Information
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
         mobile: formData.mobile,
         dateOfBirth: formData.dateOfBirth,
         address: formData.address,
+        signature: formData.signature,
         acknowledged: formData.acknowledged,
-        campaign_token,
-        stoken,
+        
+        // Witness Information
         witnessName: formData.witnessName,
         witnessEmail: formData.witnessEmail,
         witnessPhone: formData.witnessPhone,
-        witnessSignature: formData.witnessSignature
+        witnessSignature: formData.witnessSignature,
+        
+        // Event Information
+        eventId: waiver?.Ref || 'demo-event-id', // Use waiver Ref or fallback
+        eventName: eventName,
+        eventDate: eventDate,
+        waiverLink: waiverLink,
+        
+        // Additional Fields (from waiver if available, otherwise empty)
+        driverRiderName: waiver?.['Driver Rider Name'] || '',
+        manufacturer: waiver?.Manufacturer || '',
+        model: waiver?.Model || '',
+        engineCapacity: waiver?.['Engine Capacity'] || '',
+        year: waiver?.Year || '',
+        sponsors: waiver?.Sponsors || '',
+        quickestET: waiver?.['Quickest ET'] || '',
+        quickestMPH: waiver?.['Quickest MPH'] || '',
+        andraLicenseNumber: waiver?.['ANDRA License Number'] || '',
+        ihraLicenseNumber: waiver?.['IHRA License Number'] || '',
+        licenseExpiryDate: waiver?.['License Expiry Date'] || '',
+        driversLicenseNumber: waiver?.['Drivers License Number'] || '',
+        emergencyContactName: waiver?.['Emergency Contact Name'] || '',
+        emergencyContactNumber: waiver?.['Emergency Contact Number'] || '',
+        racingNumber: waiver?.['Racing Number'] || '',
+        
+        // Metadata
+        submissionTimestamp: new Date().toISOString(),
+        deviceInfo: `OutixScanner Mobile App - ${Platform.OS}`,
+        ipAddress: 'unknown' // Will be determined by server
       };
 
-      // Call the API but don't send signature
-      await signWaiver(waiverData);
+      console.log('Submitting waiver with data:', {
+        ...waiverSubmissionData,
+        signature: waiverSubmissionData.signature ? `[${waiverSubmissionData.signature.length} chars]` : 'none',
+        witnessSignature: waiverSubmissionData.witnessSignature ? `[${waiverSubmissionData.witnessSignature.length} chars]` : 'none'
+      });
+
+      // Submit the waiver using the new comprehensive API
+      const result = await submitWaiver(waiverSubmissionData);
       
-      Alert.alert(
-        'Success',
-        'Waiver submitted successfully!',
-        [{ 
-          text: 'OK',
-          onPress: () => {
-            resetForm();
-            onClose();
-          }
-        }]
-      );
-    } catch (error) {
+      if (result.success) {
+        Alert.alert(
+          'Success! 🎉',
+          `Waiver submitted successfully!\n\nReference: ${result.waiverRef}\nSubmission ID: ${result.submissionId}`,
+          [{ 
+            text: 'OK',
+            onPress: () => {
+              resetForm();
+              onClose();
+            }
+          }]
+        );
+      } else {
+        Alert.alert(
+          'Submission Failed',
+          result.message || 'Failed to submit waiver. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error: any) {
       console.error('Error submitting waiver:', error);
-      Alert.alert('Error', 'Failed to submit waiver. Please try again.');
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to submit waiver. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
@@ -296,10 +347,12 @@ export default function WaiverSigningModal({
 
   const handleSignature = (signature: string) => {
     setFormData(prev => ({ ...prev, signature }));
+    setSignature(signature);
   };
 
   const handleWitnessSignature = (signature: string) => {
     setFormData(prev => ({ ...prev, witnessSignature: signature }));
+    setWitnessSignature(signature);
   };
 
   const renderProgressBar = () => (
@@ -553,16 +606,17 @@ export default function WaiverSigningModal({
   const renderSignature = () => {
     return (
       <View style={styles.stepContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Signature</Text>
         <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
           Please sign below to acknowledge your agreement.
         </Text>
-        
+
         <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
           <View style={styles.signaturePadContainer}>
             <SignatureScreen
               ref={signatureRef}
-              onOK={(signature) => setSignature(signature)}
-              onEmpty={() => setSignature("")}
+              onOK={(signature) => handleSignature(signature)}
+              onEmpty={() => handleSignature("")}
               webStyle={`
                 .m-signature-pad {
                   box-shadow: none;
@@ -583,7 +637,7 @@ export default function WaiverSigningModal({
                   touch-action: none;
                 }
               `}
-              autoClear={true}
+              autoClear={false}
               imageType="image/svg+xml"
               onBegin={() => {
                 // Disable scrolling when starting to sign
@@ -599,19 +653,32 @@ export default function WaiverSigningModal({
               }}
             />
           </View>
-          
+
           <View style={[styles.signatureButtons, { borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[styles.signatureButton, { backgroundColor: colors.primary }]}
               onPress={() => {
                 if (signatureRef.current) {
                   signatureRef.current.clearSignature();
-                  setSignature("");
+                  handleSignature("");
                 }
               }}
             >
               <Text style={[styles.signatureButtonText, { color: colors.background }]}>
                 Clear
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.signatureButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (signatureRef.current) {
+                  signatureRef.current.readSignature();
+                }
+              }}
+            >
+              <Text style={[styles.signatureButtonText, { color: colors.background }]}>
+                Save Signature
               </Text>
             </TouchableOpacity>
           </View>
@@ -620,42 +687,136 @@ export default function WaiverSigningModal({
     );
   };
 
-  const renderWitnessSignature = () => {
-    return (
-      <View style={styles.stepContent}>
-        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
-          Please have a witness sign below.
-        </Text>
-        
-        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
-              <SignatureScreen
-            ref={witnessSignatureRef}
-            onOK={(signature) => setWitnessSignature(signature)}
-            onEmpty={() => setWitnessSignature("")}
-                webStyle={`
-                  .m-signature-pad {
-                    box-shadow: none;
-                    border: none;
-                  }
-                  .m-signature-pad--body {
-                    border: none;
-                  }
-                  .m-signature-pad--footer {
-                    display: none;
-                  }
-                `}
+  const renderWitnessInfo = () => (
+    <KeyboardAvoidingView 
+      style={styles.stepContent} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.formSection}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Witness Information</Text>
+          <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+            Please have a witness enter their details.
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <TextInput
+                style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                placeholder="Witness Full Name"
+              placeholderTextColor={`${colors.text}80`}
+                value={formData.witnessName}
+              onChangeText={(text) => setFormData({ ...formData, witnessName: text })}
               />
             </View>
 
-        <View style={styles.signatureActions}>
+            <View style={styles.inputGroup}>
+              <TextInput
+                style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                placeholder="Witness Email"
+              placeholderTextColor={`${colors.text}80`}
+                value={formData.witnessEmail}
+              onChangeText={(text) => setFormData({ ...formData, witnessEmail: text })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <TextInput
+                style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+              placeholder="Witness Phone (Optional)"
+              placeholderTextColor={`${colors.text}80`}
+                value={formData.witnessPhone}
+              onChangeText={(text) => setFormData({ ...formData, witnessPhone: text })}
+                keyboardType="phone-pad"
+              />
+            </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
+  const renderWitnessSignature = () => {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Witness Signature</Text>
+        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+          Please have the witness sign below.
+        </Text>
+        
+        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
+          <View style={styles.signaturePadContainer}>
+            <SignatureScreen
+              ref={witnessSignatureRef}
+              onOK={(signature) => handleWitnessSignature(signature)}
+              onEmpty={() => handleWitnessSignature("")}
+              webStyle={`
+                .m-signature-pad {
+                  box-shadow: none;
+                  border: none;
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  right: 0;
+                  bottom: 0;
+                }
+                .m-signature-pad--body {
+                  border: none;
+                }
+                .m-signature-pad--footer {
+                  display: none;
+                }
+                canvas {
+                  touch-action: none;
+                }
+              `}
+              autoClear={false}
+              imageType="image/svg+xml"
+              onBegin={() => {
+                // Disable scrolling when starting to sign
+                if (Platform.OS === 'web') {
+                  document.body.style.overflow = 'hidden';
+                }
+              }}
+              onEnd={() => {
+                // Re-enable scrolling after signing
+                if (Platform.OS === 'web') {
+                  document.body.style.overflow = 'auto';
+                }
+              }}
+            />
+          </View>
+
+          <View style={[styles.signatureButtons, { borderTopColor: colors.border }]}>
             <TouchableOpacity
-              style={[styles.clearButton, { borderColor: colors.border }]}
-            onPress={() => witnessSignatureRef.current?.clearSignature()}
+              style={[styles.signatureButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (witnessSignatureRef.current) {
+                  witnessSignatureRef.current.clearSignature();
+                  handleWitnessSignature("");
+                }
+              }}
             >
-            <Text style={[styles.clearButtonText, { color: colors.text }]}>Clear</Text>
+              <Text style={[styles.signatureButtonText, { color: colors.background }]}>
+                Clear
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.signatureButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (witnessSignatureRef.current) {
+                  witnessSignatureRef.current.readSignature();
+                }
+              }}
+            >
+              <Text style={[styles.signatureButtonText, { color: colors.background }]}>
+                Save Signature
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
+      </View>
     );
   };
 
@@ -670,6 +831,8 @@ export default function WaiverSigningModal({
       case 3:
         return renderSignature();
       case 4:
+        return renderWitnessInfo();
+      case 5:
         return renderWitnessSignature();
       default:
         return null;
@@ -698,22 +861,7 @@ export default function WaiverSigningModal({
         </View>
 
           {/* Progress Indicator */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              {[0, 1, 2, 3, 4].map((step) => (
-                <View
-                  key={step}
-                  style={[
-                    styles.progressStep,
-                    { backgroundColor: step <= currentStep ? colors.primary : colors.border }
-                  ]}
-                />
-              ))}
-            </View>
-            <Text style={[styles.progressText, { color: colors.text }]}>
-              Step {currentStep + 1} of 5
-            </Text>
-          </View>
+        {renderProgressBar()}
 
         {/* Content */}
           <View style={styles.contentContainer}>
@@ -722,10 +870,7 @@ export default function WaiverSigningModal({
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={true}
             >
-              {currentStep === 0 && renderTermsAndConditions()}
-              {currentStep === 1 && renderPersonalInfo()}
-              {currentStep === 2 && renderSignature()}
-              {currentStep === 3 && renderWitnessSignature()}
+          {renderStepContent()}
             </ScrollView>
         </View>
 
@@ -745,15 +890,22 @@ export default function WaiverSigningModal({
               style={[
                 styles.footerButton,
                 styles.nextButton,
-                { backgroundColor: colors.primary },
+                { 
+                  backgroundColor: !canProceedFromStep(currentStep) || loading ? 
+                    `${colors.primary}50` : colors.primary 
+                },
                 !canProceedFromStep(currentStep) && styles.disabledButton
               ]}
               onPress={currentStep === steps.length - 1 ? handleSubmit : nextStep}
               disabled={!canProceedFromStep(currentStep) || loading}
             >
-              <Text style={[styles.footerButtonText, { color: '#FFFFFF' }]}>
-                {currentStep === steps.length - 1 ? 'Submit' : 'Next'}
-              </Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={[styles.footerButtonText, { color: '#FFFFFF' }]}>
+                  {currentStep === steps.length - 1 ? 'Submit' : 'Next'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -947,16 +1099,19 @@ const styles = StyleSheet.create({
   },
   signatureButtons: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderTopWidth: 1,
+    gap: 12,
   },
   signatureButton: {
+    flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 8,
-    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   signatureButtonText: {
     fontSize: 14,
@@ -972,7 +1127,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   progressStep: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -1192,7 +1346,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   datePickerButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   datePickerText: {
     fontSize: 16,

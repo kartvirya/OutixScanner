@@ -77,7 +77,7 @@ export default function Registrants() {
     setError(null);
     
     try {
-      await loadRegistrations();
+        await loadRegistrations();
     } catch (error) {
       console.error('Refresh error:', error);
     } finally {
@@ -157,10 +157,10 @@ export default function Registrants() {
               <Text style={styles.signButtonText}>Sign Waiver</Text>
             </TouchableOpacity>
           </View>
-        )}
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
 
   // Show loading screen while checking authentication or loading initial data
   if (!authChecked || (loading && registrations.length === 0)) {
@@ -199,20 +199,20 @@ export default function Registrants() {
       </View>
 
       <FlatList
-        data={registrations}
-        keyExtractor={(item) => item.id}
-        renderItem={renderRegistrationItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-        contentContainerStyle={styles.listContainer}
+          data={registrations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderRegistrationItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+          contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-      />
+        />
       
       {/* WaiverSigningModal */}
       {selectedRegistration && selectedRegistration.WaiverLink && (
