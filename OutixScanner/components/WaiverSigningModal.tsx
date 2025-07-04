@@ -79,6 +79,7 @@ interface WaiverSigningModalProps {
   waiverLink?: string; // Dynamic waiver link
   waiverLogo?: string; // Dynamic waiver logo
   waiverBgImage?: string; // Dynamic waiver background image
+  role?: 'driver' | 'crew'; // Add role parameter
 }
 
 export default function WaiverSigningModal({
@@ -90,7 +91,8 @@ export default function WaiverSigningModal({
   eventDate,
   waiverLink,
   waiverLogo,
-  waiverBgImage
+  waiverBgImage,
+  role = 'driver' // Default to driver if not specified
 }: WaiverSigningModalProps) {
   // Theme and window dimensions
   const { colors, colorScheme } = useTheme();
@@ -140,26 +142,27 @@ export default function WaiverSigningModal({
     }
   }, [visible, waiverLink]);
 
+  // Reset form when modal opens or when role/waiver changes
+  useEffect(() => {
+    if (visible) {
+      resetForm();
+    }
+  }, [visible, role, waiver]);
+
   // Function to fetch waiver content from the waiver link
-  const fetchWaiverContent = async (url: string) => {
+  const fetchWaiverContent = async (waiverLink: string) => {
     try {
-      setWaiverLoading(true);
-      setWaiverError(null);
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch waiver content: ${response.status}`);
-      }
-      
-      const htmlContent = await response.text();
-      setWaiverContent(htmlContent);
+      const response = await fetch(waiverLink, {
+        redirect: 'follow' // Ensure redirects are followed
+      });
+      const finalUrl = response.url;
+      const html = await response.text();
+      setWaiverContent(html); // now renderable HTML
     } catch (error) {
-      console.error('Error fetching waiver content:', error);
-      setWaiverError(error instanceof Error ? error.message : 'Failed to load waiver content');
-    } finally {
-      setWaiverLoading(false);
+      setWaiverError("Failed to load waiver content.");
     }
   };
+  
 
   const steps = [
     { id: 0, title: 'Welcome', icon: FileText },
@@ -172,20 +175,44 @@ export default function WaiverSigningModal({
 
   const resetForm = () => {
     setCurrentStep(0);
-    setFormData({
-      firstName: waiver?.['Client Name']?.split(' ')[0] || '',
-      lastName: waiver?.['Client Name']?.split(' ').slice(1).join(' ') || '',
-      email: waiver?.Email || '',
-      mobile: waiver?.Mobile || '',
-      dateOfBirth: '',
-      address: waiver?.Address || '',
-      acknowledged: false,
-      witnessName: '',
-      witnessEmail: '',
-      witnessPhone: '',
-      signature: '',
-      witnessSignature: ''
-    });
+    
+    // For driver waiver, prefill data from the waiver card
+    if (role === 'driver' && waiver) {
+      const nameParts = waiver['Client Name']?.split(' ') || [];
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
+      setFormData({
+        firstName: firstName,
+        lastName: lastName,
+        email: waiver.Email || '',
+        mobile: waiver.Mobile || '',
+        dateOfBirth: '',
+        address: waiver.Address || '',
+        acknowledged: false,
+        witnessName: '',
+        witnessEmail: '',
+        witnessPhone: '',
+        signature: '',
+        witnessSignature: ''
+      });
+    } else {
+      // For crew waiver or when no waiver data, use empty form
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        mobile: '',
+        dateOfBirth: '',
+        address: '',
+        acknowledged: false,
+        witnessName: '',
+        witnessEmail: '',
+        witnessPhone: '',
+        signature: '',
+        witnessSignature: ''
+      });
+    }
   };
 
   const handleClose = () => {
@@ -258,66 +285,37 @@ export default function WaiverSigningModal({
     try {
       setLoading(true);
       
-      // Prepare comprehensive waiver submission data
+      // Prepare waiver submission data using the new API structure
       const waiverSubmissionData = {
-        // Personal Information
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        mobile: formData.mobile,
-        dateOfBirth: formData.dateOfBirth,
-        address: formData.address,
-        signature: formData.signature,
-        acknowledged: formData.acknowledged,
-        
-        // Witness Information
-        witnessName: formData.witnessName,
-        witnessEmail: formData.witnessEmail,
-        witnessPhone: formData.witnessPhone,
-        witnessSignature: formData.witnessSignature,
-        
-        // Event Information
-        eventId: waiver?.Ref || 'demo-event-id', // Use waiver Ref or fallback
-        eventName: eventName,
-        eventDate: eventDate,
-        waiverLink: waiverLink,
-        
-        // Additional Fields (from waiver if available, otherwise empty)
-        driverRiderName: waiver?.['Driver Rider Name'] || '',
-        manufacturer: waiver?.Manufacturer || '',
-        model: waiver?.Model || '',
-        engineCapacity: waiver?.['Engine Capacity'] || '',
-        year: waiver?.Year || '',
-        sponsors: waiver?.Sponsors || '',
-        quickestET: waiver?.['Quickest ET'] || '',
-        quickestMPH: waiver?.['Quickest MPH'] || '',
-        andraLicenseNumber: waiver?.['ANDRA License Number'] || '',
-        ihraLicenseNumber: waiver?.['IHRA License Number'] || '',
-        licenseExpiryDate: waiver?.['License Expiry Date'] || '',
-        driversLicenseNumber: waiver?.['Drivers License Number'] || '',
-        emergencyContactName: waiver?.['Emergency Contact Name'] || '',
-        emergencyContactNumber: waiver?.['Emergency Contact Number'] || '',
-        racingNumber: waiver?.['Racing Number'] || '',
-        
-        // Metadata
-        submissionTimestamp: new Date().toISOString(),
-        deviceInfo: `OutixScanner Mobile App - ${Platform.OS}`,
-        ipAddress: 'unknown' // Will be determined by server
+        // Set waiverType based on role: 'Entrant' for driver, 'Crew' for crew
+        waiverType: (role === 'driver' ? 'Entrant' : 'Crew') as 'Entrant' | 'Crew',
+        waiver_ref: waiver?.Ref || 'unknown-ref',
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        date_of_birth: formData.dateOfBirth,
+        email_address: formData.email,
+        mobile_number: formData.mobile,
+        witness_name: formData.witnessName,
+        applicant_name: `${formData.firstName} ${formData.lastName}`,
+        witness_address: formData.witnessPhone || 'Not provided', // Use phone as witness address fallback
+        applicantSignFile: formData.signature,
+        witnessSignFile: formData.witnessSignature
       };
 
-      console.log('Submitting waiver with data:', {
+      console.log('Submitting waiver with role:', role, 'waiverType:', waiverSubmissionData.waiverType);
+      console.log('Waiver submission data:', {
         ...waiverSubmissionData,
-        signature: waiverSubmissionData.signature ? `[${waiverSubmissionData.signature.length} chars]` : 'none',
-        witnessSignature: waiverSubmissionData.witnessSignature ? `[${waiverSubmissionData.witnessSignature.length} chars]` : 'none'
+        applicantSignFile: waiverSubmissionData.applicantSignFile ? `[${waiverSubmissionData.applicantSignFile.length} chars]` : 'none',
+        witnessSignFile: waiverSubmissionData.witnessSignFile ? `[${waiverSubmissionData.witnessSignFile.length} chars]` : 'none'
       });
 
-      // Submit the waiver using the new comprehensive API
+      // Submit the waiver using the new API
       const result = await submitWaiver(waiverSubmissionData);
       
       if (result.success) {
         Alert.alert(
           'Success! 🎉',
-          `Waiver submitted successfully!\n\nReference: ${result.waiverRef}\nSubmission ID: ${result.submissionId}`,
+          `${role === 'driver' ? 'Driver' : 'Crew'} waiver submitted successfully!\n\nReference: ${result.waiverRef}\nSubmission ID: ${result.submissionId}`,
           [{ 
             text: 'OK',
             onPress: () => {
@@ -420,10 +418,10 @@ export default function WaiverSigningModal({
         )}
       </View>
       <Text style={[styles.title, { color: colors.text }]}>
-        Digital Waiver
+        {role === 'driver' ? 'Driver Waiver' : 'Crew Waiver'}
       </Text>
       <Text style={[styles.description, { color: colors.text }]}>
-        Please complete this digital waiver form to participate in the event.
+        Please complete this digital {role} waiver form to participate in the event.
       </Text>
       <Text style={[styles.eventDetails, { color: colors.text }]}>
         Event: {eventName}
@@ -504,104 +502,112 @@ export default function WaiverSigningModal({
     </KeyboardAvoidingView>
   );
 
-  const renderTermsAndConditions = () => {
-    return (
-      <View style={styles.stepContent}>
-        <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
-          Please carefully read all the terms and conditions and proceed.
-        </Text>
+const renderTermsAndConditions = () => {
+  return (
+    <View style={styles.stepContent}>
+      <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
+        Please carefully read all the terms and conditions and proceed.
+      </Text>
 
-        <View style={[styles.termsContainer, { backgroundColor: colors.card }]}>
-          {waiverLogo && (
-            <View style={styles.logoContainer}>
-              <Image
-                source={{ uri: waiverLogo }}
-                style={styles.waiverLogo}
-                contentFit="contain"
+      <View style={[styles.termsContainer, { backgroundColor: colors.card }]}>
+        {waiverLogo ? (
+          <View style={styles.logoContainer}>
+            <Image
+              source={{ uri: waiverLogo }}
+              style={styles.waiverLogo}
+              resizeMode="contain"
+            />
+          </View>
+        ) : null}
+
+        {waiverLoading ? (
+          <ActivityIndicator size="large" color={colors.primary} />
+        ) : waiverError ? (
+          <View style={styles.errorContainer}>
+            <AlertCircle size={32} color="#EF4444" />
+            <Text style={[styles.errorText, { color: "#EF4444" }]}>
+              {waiverError}
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                if (waiverLink) {
+                  fetchWaiverContent(waiverLink);
+                }
+              }}
+            >
+              <Text style={[styles.retryButtonText, { color: colors.background }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.termsScrollView}
+            contentContainerStyle={styles.termsScrollContent}
+            showsVerticalScrollIndicator
+          >
+            <View style={styles.htmlContainer}>
+              <RenderHtml
+                contentWidth={Dimensions.get('window').width - 72}
+                source={{ html: waiverContent }}
+                tagsStyles={{
+                  body: {
+                    color: colors.text,
+                    fontSize: 14,
+                    lineHeight: 20,
+                  },
+                  p: {
+                    marginBottom: 16,
+                  },
+                  h3: {
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    marginBottom: 8,
+                    marginTop: 16,
+                  },
+                  ul: {
+                    marginBottom: 16,
+                    paddingLeft: 16,
+                  },
+                  li: {
+                    marginBottom: 8,
+                  },
+                }}
               />
             </View>
-          )}
-          
-          {waiverLoading ? (
-            <ActivityIndicator size="large" color={colors.primary} />
-          ) : waiverError ? (
-            <View style={styles.errorContainer}>
-              <AlertCircle size={32} color="#EF4444" />
-              <Text style={[styles.errorText, { color: "#EF4444" }]}>
-                {waiverError}
-            </Text>
-              <TouchableOpacity 
-                style={[styles.retryButton, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  if (waiverLink) {
-                    fetchWaiverContent(waiverLink);
-                  }
-                }}
-              >
-                <Text style={[styles.retryButtonText, { color: colors.background }]}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <ScrollView 
-              style={styles.termsScrollView}
-              contentContainerStyle={styles.termsScrollContent}
-              showsVerticalScrollIndicator={true}
-            >
-              <View style={styles.htmlContainer}>
-                <RenderHtml
-                  contentWidth={width - 72} // Account for padding and margins
-                  source={{ html: waiverContent }}
-                  tagsStyles={{
-                    body: {
-                      color: colors.text,
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    p: {
-                      marginBottom: 16,
-                    },
-                    h3: {
-                      fontSize: 16,
-                      fontWeight: 'bold',
-                      marginBottom: 8,
-                      marginTop: 16,
-                    },
-                    ul: {
-                      marginBottom: 16,
-                      paddingLeft: 16,
-                    },
-                    li: {
-                      marginBottom: 8,
-                    },
-                  }}
-                />
-              </View>
           </ScrollView>
-          )}
-        </View>
+        )}
+      </View>
 
-        <View style={styles.acknowledgementContainer}>
+      <View style={styles.acknowledgementContainer}>
         <TouchableOpacity
-            style={styles.checkbox}
-          onPress={() => setFormData({ ...formData, acknowledged: !formData.acknowledged })}
+          style={styles.checkbox}
+          onPress={() =>
+            setFormData((prev) => ({
+              ...prev,
+              acknowledged: !prev.acknowledged,
+            }))
+          }
         >
-          <View style={[
+          <View
+            style={[
               styles.checkboxInner,
               { borderColor: colors.primary },
-              formData.acknowledged && { backgroundColor: colors.primary }
-          ]}>
-              {formData.acknowledged && <Check size={16} color="#FFF" />}
+              formData.acknowledged && { backgroundColor: colors.primary },
+            ]}
+          >
+            {formData.acknowledged && <Check size={16} color="#FFF" />}
           </View>
         </TouchableOpacity>
-          <Text style={[styles.acknowledgementText, { color: colors.text }]}>
-            I have read and agree to the terms and conditions
-          </Text>
+        <Text style={[styles.acknowledgementText, { color: colors.text }]}>
+          I have read and agree to the terms and conditions
+        </Text>
       </View>
-      </View>
+    </View>
   );
-  };
+};
+
 
   const renderSignature = () => {
     return (

@@ -1838,49 +1838,19 @@ export const signWaiver = async (data: WaiverSigningData): Promise<any> => {
 };
 
 export interface WaiverSubmissionData {
-  // Personal Information
-  firstName: string;
-  lastName: string;
-  email: string;
-  mobile: string;
-  dateOfBirth: string;
-  address: string;
-  signature: string; // Base64 encoded signature
-  acknowledged: boolean;
-  
-  // Witness Information
-  witnessName: string;
-  witnessEmail: string;
-  witnessPhone?: string;
-  witnessSignature: string; // Base64 encoded signature
-  
-  // Event Information
-  eventId: string;
-  eventName: string;
-  eventDate: string;
-  waiverLink?: string;
-  
-  // Additional Fields (from existing waiver data structure)
-  driverRiderName?: string;
-  manufacturer?: string;
-  model?: string;
-  engineCapacity?: string;
-  year?: string;
-  sponsors?: string;
-  quickestET?: string;
-  quickestMPH?: string;
-  andraLicenseNumber?: string;
-  ihraLicenseNumber?: string;
-  licenseExpiryDate?: string;
-  driversLicenseNumber?: string;
-  emergencyContactName?: string;
-  emergencyContactNumber?: string;
-  racingNumber?: string;
-  
-  // Metadata
-  submissionTimestamp: string;
-  deviceInfo?: string;
-  ipAddress?: string;
+  // Updated interface to match the new API requirements
+  waiverType: 'Entrant' | 'Crew';
+  waiver_ref: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  email_address: string;
+  mobile_number: string;
+  witness_name: string;
+  applicant_name: string;
+  witness_address: string;
+  applicantSignFile: string; // Base64 encoded signature
+  witnessSignFile: string; // Base64 encoded signature
 }
 
 export interface WaiverSubmissionResponse {
@@ -1897,91 +1867,48 @@ export const submitWaiver = async (data: WaiverSubmissionData): Promise<WaiverSu
   try {
     console.log('Submitting waiver with data:', {
       ...data,
-      signature: data.signature ? `[${data.signature.length} chars]` : 'none',
-      witnessSignature: data.witnessSignature ? `[${data.witnessSignature.length} chars]` : 'none'
+      applicantSignFile: data.applicantSignFile ? `[${data.applicantSignFile.length} chars]` : 'none',
+      witnessSignFile: data.witnessSignFile ? `[${data.witnessSignFile.length} chars]` : 'none'
     });
 
-    // For demo/testing purposes - replace with your production endpoint
-    const DEMO_ENDPOINT = 'https://jsonplaceholder.typicode.com/posts';
-    
-    // Prepare the payload
-    const payload = {
-      // Personal Information
-      firstName: data.firstName,
-      lastName: data.lastName,
-      fullName: `${data.firstName} ${data.lastName}`,
-      email: data.email,
-      mobile: data.mobile,
-      dateOfBirth: data.dateOfBirth,
-      address: data.address,
-      signature: data.signature,
-      acknowledged: data.acknowledged,
-      
-      // Witness Information
-      witnessName: data.witnessName,
-      witnessEmail: data.witnessEmail,
-      witnessPhone: data.witnessPhone || '',
-      witnessSignature: data.witnessSignature,
-      
-      // Event Information
-      eventId: data.eventId,
-      eventName: data.eventName,
-      eventDate: data.eventDate,
-      waiverLink: data.waiverLink || '',
-      
-      // Additional Fields
-      driverRiderName: data.driverRiderName || '',
-      manufacturer: data.manufacturer || '',
-      model: data.model || '',
-      engineCapacity: data.engineCapacity || '',
-      year: data.year || '',
-      sponsors: data.sponsors || '',
-      quickestET: data.quickestET || '',
-      quickestMPH: data.quickestMPH || '',
-      andraLicenseNumber: data.andraLicenseNumber || '',
-      ihraLicenseNumber: data.ihraLicenseNumber || '',
-      licenseExpiryDate: data.licenseExpiryDate || '',
-      driversLicenseNumber: data.driversLicenseNumber || '',
-      emergencyContactName: data.emergencyContactName || '',
-      emergencyContactNumber: data.emergencyContactNumber || '',
-      racingNumber: data.racingNumber || '',
-      
-      // Metadata
-      submissionTimestamp: data.submissionTimestamp,
-      deviceInfo: data.deviceInfo || 'OutixScanner Mobile App',
-      ipAddress: data.ipAddress || 'unknown',
-      
-      // API Tracking
-      source: 'OutixScanner',
-      version: '1.0.0'
-    };
+    // Prepare the form data for the API
+    const formData = new URLSearchParams();
+    formData.append('waiverType', data.waiverType);
+    formData.append('waiver_ref', data.waiver_ref);
+    formData.append('first_name', data.first_name);
+    formData.append('last_name', data.last_name);
+    formData.append('date_of_birth', data.date_of_birth);
+    formData.append('email_address', data.email_address);
+    formData.append('mobile_number', data.mobile_number);
+    formData.append('witness_name', data.witness_name);
+    formData.append('applicant_name', data.applicant_name);
+    formData.append('witness_address', data.witness_address);
+    formData.append('applicantSignFile', data.applicantSignFile);
+    formData.append('witnessSignFile', data.witnessSignFile);
 
-    console.log('Sending waiver submission to demo endpoint...');
+    console.log('Sending waiver submission to /waiver/personal endpoint...');
     
-    // Use demo endpoint for testing
-    const response = await axios.post(DEMO_ENDPOINT, payload, {
+    // Use the correct endpoint with axios instance that has auth token interceptor
+    const response = await api.post('/waiver/personal', formData, {
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        // Add auth token if available
-        ...(authToken && { 'Auth-Token': authToken })
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       timeout: 30000
     });
 
-    console.log('Demo response:', response.data);
+    console.log('Waiver submission response:', response.data);
 
-    // Mock successful response for demo
-    const mockResponse: WaiverSubmissionResponse = {
+    // Return success response
+    const successResponse: WaiverSubmissionResponse = {
       success: true,
-      message: 'Waiver submitted successfully',
-      waiverUrl: `https://example.com/waivers/${response.data.id}`,
-      waiverRef: `WAV-${Date.now()}`,
-      submissionId: response.data.id?.toString() || `sub_${Date.now()}`,
-      status: 200
+      message: response.data.message || 'Waiver submitted successfully',
+      waiverUrl: response.data.waiverUrl,
+      waiverRef: response.data.waiverRef || data.waiver_ref,
+      submissionId: response.data.submissionId || response.data.id?.toString(),
+      status: response.status
     };
 
-    return mockResponse;
+    return successResponse;
 
   } catch (error: any) {
     console.error('Error submitting waiver:', error);
