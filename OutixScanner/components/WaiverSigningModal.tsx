@@ -800,7 +800,7 @@ const renderTermsAndConditions = () => {
 
         {waiverLoading ? (
           <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-            <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.text }]}>
               Loading terms and conditions...
             </Text>
@@ -885,7 +885,7 @@ const renderTermsAndConditions = () => {
                 }}
               />
             )}
-          </View>
+            </View>
         )}
       </View>
 
@@ -905,7 +905,7 @@ const renderTermsAndConditions = () => {
           }
         >
           <View style={[
-            styles.checkboxInner,
+              styles.checkboxInner,
             { borderColor: colors.text },
             formData.acknowledged && { backgroundColor: colors.text }
           ]}>
@@ -1340,29 +1340,27 @@ const styles = StyleSheet.create({
       lineHeight: 20,
     },
     signaturePadContainer: {
-      marginTop: 0,
-      height: 300,
-      borderWidth: 0,
-      borderRadius: 8,
-      overflow: 'hidden',
+      flex: 1,
+      borderBottomWidth: 1,
     },
   signatureButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-      paddingVertical: 12,
-    paddingHorizontal: 16,
+    padding: 8,
     borderTopWidth: 1,
   },
   signatureButton: {
-      paddingVertical: 8,
+    flex: 1,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
-      minWidth: 100,
+    marginHorizontal: 4,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   signatureButtonText: {
     fontSize: 14,
-      fontWeight: '600',
+    fontWeight: '600',
   },
     sectionTitle: {
       fontSize: 24,
@@ -1402,7 +1400,7 @@ const styles = StyleSheet.create({
     logoContainer: {
       alignItems: 'center',
       marginBottom: 16,
-    },
+  },
   logo: {
     width: '100%',
     height: 60,
@@ -1434,7 +1432,7 @@ const styles = StyleSheet.create({
       minHeight: 300,
       maxHeight: Dimensions.get('window').height * 0.5,
       backgroundColor: colors.card,
-      borderWidth: 1,
+    borderWidth: 1,
       borderColor: colors.border,
     },
     waiverLogo: {
@@ -1458,14 +1456,14 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       padding: 24,
       backgroundColor: colors.background,
-      borderRadius: 12,
-    },
+    borderRadius: 12,
+  },
     errorText: {
-      fontSize: 14,
+    fontSize: 14,
       textAlign: 'center',
       marginTop: 12,
       marginBottom: 20,
-      lineHeight: 20,
+    lineHeight: 20,
     },
     retryButton: {
     paddingHorizontal: 20,
@@ -1474,11 +1472,11 @@ const styles = StyleSheet.create({
   },
     retryButtonText: {
     fontSize: 14,
-      fontWeight: '600',
-    },
+    fontWeight: '600',
+  },
     signatureContainer: {
       minHeight: 200,
-      maxHeight: 450,
+      maxHeight: 300, // Reduced from 450px to 300px
       borderRadius: 12,
       overflow: 'hidden',
       marginVertical: 16,
@@ -1525,14 +1523,14 @@ const styles = StyleSheet.create({
       marginTop: 20,
       borderRadius: 12,
       minHeight: 60,
-    },
-    acknowledgementText: {
-      flex: 1,
-      fontSize: 14,
+  },
+  acknowledgementText: {
+    flex: 1,
+    fontSize: 14,
       lineHeight: 20,
       marginLeft: 12,
-    },
-    signatureNote: {
+  },
+  signatureNote: {
     fontSize: 12,
     marginBottom: 12,
     fontStyle: 'italic',
@@ -1662,12 +1660,12 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
     },
     noScrollContent: {
-      flex: 1,
-    },
+    flex: 1,
+  },
     termsStepContainer: {
       flex: 1,
       padding: 16,
-    },
+  },
 }); 
 
   return (

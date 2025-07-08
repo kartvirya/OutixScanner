@@ -210,22 +210,7 @@ export default function Profile() {
             />
           </View>
         </View>
-               {/* Settings */}
-               <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Help</Text>
-          
-          <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
-            <View style={styles.settingLeft}>
-              <View style={[styles.settingIcon, { backgroundColor: `${colors.primary}15` }]}>
-                {isDarkMode ? (
-                  <Moon size={18} color={colors.primary} />
-                ) : (
-                  <Sun size={18} color={colors.primary} />
-                )}
-              </View>
-            </View>
-          </View>
-        </View> 
+
         {/* Logout Button */}
         <TouchableOpacity 
           style={[styles.logoutButton, { backgroundColor: colors.card, borderColor: '#FF3B30' }]}
