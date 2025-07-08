@@ -786,12 +786,7 @@ const renderTermsAndConditions = () => {
   `;
 
   return (
-    <View style={styles.stepContent}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Terms & Conditions</Text>
-      <Text style={[styles.description, { color: colors.text, opacity: 0.6 }]}>
-        Please carefully read all the terms and conditions and proceed.
-      </Text>
-
+    <View style={styles.termsStepContainer}>
       <View style={[styles.termsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {waiverLogo && (
           <View style={[styles.logoContainer, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
@@ -847,6 +842,9 @@ const renderTermsAndConditions = () => {
                 scalesPageToFit={true}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
+                scrollEnabled={true}
+                bounces={false}
+                nestedScrollEnabled={true}
                 injectedJavaScript={cssInject}
                 onLoadEnd={() => {
                   // Additional styling after page loads
@@ -891,7 +889,12 @@ const renderTermsAndConditions = () => {
         )}
       </View>
 
-      <View style={styles.acknowledgementContainer}>
+      <View style={[styles.acknowledgementContainer, { 
+        borderTopColor: colors.border,
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        borderWidth: 1
+      }]}>
         <TouchableOpacity
           style={[styles.checkbox, { borderColor: colors.text }]}
           onPress={() =>
@@ -962,7 +965,7 @@ const renderTermsAndConditions = () => {
         )}
 
         <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
-          <View style={styles.signaturePadContainer}>
+          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
             <SignatureScreen
               ref={signatureRef}
               onOK={handleSignature}
@@ -977,11 +980,15 @@ const renderTermsAndConditions = () => {
                   right: 0;
                   bottom: 0;
                   touch-action: none;
+                  user-select: none;
+                  -webkit-user-select: none;
+                  -webkit-touch-callout: none;
                 }
                 .m-signature-pad--body {
                   border: none;
                   position: relative;
                   touch-action: none;
+                  overflow: hidden;
                 }
                 .m-signature-pad--footer {
                   display: none;
@@ -993,10 +1000,26 @@ const renderTermsAndConditions = () => {
                   top: 0;
                   width: 100%;
                   height: 100%;
+                  user-select: none;
+                  -webkit-user-select: none;
+                  -webkit-touch-callout: none;
                 }
                 body {
                   touch-action: none;
                   overflow: hidden;
+                  position: fixed;
+                  width: 100%;
+                  height: 100%;
+                }
+                html {
+                  touch-action: none;
+                  overflow: hidden;
+                }
+                * {
+                  -webkit-user-select: none;
+                  -moz-user-select: none;
+                  -ms-user-select: none;
+                  user-select: none;
                 }
               `}
               autoClear={false}
@@ -1006,6 +1029,9 @@ const renderTermsAndConditions = () => {
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'hidden';
                   document.body.style.touchAction = 'none';
+                  document.body.style.position = 'fixed';
+                  document.documentElement.style.overflow = 'hidden';
+                  document.documentElement.style.touchAction = 'none';
                 }
               }}
               onEnd={() => {
@@ -1013,6 +1039,9 @@ const renderTermsAndConditions = () => {
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'auto';
                   document.body.style.touchAction = 'auto';
+                  document.body.style.position = 'static';
+                  document.documentElement.style.overflow = 'auto';
+                  document.documentElement.style.touchAction = 'auto';
                 }
               }}
             />
@@ -1109,7 +1138,7 @@ const renderTermsAndConditions = () => {
         </Text>
         
         <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
-          <View style={styles.signaturePadContainer}>
+          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
             <SignatureScreen
               ref={witnessSignatureRef}
               onOK={(signature) => handleWitnessSignature(signature)}
@@ -1124,11 +1153,15 @@ const renderTermsAndConditions = () => {
                   right: 0;
                   bottom: 0;
                   touch-action: none;
+                  user-select: none;
+                  -webkit-user-select: none;
+                  -webkit-touch-callout: none;
                 }
                 .m-signature-pad--body {
                   border: none;
                   position: relative;
                   touch-action: none;
+                  overflow: hidden;
                 }
                 .m-signature-pad--footer {
                   display: none;
@@ -1140,10 +1173,26 @@ const renderTermsAndConditions = () => {
                   top: 0;
                   width: 100%;
                   height: 100%;
+                  user-select: none;
+                  -webkit-user-select: none;
+                  -webkit-touch-callout: none;
                 }
                 body {
                   touch-action: none;
                   overflow: hidden;
+                  position: fixed;
+                  width: 100%;
+                  height: 100%;
+                }
+                html {
+                  touch-action: none;
+                  overflow: hidden;
+                }
+                * {
+                  -webkit-user-select: none;
+                  -moz-user-select: none;
+                  -ms-user-select: none;
+                  user-select: none;
                 }
               `}
               autoClear={false}
@@ -1153,6 +1202,9 @@ const renderTermsAndConditions = () => {
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'hidden';
                   document.body.style.touchAction = 'none';
+                  document.body.style.position = 'fixed';
+                  document.documentElement.style.overflow = 'hidden';
+                  document.documentElement.style.touchAction = 'none';
                 }
               }}
               onEnd={() => {
@@ -1160,6 +1212,9 @@ const renderTermsAndConditions = () => {
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'auto';
                   document.body.style.touchAction = 'auto';
+                  document.body.style.position = 'static';
+                  document.documentElement.style.overflow = 'auto';
+                  document.documentElement.style.touchAction = 'auto';
                 }
               }}
             />
@@ -1285,12 +1340,12 @@ const styles = StyleSheet.create({
       lineHeight: 20,
     },
     signaturePadContainer: {
-      marginTop: 20,
-      height: 350,
-      borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
+      marginTop: 0,
+      height: 300,
+      borderWidth: 0,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
   signatureButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1376,8 +1431,8 @@ const styles = StyleSheet.create({
       borderRadius: 12,
       padding: 0,
       marginVertical: 16,
-      minHeight: 450,
-      maxHeight: Dimensions.get('window').height * 0.65,
+      minHeight: 300,
+      maxHeight: Dimensions.get('window').height * 0.5,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.border,
@@ -1422,12 +1477,13 @@ const styles = StyleSheet.create({
       fontWeight: '600',
     },
     signatureContainer: {
-    flex: 1,
       minHeight: 200,
+      maxHeight: 450,
       borderRadius: 12,
       overflow: 'hidden',
       marginVertical: 16,
-  },
+      borderWidth: 1,
+    },
     progressContainer: {
       marginTop: 'auto',
       paddingTop: 16,
@@ -1462,17 +1518,21 @@ const styles = StyleSheet.create({
     acknowledgementContainer: {
       flexDirection: 'row',
       alignItems: 'flex-start',
+      paddingTop: 20,
+      paddingBottom: 20,
+      paddingHorizontal: 16,
+      borderTopWidth: 1,
       marginTop: 20,
-      paddingHorizontal: 4,
-      paddingVertical: 8,
+      borderRadius: 12,
+      minHeight: 60,
     },
-  acknowledgementText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  signatureNote: {
+    acknowledgementText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 20,
+      marginLeft: 12,
+    },
+    signatureNote: {
     fontSize: 12,
     marginBottom: 12,
     fontStyle: 'italic',
@@ -1600,7 +1660,14 @@ const styles = StyleSheet.create({
       borderWidth: 1,
       alignItems: 'center',
       justifyContent: 'center',
-  },
+    },
+    noScrollContent: {
+      flex: 1,
+    },
+    termsStepContainer: {
+      flex: 1,
+      padding: 16,
+    },
 }); 
 
   return (
@@ -1635,13 +1702,23 @@ const styles = StyleSheet.create({
 
             {/* Content */}
             <View style={styles.contentContainer}>
-              <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={true}
-              >
-                {renderStepContent()}
-              </ScrollView>
+              {/* Remove ScrollView for signature steps and terms step to prevent scroll interference */}
+              {currentStep === 2 || currentStep === 3 || currentStep === 5 ? (
+                // For Terms & Conditions and Signature steps - no outer scroll
+                <View style={styles.noScrollContent}>
+                  {renderStepContent()}
+                </View>
+              ) : (
+                // For other steps - use ScrollView
+                <ScrollView
+                  style={styles.scrollView}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={true}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {renderStepContent()}
+                </ScrollView>
+              )}
             </View>
 
             {/* Footer */}
