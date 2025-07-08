@@ -1851,6 +1851,8 @@ export interface WaiverSubmissionData {
   witness_address: string;
   applicantSignFile: string; // Base64 encoded signature
   witnessSignFile: string; // Base64 encoded signature
+  signed_by_parent?: boolean; // New field for parent signature indicator
+  parent_name?: string; // New field for parent name
 }
 
 export interface WaiverSubmissionResponse {
@@ -1885,6 +1887,12 @@ export const submitWaiver = async (data: WaiverSubmissionData): Promise<WaiverSu
     formData.append('witness_address', data.witness_address);
     formData.append('applicantSignFile', data.applicantSignFile);
     formData.append('witnessSignFile', data.witnessSignFile);
+
+    // Add parent-related fields if present
+    if (data.signed_by_parent) {
+      formData.append('signed_by_parent', 'true');
+      formData.append('parent_name', data.parent_name || '');
+    }
 
     console.log('Sending waiver submission to /waiver/personal endpoint...');
     

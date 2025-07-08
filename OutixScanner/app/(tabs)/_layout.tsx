@@ -149,7 +149,7 @@ function CustomTabBar() {
 
   const tabs = [
     { name: 'index', title: 'Events', icon: Calendar, route: '/(tabs)' },
-    { name: 'registrants', title: 'Registrants', icon: Users, route: '/(tabs)/registrants' },
+    { name: 'registrants', title: 'Registrations', icon: Users, route: '/(tabs)/registrants' },
     ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true }] : []),
     { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics' },
     { name: 'profile', title: 'Profile', icon: User, route: '/(tabs)/profile' },
@@ -382,7 +382,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="registrants"
         options={{
-          title: "Registrants",
+          title: "Registrations",
           headerShown: false,
         }}
       />

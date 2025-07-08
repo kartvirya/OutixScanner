@@ -1,9 +1,9 @@
 import { Calendar, ChevronDown, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, SafeAreaView, StatusBar, Platform } from 'react-native';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
-import { getRegistrations, getWaivers, isAuthenticated, login, Registration, Waiver } from '../../services/api';
+import { getRegistrations, getWaivers, isAuthenticated, login, submitWaiver, Registration, Waiver } from '../../services/api';
 
 export default function Registrants() {
   const { colors } = useTheme();
@@ -145,7 +145,7 @@ export default function Registrants() {
       VenueAddress: selectedEventForWaivers.VenueAddress,
       City: selectedEventForWaivers.City,
       PostCode: selectedEventForWaivers.PostCode,
-      WaiverLink: waiver.WaiverLink,
+      WaiverLink: selectedEventForWaivers.WaiverLink,
       WaiverLogo: selectedEventForWaivers.WaiverLogo,
       WaiverBgImage: selectedEventForWaivers.WaiverBgImage,
     };
@@ -156,6 +156,7 @@ export default function Registrants() {
     setSelectedWaiver(waiver);
     setSelectedRole(role);
     setShowWaiverModal(true);
+    setShowWaiversModal(false); // Close the waivers list modal
   };
 
   const closeWaiverModal = () => {
@@ -166,6 +167,7 @@ export default function Registrants() {
     // Refresh waivers to get updated status
     if (selectedEventForWaivers) {
       loadWaivers(selectedEventForWaivers.id);
+      setShowWaiversModal(true); // Show the waivers list modal again
     }
   };
 
@@ -223,12 +225,7 @@ export default function Registrants() {
           </View>
         </View>
 
-        {/* Tap to view waivers indicator */}
-        <View style={styles.tapIndicator}>
-          <Text style={[styles.tapIndicatorText, { color: colors.primary }]}>
-            Tap to view waivers
-          </Text>
-        </View>
+
       </View>
     </TouchableOpacity>
   );
@@ -361,8 +358,13 @@ export default function Registrants() {
       transparent={false}
       onRequestClose={closeWaiversModal}
     >
-      <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-        <View style={styles.modalHeader}>
+      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        <StatusBar 
+          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
+          backgroundColor={colors.background} 
+          translucent={false}
+        />
+        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <View style={styles.modalTitleContainer}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Waivers - {selectedEventForWaivers?.EventName}
@@ -417,25 +419,35 @@ export default function Registrants() {
             }
           />
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 
   // Show loading screen while checking authentication or loading initial data
   if (!authChecked || (loading && registrations.length === 0)) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
+        <StatusBar 
+          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
+          backgroundColor={colors.background} 
+          translucent={false}
+        />
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.text }]}>
           {!authChecked ? 'Authenticating...' : 'Loading registrations...'}
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (error && registrations.length === 0) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
+        <StatusBar 
+          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
+          backgroundColor={colors.background} 
+          translucent={false}
+        />
         <Text style={[styles.errorText, { color: '#EF4444' }]}>Error: {error}</Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
@@ -447,14 +459,19 @@ export default function Registrants() {
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Registrants</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar 
+        barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
+        backgroundColor={colors.background} 
+        translucent={false}
+      />
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Registrations</Text>
       </View>
 
       <FlatList
@@ -489,15 +506,49 @@ export default function Registrants() {
           role={selectedRole}
           onSubmit={async (waiverData) => {
             try {
-              // Handle waiver submission
-              closeWaiverModal();
+              // Transform WaiverData into WaiverSubmissionData
+              const submissionData = {
+                waiverType: (selectedRole === 'driver' ? 'Entrant' : 'Crew') as 'Entrant' | 'Crew',
+                waiver_ref: selectedWaiver.Ref || 'unknown-ref',
+                first_name: waiverData.firstName,
+                last_name: waiverData.lastName,
+                date_of_birth: waiverData.dateOfBirth,
+                email_address: waiverData.email,
+                mobile_number: waiverData.mobile,
+                witness_name: waiverData.witnessName,
+                applicant_name: `${waiverData.firstName} ${waiverData.lastName}`,
+                witness_address: waiverData.witnessPhone || 'Not provided',
+                applicantSignFile: waiverData.signature,
+                witnessSignFile: waiverData.witnessSignature,
+                // Add parent/guardian information if signed by parent
+                signed_by_parent: waiverData.signedByParent,
+                parent_name: waiverData.signedByParent ? waiverData.parentName : undefined
+              };
+
+              // Submit the waiver data
+              const response = await submitWaiver(submissionData);
+              
+              if (response.success) {
+                Alert.alert(
+                  'Success',
+                  'Waiver submitted successfully!',
+                  [{ text: 'OK', onPress: closeWaiverModal }]
+                );
+              } else {
+                throw new Error(response.message || 'Failed to submit waiver');
+              }
             } catch (error) {
               console.error('Error submitting waiver:', error);
+              Alert.alert(
+                'Error',
+                error instanceof Error ? error.message : 'Failed to submit waiver. Please try again.',
+                [{ text: 'OK' }]
+              );
             }
           }}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -713,7 +764,9 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 16 : 20,
+    borderBottomWidth: 1,
   },
   modalTitleContainer: {
     flexDirection: 'column',
