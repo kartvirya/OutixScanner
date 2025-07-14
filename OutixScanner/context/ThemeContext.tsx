@@ -54,6 +54,7 @@ export type ThemeContextType = {
   theme: Theme;
   colors: Theme['colors'];
   isDark: boolean;
+  isDarkMode: boolean; // Alias for isDark for backward compatibility
   colorScheme: 'light' | 'dark';
   toggleTheme: () => void;
   // Event context
@@ -171,6 +172,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     theme,
     colors,
     isDark,
+    isDarkMode: isDark, // Alias for backward compatibility
     colorScheme: isDark ? 'dark' : 'light',
     toggleTheme,
     selectedEventId,

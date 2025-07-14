@@ -624,14 +624,6 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   dropdownHeader: {
     paddingBottom: 12,
@@ -661,12 +653,13 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 100,
   },
   itemCard: {
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
   },
   itemHeader: {
@@ -743,15 +736,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   waiverSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   waiverHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
     gap: 8,
   },
   waiverTitle: {
@@ -810,7 +803,8 @@ const styles = StyleSheet.create({
   waiverCard: {
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    marginTop: 8,
     borderWidth: 1,
   },
   waiverTitleContainer: {
@@ -885,8 +879,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   waiverActions: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },

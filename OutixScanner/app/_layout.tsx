@@ -12,10 +12,10 @@ SplashScreen.preventAutoHideAsync();
 
 // StatusBar component that changes with theme
 function ThemedStatusBar() {
-  const { isDarkMode } = useTheme();
+  const { isDark } = useTheme();
   return (
     <StatusBar 
-      barStyle={isDarkMode ? "light-content" : "dark-content"} 
+      barStyle={isDark ? "light-content" : "dark-content"} 
       backgroundColor="transparent"
       translucent={true}
     />

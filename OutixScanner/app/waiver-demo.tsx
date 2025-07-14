@@ -4,7 +4,7 @@ import WaiverDemo from '../components/WaiverDemo';
 import { useTheme } from '../context/ThemeContext';
 
 export default function WaiverDemoPage() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [waiverStatuses, setWaiverStatuses] = useState({
     participant1: false,
     participant2: true,
@@ -53,7 +53,11 @@ export default function WaiverDemoPage() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar 
+        barStyle={isDark ? "light-content" : "dark-content"} 
+        backgroundColor="transparent" 
+        translucent 
+      />
       
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>

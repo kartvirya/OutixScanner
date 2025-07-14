@@ -141,6 +141,7 @@ export default function WaiverSigningModal({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [date, setDate] = useState(new Date());
   const [isMinor, setIsMinor] = useState(false);
+  const [isSigningActive, setIsSigningActive] = useState(false); // Add scroll lock state
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -186,6 +187,9 @@ export default function WaiverSigningModal({
   useEffect(() => {
     if (visible) {
       resetForm();
+    } else {
+      // Clean up scroll lock state when modal closes
+      setIsSigningActive(false);
     }
   }, [visible, role, waiver]);
 
@@ -787,9 +791,9 @@ const renderTermsAndConditions = () => {
 
   return (
     <View style={styles.termsStepContainer}>
-      <View style={[styles.termsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={{ flex: 1 }}>
         {waiverLogo && (
-          <View style={[styles.logoContainer, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+          <View style={[styles.logoContainer, { backgroundColor: colors.background }]}>
             <Image
               source={{ uri: waiverLogo }}
               style={styles.waiverLogo}
@@ -891,9 +895,7 @@ const renderTermsAndConditions = () => {
 
       <View style={[styles.acknowledgementContainer, { 
         borderTopColor: colors.border,
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-        borderWidth: 1
+        backgroundColor: colors.background
       }]}>
         <TouchableOpacity
           style={[styles.checkbox, { borderColor: colors.text }]}
@@ -964,8 +966,23 @@ const renderTermsAndConditions = () => {
           </>
         )}
 
-        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
-          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
+        <View style={[
+          styles.signatureContainer, 
+          { backgroundColor: colors.card },
+          isSigningActive && { 
+            zIndex: 1000,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+          }
+        ]}>
+          <View style={[
+            styles.signaturePadContainer, 
+            { borderColor: colors.border },
+            isSigningActive && { pointerEvents: 'auto' }
+          ]}>
             <SignatureScreen
               ref={signatureRef}
               onOK={handleSignature}
@@ -1025,7 +1042,8 @@ const renderTermsAndConditions = () => {
               autoClear={false}
               imageType="image/svg+xml"
               onBegin={() => {
-                // Disable scrolling when starting to sign
+                // Lock scrolling for all platforms
+                setIsSigningActive(true);
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'hidden';
                   document.body.style.touchAction = 'none';
@@ -1035,7 +1053,8 @@ const renderTermsAndConditions = () => {
                 }
               }}
               onEnd={() => {
-                // Re-enable scrolling after signing
+                // Unlock scrolling for all platforms
+                setIsSigningActive(false);
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'auto';
                   document.body.style.touchAction = 'auto';
@@ -1137,8 +1156,23 @@ const renderTermsAndConditions = () => {
           Please have your witness sign below to acknowledge their presence.
         </Text>
         
-        <View style={[styles.signatureContainer, { backgroundColor: colors.card }]}>
-          <View style={[styles.signaturePadContainer, { borderColor: colors.border }]}>
+        <View style={[
+          styles.signatureContainer, 
+          { backgroundColor: colors.card },
+          isSigningActive && { 
+            zIndex: 1000,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+          }
+        ]}>
+          <View style={[
+            styles.signaturePadContainer, 
+            { borderColor: colors.border },
+            isSigningActive && { pointerEvents: 'auto' }
+          ]}>
             <SignatureScreen
               ref={witnessSignatureRef}
               onOK={(signature) => handleWitnessSignature(signature)}
@@ -1198,7 +1232,8 @@ const renderTermsAndConditions = () => {
               autoClear={false}
               imageType="image/svg+xml"
               onBegin={() => {
-                // Disable scrolling when starting to sign
+                // Lock scrolling for all platforms
+                setIsSigningActive(true);
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'hidden';
                   document.body.style.touchAction = 'none';
@@ -1208,7 +1243,8 @@ const renderTermsAndConditions = () => {
                 }
               }}
               onEnd={() => {
-                // Re-enable scrolling after signing
+                // Unlock scrolling for all platforms
+                setIsSigningActive(false);
                 if (Platform.OS === 'web') {
                   document.body.style.overflow = 'auto';
                   document.body.style.touchAction = 'auto';
@@ -1424,17 +1460,7 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 16,
   },
-    termsContainer: {
-      flex: 1,
-      borderRadius: 12,
-      padding: 0,
-      marginVertical: 16,
-      minHeight: 300,
-      maxHeight: Dimensions.get('window').height * 0.5,
-      backgroundColor: colors.card,
-    borderWidth: 1,
-      borderColor: colors.border,
-    },
+
     waiverLogo: {
       width: '100%',
       height: 50,
@@ -1664,7 +1690,7 @@ const styles = StyleSheet.create({
   },
     termsStepContainer: {
       flex: 1,
-      padding: 16,
+      padding: 8,
   },
 }); 
 
@@ -1684,6 +1710,7 @@ const styles = StyleSheet.create({
         <KeyboardAvoidingView 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={[styles.container]}
+          pointerEvents={isSigningActive ? 'box-none' : 'auto'}
         >
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
             {/* Header */}
@@ -1703,16 +1730,21 @@ const styles = StyleSheet.create({
               {/* Remove ScrollView for signature steps and terms step to prevent scroll interference */}
               {currentStep === 2 || currentStep === 3 || currentStep === 5 ? (
                 // For Terms & Conditions and Signature steps - no outer scroll
-                <View style={styles.noScrollContent}>
+                <View style={[
+                  styles.noScrollContent,
+                  isSigningActive && { pointerEvents: 'box-none' }
+                ]}>
                   {renderStepContent()}
                 </View>
               ) : (
-                // For other steps - use ScrollView
+                // For other steps - use ScrollView with conditional scrolling
                 <ScrollView
                   style={styles.scrollView}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={true}
                   keyboardShouldPersistTaps="handled"
+                  scrollEnabled={!isSigningActive}
+                  pointerEvents={isSigningActive ? 'none' : 'auto'}
                 >
                   {renderStepContent()}
                 </ScrollView>

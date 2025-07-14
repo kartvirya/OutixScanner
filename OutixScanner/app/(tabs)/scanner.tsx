@@ -56,7 +56,7 @@ interface GroupScanData {
 const DEBUG_MODE = true;
 
 export default function ScannerScreen() {
-  const { colors, selectedEventId, selectedEventName } = useTheme();
+  const { colors, isDark, selectedEventId, selectedEventName } = useTheme();
   const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { eventId: paramEventId } = useLocalSearchParams();
   
@@ -1054,7 +1054,11 @@ export default function ScannerScreen() {
   if (showEventSelection) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <StatusBar 
+          barStyle={isDark ? "light-content" : "dark-content"} 
+          backgroundColor="transparent" 
+          translucent 
+        />
         
         <View style={styles.eventSelectionContainer}>
           <View style={styles.eventSelectionContent}>
@@ -1093,7 +1097,11 @@ export default function ScannerScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar 
+        barStyle={isDark ? "light-content" : "dark-content"} 
+        backgroundColor="transparent" 
+        translucent 
+      />
       
       {showCamera ? (
         <QRScanner
@@ -1189,11 +1197,8 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   activeToggle: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   toggleButtonText: {
     fontSize: 16,
@@ -1214,11 +1219,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   smartScanText: {
     fontSize: 14,
@@ -1478,11 +1480,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
   },
   startScanButtonText: {
     color: '#FFFFFF',
