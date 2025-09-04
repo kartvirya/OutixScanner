@@ -1344,10 +1344,22 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
       // Check if data is nested in a 'details' object
       const responseData = data.details || data;
       
+      // Better error messages for unscan operations
+      let errorMsg = responseData.msg || responseData.message;
+      if (!errorMsg) {
+        if (status === 404) {
+          errorMsg = 'Ticket not found or not checked in. Cannot check out.';
+        } else if (status === 401) {
+          errorMsg = 'Authentication failed. Please check your credentials.';
+        } else {
+          errorMsg = 'Unscan operation failed';
+        }
+      }
+      
       // Return the actual API response for all status codes
       return {
         error: responseData.error !== undefined ? responseData.error : true,
-        msg: responseData.msg || responseData.message || (status === 404 ? 'Already Scanned Ticket, Cannot check in.' : status === 401 ? 'Authentication failed. Please check your credentials.' : 'Scan failed'),
+        msg: errorMsg,
         status: responseData.status || status
       };
     }
@@ -1372,10 +1384,24 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       };
     }
     
-    // Make direct API request to unscan endpoint
-    const response = await api.get(`/scan/${eventId}/${scanCode}?unscan=1`, {
-      timeout: 30000
-    });
+    // Make direct API request to unscan endpoint - try different approaches
+    let response;
+    try {
+      // First try the unscan parameter approach
+      response = await api.get(`/scan/${eventId}/${scanCode}?unscan=1`, {
+        timeout: 30000
+      });
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        console.log('Trying alternative unscan endpoint...');
+        // Try alternative endpoint - might be /unscan instead
+        response = await api.get(`/unscan/${eventId}/${scanCode}`, {
+          timeout: 30000
+        });
+      } else {
+        throw error;
+      }
+    }
     
     console.log('QR unscan response:', response.data);
     return response.data;
@@ -1414,8 +1440,11 @@ export { getStorageItem, removeStorageItem, setStorageItem };
 
 export const getGroupTickets = async (eventId: string, qrData: string): Promise<any> => {
   try {
+    console.log('🔍 getGroupTickets called with:', { eventId, qrData });
+    
     // First validate the ticket to get purchaser info
     const validation = await validateQRCode(eventId, qrData);
+    console.log('📋 Validation result:', validation);
     
     if (!validation) {
       return {
@@ -1428,6 +1457,7 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     let purchaserEmail = null;
     let purchaserName = null;
     let purchaserBookingId = null;
+    let purchaserReferenceNum = null;
     
     // Check if we have ticket info (can be present even in error responses)
     if (validation.msg && typeof validation.msg === 'object' && 'info' in validation.msg) {
@@ -1435,10 +1465,11 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
       purchaserEmail = info?.email;
       purchaserName = info?.fullname;
       purchaserBookingId = info?.booking_id;
+      purchaserReferenceNum = info?.reference_num;
     }
     
     // If validation failed but we don't have purchaser info, it's a real error
-    if (validation.error && !purchaserEmail && !purchaserName && !purchaserBookingId) {
+    if (validation.error && !purchaserEmail && !purchaserName && !purchaserBookingId && !purchaserReferenceNum) {
       return {
         error: true,
         msg: typeof validation.msg === 'string' 
@@ -1448,19 +1479,21 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     }
     
     // If we don't have purchaser info by now, we can't proceed
-    if (!purchaserEmail && !purchaserName && !purchaserBookingId) {
+    if (!purchaserEmail && !purchaserName && !purchaserBookingId && !purchaserReferenceNum) {
       return {
         error: true,
         msg: 'Cannot identify purchaser for group scan'
       };
     }
     
-    console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId });
+    console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
     
     // Get all attendees for this event using the correct endpoint
+    console.log('📞 Fetching guest list for event:', eventId);
     const response = await api.get(`/guestlist/${eventId}`, {
       timeout: 30000
     });
+    console.log('📋 Guest list response status:', response.status);
     
     if (!response.data) {
       throw new Error('No response data from guest list API');
@@ -1484,22 +1517,66 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     
     // Filter attendees by same purchaser email, name, or booking ID
     // Note: guest list structure uses different field names
+    console.log('🔍 Filtering guests by purchaser info:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
+    console.log('🔍 Sample guest booking references:', allGuests.slice(0, 3).map(g => ({
+      ticket_identifier: g.ticket_identifier,
+      booking_reference: g.booking_reference,
+      booking_id: g.booking_id
+    })));
+    
     const groupTickets = allGuests.filter((attendee: any) => {
+      // Match by reference number (reference_num from validation vs booking_reference in guest list)
+      if (purchaserReferenceNum && attendee.booking_reference === purchaserReferenceNum) {
+        console.log('✅ Matched by reference number:', attendee.booking_reference, 'vs', purchaserReferenceNum);
+        return true;
+      }
       // Match by booking reference (booking_reference in guest list vs booking_id in validation)
       if (purchaserBookingId && (attendee.booking_reference === purchaserBookingId || attendee.booking_id === purchaserBookingId)) {
+        console.log('✅ Matched by booking ID:', attendee.booking_reference, 'vs', purchaserBookingId);
         return true;
       }
       if (purchaserEmail && attendee.email === purchaserEmail) {
+        console.log('✅ Matched by email:', attendee.email);
         return true;
       }
       // Match by name (purchased_by in guest list vs fullname in validation)
       if (purchaserName && (attendee.purchased_by === purchaserName || attendee.fullname === purchaserName)) {
+        console.log('✅ Matched by name:', attendee.purchased_by || attendee.fullname);
         return true;
       }
+      
+      // NEW: If no purchaser info is available, check if this is the same ticket by ticket_identifier
+      if (!purchaserEmail && !purchaserName && !purchaserBookingId && !purchaserReferenceNum) {
+        console.log('⚠️ No purchaser info available, checking if this is the scanned ticket');
+        if (attendee.ticket_identifier === qrData) {
+          console.log('✅ This is the scanned ticket itself:', attendee.ticket_identifier);
+          return true;
+        }
+      }
+      
       return false;
     });
     
     console.log('Group tickets found:', groupTickets.length);
+    
+    // If no group tickets found but we have the scanned ticket, create a single-ticket group
+    if (groupTickets.length === 0) {
+      console.log('⚠️ No group tickets found, checking if scanned ticket exists in guest list');
+      console.log('🔍 Looking for QR data:', qrData);
+      console.log('🔍 Available ticket identifiers:', allGuests.slice(0, 5).map(g => g.ticket_identifier));
+      
+      const scannedTicket = allGuests.find((attendee: any) => attendee.ticket_identifier === qrData);
+      if (scannedTicket) {
+        console.log('✅ Found scanned ticket in guest list, creating single-ticket group');
+        groupTickets.push(scannedTicket);
+      } else {
+        console.log('❌ Scanned ticket not found in guest list');
+        console.log('🔍 First few guest ticket identifiers:', allGuests.slice(0, 3).map(g => ({
+          ticket_identifier: g.ticket_identifier,
+          booking_reference: g.booking_reference
+        })));
+      }
+    }
     
     // Map to consistent format using guest list field names
     const formattedTickets = groupTickets.map((ticket: any, index: number) => {
@@ -1515,9 +1592,27 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
       // Use ticket_identifier as the primary QR code (this is what we scan)
       const qrCode = ticket.ticket_identifier;
       
+      // Helper function to extract guest name from ticket data
+      const extractGuestName = (ticket: any): string => {
+        if (ticket.purchased_by && ticket.purchased_by.trim()) {
+          return ticket.purchased_by.trim();
+        } else if (ticket.admit_name && ticket.admit_name.trim()) {
+          return ticket.admit_name.trim();
+        } else if (ticket.name && ticket.name.trim()) {
+          return ticket.name.trim();
+        } else if (ticket.email && ticket.email.trim()) {
+          return ticket.email.trim();
+        } else if (ticket.firstName || ticket.lastName) {
+          return `${ticket.firstName || ''} ${ticket.lastName || ''}`.trim();
+        } else if (ticket.ticket_identifier) {
+          return `Ticket ${ticket.ticket_identifier.slice(-6)}`;
+        }
+        return 'Guest';
+      };
+      
       return {
         id: qrCode, // Use the ticket identifier as the unique ID
-        name: ticket.purchased_by || ticket.admit_name || 'Guest',
+        name: extractGuestName(ticket),
         email: ticket.email || 'No email',
         ticketType: ticket.ticket_title || 'General Admission',
         ticketIdentifier: ticket.ticket_identifier,

@@ -125,9 +125,27 @@ export default function AttendancePage() {
       const checkedInData = await getCheckedInGuestList(eventId);
       
       if (checkedInData && Array.isArray(checkedInData)) {
+        // Helper function to extract guest name from API data
+        const extractGuestName = (guest: any): string => {
+          if (guest.purchased_by && guest.purchased_by.trim()) {
+            return guest.purchased_by.trim();
+          } else if (guest.admit_name && guest.admit_name.trim()) {
+            return guest.admit_name.trim();
+          } else if (guest.name && guest.name.trim()) {
+            return guest.name.trim();
+          } else if (guest.email && guest.email.trim()) {
+            return guest.email.trim();
+          } else if (guest.firstName || guest.lastName) {
+            return `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
+          } else if (guest.ticket_identifier) {
+            return `Ticket ${guest.ticket_identifier.slice(-6)}`;
+          }
+          return 'Guest';
+        };
+        
         const attendees = checkedInData.map(guest => ({
           id: guest.id || guest.guestId || String(Math.random()),
-          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+          name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticketType || guest.ticket_type || 'General',
           scannedIn: true, // All guests from this endpoint are checked in

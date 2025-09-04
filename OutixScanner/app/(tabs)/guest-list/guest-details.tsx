@@ -1,28 +1,29 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
-  Calendar,
-  CheckCircle,
-  Clock,
-  CreditCard,
-  DollarSign,
-  FileText,
-  Mail,
-  Phone,
-  Ticket,
-  User
+    ArrowLeft,
+    Calendar,
+    CheckCircle,
+    Clock,
+    CreditCard,
+    DollarSign,
+    FileText,
+    Mail,
+    Phone,
+    Ticket,
+    User
 } from 'lucide-react-native';
 import React from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { feedback } from '../../../services/feedback';
+import { formatAppDateTime } from '../../../utils/date';
 
 export default function GuestDetailsPage() {
   const { colors } = useTheme();
@@ -56,16 +57,7 @@ export default function GuestDetailsPage() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch {
-      return dateString;
-    }
+    return formatAppDateTime(dateString);
   };
 
   const getCardLastDigits = (cardInfo?: string) => {

@@ -74,7 +74,7 @@ interface ThemeProviderProps {
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   const systemColorScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(systemColorScheme === 'dark');
+  const [isDark, setIsDark] = useState(true); // Default to dark mode
   const theme = isDark ? DarkTheme : DefaultTheme;
   const [selectedEventId, setSelectedEventId] = useState<string | null>('77809'); // Default to event 77809
   const [selectedEventName, setSelectedEventName] = useState<string | null>(null);
@@ -117,7 +117,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const savedTheme = await getStorageValue('theme', 'light');
+        const savedTheme = await getStorageValue('theme', 'dark');
         setIsDark(savedTheme === 'dark');
       } catch (error) {
         console.error('Error loading theme:', error);
@@ -145,7 +145,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
     setIsDark(!isDark);
     
     // Save theme preference to storage
-    setStorageValue('theme', isDark ? 'dark' : 'light');
+    setStorageValue('theme', !isDark ? 'dark' : 'light');
   };
 
   const updateSelectedEventId = async (eventId: string) => {

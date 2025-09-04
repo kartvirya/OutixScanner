@@ -1,23 +1,23 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  hapticFeedback, 
-  soundFeedback, 
-  feedback, 
-  updateFeedbackSettings, 
-  getFeedbackSettings,
-  isHapticsSupported,
-  disableAllSounds,
-  enableHapticsOnly,
-  enableSubtleSounds
+import {
+    disableAllSounds,
+    enableHapticsOnly,
+    enableSubtleSounds,
+    feedback,
+    getFeedbackSettings,
+    hapticFeedback,
+    isHapticsSupported,
+    soundFeedback,
+    updateFeedbackSettings
 } from '../services/feedback';
 
 export default function FeedbackTestComponent() {
@@ -267,7 +267,7 @@ export default function FeedbackTestComponent() {
         
         {testButtons.map((button, index) => (
           <TouchableOpacity
-            key={index}
+            key={`test-${index}-${button.title}`}
             style={[styles.testButton, { backgroundColor: colors.background }]}
             onPress={button.onPress}
           >
@@ -286,7 +286,7 @@ export default function FeedbackTestComponent() {
         
         {combinedButtons.map((button, index) => (
           <TouchableOpacity
-            key={index}
+            key={`combined-${index}-${button.title}`}
             style={[styles.testButton, { backgroundColor: colors.background }]}
             onPress={button.onPress}
           >

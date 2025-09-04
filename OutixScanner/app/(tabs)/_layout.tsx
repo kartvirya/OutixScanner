@@ -1,7 +1,7 @@
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { BarChart, Calendar, QrCode, User, Users } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
-import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from "../../context/ThemeContext";
@@ -148,11 +148,11 @@ function CustomTabBar() {
   }, [isOnEventDetailPage]);
 
   const tabs = [
-    { name: 'index', title: 'Events', icon: Calendar, route: '/(tabs)' },
-    { name: 'registrants', title: 'Registrations', icon: Users, route: '/(tabs)/registrants' },
-    ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true }] : []),
-    { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics' },
-    { name: 'profile', title: 'Profile', icon: User, route: '/(tabs)/profile' },
+    { name: 'index', title: 'Events', icon: Calendar, route: '/(tabs)', key: 'index' },
+    { name: 'registrants', title: 'Registrations', icon: Users, route: '/(tabs)/registrants', key: 'registrants' },
+    ...(isOnEventDetailPage ? [{ name: 'scanner', title: '', icon: QrCode, route: '/(tabs)/scanner', isCenter: true, key: 'scanner' }] : []),
+    { name: 'analytics', title: 'Analytics', icon: BarChart, route: '/(tabs)/analytics', key: 'analytics' },
+    { name: 'profile', title: 'Profile', icon: User, route: '/(tabs)/profile', key: 'profile' },
   ];
 
   const isActive = (route: string) => {
@@ -209,7 +209,7 @@ function CustomTabBar() {
               
               return (
                 <TouchableOpacity
-                  key={tab.name}
+                  key={tab.key}
                   style={styles.regularTab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
@@ -225,21 +225,11 @@ function CustomTabBar() {
                   ]}>
                     <IconComponent 
                       size={22} 
-                      color={active ? '#FF6B00' : colors.secondary} 
+                      color={active ? '#FF6B00' : colors.text} 
                       strokeWidth={active ? 2.5 : 2} 
                     />
                   </View>
-                  <Text style={[
-                    styles.tabLabel,
-                    { 
-                      color: active ? '#FF6B00' : colors.secondary,
-                      marginTop: 4,
-                      fontWeight: active ? '700' : '500',
-                      opacity: active ? 1 : 0.7,
-                    }
-                  ]}>
-                    {tab.title}
-                  </Text>
+                  {/* Removed text labels - keeping only icons */}
                 </TouchableOpacity>
               );
             })}
@@ -256,7 +246,7 @@ function CustomTabBar() {
               
               return (
                 <TouchableOpacity
-                  key={tab.name}
+                  key={tab.key}
                   style={styles.regularTab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
@@ -272,21 +262,11 @@ function CustomTabBar() {
                   ]}>
                     <IconComponent 
                       size={22} 
-                      color={active ? '#FF6B00' : colors.secondary} 
+                      color={active ? '#FF6B00' : colors.text} 
                       strokeWidth={active ? 2.5 : 2} 
                     />
                   </View>
-                  <Text style={[
-                    styles.tabLabel,
-                    { 
-                      color: active ? '#FF6B00' : colors.secondary,
-                      marginTop: 4,
-                      fontWeight: active ? '700' : '500',
-                      opacity: active ? 1 : 0.7,
-                    }
-                  ]}>
-                    {tab.title}
-                  </Text>
+                  {/* Removed text labels - keeping only icons */}
                 </TouchableOpacity>
               );
             })}
@@ -302,7 +282,7 @@ function CustomTabBar() {
           
           return (
             <Animated.View
-              key={tab.name}
+              key={tab.key}
               style={[
                 styles.floatingTabContainer,
                 {
@@ -345,7 +325,7 @@ export default function TabsLayout() {
   }, []);
 
   return (
-    <View style={{ flex: 1, paddingTop: insets.top }}>
+    <View style={{ flex: 1 }}>
       <Tabs
         tabBar={() => <CustomTabBar />}
         screenOptions={{
@@ -451,6 +431,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
+    paddingVertical: 8, // Added vertical padding for better touch targets
   },
   floatingTabContainer: {
     position: 'absolute',
@@ -477,9 +458,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabLabel: {
-    fontSize: 11,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
+  // tabLabel style removed since we're only using icons
 });

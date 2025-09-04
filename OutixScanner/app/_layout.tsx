@@ -1,8 +1,13 @@
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
+
+import { Amplify, Notifications } from 'aws-amplify';
 import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect } from "react";
 import { StatusBar, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import awsconfig from '../aws-exports';
 import { RefreshProvider } from "../context/RefreshContext";
 import { StorageProvider } from "../context/StorageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
@@ -29,12 +34,19 @@ export default function RootLayout() {
   useEffect(() => {
     async function loadResourcesAndDataAsync() {
       try {
+        // Configure AWS Amplify
+        Amplify.configure(awsconfig);
+        
+        // Enable push notifications
+        Notifications.Push.enable();
+        
+        console.log('AWS Amplify and push notifications initialized');
+        
         // Load fonts if needed, but Lucide doesn't require extra fonts
         setFontsLoaded(true);
       } catch (e) {
         // We might want to provide this error information to an error reporting service
         console.warn('Error loading resources:', e);
-      } finally {
         setFontsLoaded(true);
       }
     }

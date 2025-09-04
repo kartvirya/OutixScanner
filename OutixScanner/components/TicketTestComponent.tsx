@@ -158,7 +158,7 @@ const TicketTestComponent: React.FC = () => {
               </Text>
             ) : (
               results.map((result, index) => (
-                <Text key={index} style={[styles.resultText, { color: colors.text }]}>
+                <Text key={`result-${index}-${result.substring(0, 20)}`} style={[styles.resultText, { color: colors.text }]}>
                   {result}
                 </Text>
               ))

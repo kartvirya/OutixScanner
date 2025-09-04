@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
-import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
-import { login, isAuthenticated } from "../services/api";
-import { useTheme } from "../context/ThemeContext";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import AppLayout from "../components/AppLayout";
 import { useStorage } from "../context/StorageContext";
+import { useTheme } from "../context/ThemeContext";
+import { isAuthenticated, login } from "../services/api";
 
 export default function Index() {
   const { colors } = useTheme();
@@ -57,19 +58,19 @@ export default function Index() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <AppLayout contentStyle={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.text, { color: colors.text }]}>Connecting to OutixScan...</Text>
-      </View>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+      <AppLayout contentStyle={styles.centered}>
+        <Text style={[styles.errorText, { color: '#EF4444' }]}>{error}</Text>
         <Text style={[styles.text, { color: colors.text }]}>Redirecting to login...</Text>
-      </View>
+      </AppLayout>
     );
   }
 
@@ -78,11 +79,11 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  centered: {
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    flex: 1,
   },
   text: {
     marginTop: 16,

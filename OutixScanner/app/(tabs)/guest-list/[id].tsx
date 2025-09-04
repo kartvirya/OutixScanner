@@ -88,6 +88,43 @@ export default function GuestListPage() {
   // Track which guests we've already marked as checked in to prevent duplicates
   const markedAsCheckedInRef = useRef(new Set<string>());
 
+  // Helper function to extract guest name from API data
+  const extractGuestName = (guest: any): string => {
+    console.log('🔍 Extracting name from guest data:', {
+      purchased_by: guest.purchased_by,
+      admit_name: guest.admit_name,
+      name: guest.name,
+      email: guest.email,
+      firstName: guest.firstName,
+      lastName: guest.lastName,
+      ticket_identifier: guest.ticket_identifier
+    });
+    
+    if (guest.purchased_by && guest.purchased_by.trim()) {
+      console.log('✅ Using purchased_by:', guest.purchased_by.trim());
+      return guest.purchased_by.trim();
+    } else if (guest.admit_name && guest.admit_name.trim()) {
+      console.log('✅ Using admit_name:', guest.admit_name.trim());
+      return guest.admit_name.trim();
+    } else if (guest.name && guest.name.trim()) {
+      console.log('✅ Using name:', guest.name.trim());
+      return guest.name.trim();
+    } else if (guest.email && guest.email.trim()) {
+      console.log('✅ Using email:', guest.email.trim());
+      return guest.email.trim();
+    } else if (guest.firstName || guest.lastName) {
+      const fullName = `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
+      console.log('✅ Using firstName/lastName:', fullName);
+      return fullName;
+    } else if (guest.ticket_identifier) {
+      const ticketName = `Ticket ${guest.ticket_identifier.slice(-6)}`;
+      console.log('✅ Using ticket_identifier:', ticketName);
+      return ticketName;
+    }
+    console.log('❌ No name found, using default: Guest');
+    return 'Guest';
+  };
+
   // Debug function to log current state
   const logCurrentState = (action: string, guest: Attendee) => {
     console.log(`🔍 ${action} Debug State for ${guest.name}:`);
@@ -111,7 +148,7 @@ export default function GuestListPage() {
       
       const processedGuests = result.guests.map(guest => ({
           id: guest.id || guest.guestId || String(Math.random()),
-          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+          name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
           scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
@@ -162,9 +199,9 @@ export default function GuestListPage() {
       if (checkedInData && Array.isArray(checkedInData)) {
         // Map API checked-in guest data to our format
         const attendees = checkedInData.map(guest => ({
-          id: guest.id || guest.guestId || String(Math.random()),
-          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
-          email: guest.email || 'N/A',
+            id: guest.id || guest.guestId || String(Math.random()),
+            name: extractGuestName(guest),
+            email: guest.email || 'N/A',
           ticketType: guest.ticketType || guest.ticket_type || 'General',
           scannedIn: true, // All guests from this endpoint are checked in
           scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
@@ -343,9 +380,9 @@ export default function GuestListPage() {
         console.log('Performing search for:', searchQuery);
         const results = await searchGuestList(eventId, searchQuery);
         const processedResults = results.map(guest => ({
-          id: guest.id || guest.guestId || String(Math.random()),
-          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
-          email: guest.email || 'N/A',
+            id: guest.id || guest.guestId || String(Math.random()),
+            name: extractGuestName(guest),
+            email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
           scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,

@@ -1,9 +1,12 @@
-import { Calendar, ChevronDown, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TouchableOpacity, View, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { Calendar, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AppLayout from '../../components/AppLayout';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
-import { getRegistrations, getWaivers, isAuthenticated, login, submitWaiver, Registration, Waiver } from '../../services/api';
+import { getRegistrations, getWaivers, isAuthenticated, login, Registration, submitWaiver, Waiver } from '../../services/api';
+import { formatAppDateTime } from '../../utils/date';
 
 export default function Registrants() {
   const { colors } = useTheme();
@@ -13,6 +16,7 @@ export default function Registrants() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [search, setSearch] = useState('');
   const [showWaiverModal, setShowWaiverModal] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [selectedEventForWaivers, setSelectedEventForWaivers] = useState<Registration | null>(null);
@@ -65,6 +69,17 @@ export default function Registrants() {
       
       const data = await getRegistrations();
       console.log('Registrations loaded:', data.length, 'items');
+      
+      // Check for duplicate IDs
+      const ids = data.map(item => item.id);
+      const uniqueIds = new Set(ids);
+      if (ids.length !== uniqueIds.size) {
+        console.warn('⚠️ Duplicate registration IDs found:', ids.length - uniqueIds.size, 'duplicates');
+        // Find and log duplicates
+        const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+        console.warn('Duplicate IDs:', [...new Set(duplicates)]);
+      }
+      
       setRegistrations(data);
     } catch (error) {
       console.error('Error loading registrations:', error);
@@ -90,6 +105,17 @@ export default function Registrants() {
       
       const data = await getWaivers(eventId);
       console.log('Waivers loaded:', data.length, 'items');
+      
+      // Check for duplicate Ref values
+      const refs = data.map(item => item.Ref);
+      const uniqueRefs = new Set(refs);
+      if (refs.length !== uniqueRefs.size) {
+        console.warn('⚠️ Duplicate waiver Refs found:', refs.length - uniqueRefs.size, 'duplicates');
+        // Find and log duplicates
+        const duplicates = refs.filter((ref, index) => refs.indexOf(ref) !== index);
+        console.warn('Duplicate Refs:', [...new Set(duplicates)]);
+      }
+      
       setWaivers(data);
     } catch (error) {
       console.error('Error loading waivers:', error);
@@ -192,16 +218,18 @@ export default function Registrants() {
               {item.EventName}
             </Text>
             <Text style={[styles.itemDate, { color: colors.text }]}>
-              {new Date(item.showStart).toLocaleDateString()}
+              {formatAppDateTime(item.showStart)}
             </Text>
           </View>
         </View>
       </View>
       
       <View style={styles.itemDetails}>
-        <Text style={[styles.itemSubtitle, { color: colors.text }]} numberOfLines={1}>
-          {item.EventSubtitle || 'No subtitle'}
-        </Text>
+        {Boolean(item.EventSubtitle) && (
+          <Text style={[styles.itemSubtitle, { color: colors.text }]} numberOfLines={1}>
+            {item.EventSubtitle}
+          </Text>
+        )}
         <View style={styles.detailsGrid}>
           <View style={styles.detailItem}>
             <MapPin size={16} color={colors.text} />
@@ -230,6 +258,18 @@ export default function Registrants() {
     </TouchableOpacity>
   );
 
+  const filteredRegistrations = useMemo(() => {
+    if (!search.trim()) return registrations;
+    const q = search.toLowerCase();
+    return registrations.filter((r) =>
+      (r.EventName && r.EventName.toLowerCase().includes(q)) ||
+      (r.EventSubtitle && r.EventSubtitle.toLowerCase().includes(q)) ||
+      (r.VenueName && r.VenueName.toLowerCase().includes(q)) ||
+      (r.City && r.City.toLowerCase().includes(q)) ||
+      (r.organizerName && r.organizerName.toLowerCase().includes(q))
+    );
+  }, [registrations, search]);
+
   const renderWaiverItem = ({ item }: { item: Waiver }) => (
     <View style={[styles.waiverCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       {/* Header with status */}
@@ -240,8 +280,8 @@ export default function Registrants() {
             <Text style={[styles.waiverTitle, { color: colors.text }]} numberOfLines={2}>
               {item['Driver Rider Name'] || item.ItemName}
             </Text>
-            <Text style={[styles.waiverDate, { color: colors.text }]}>
-              Registered: {new Date(item.RegisteredDate).toLocaleDateString()}
+            <Text style={[styles.waiverDate, { color: colors.text }]}> 
+              Registered: {formatAppDateTime(item.RegisteredDate)}
             </Text>
           </View>
         </View>
@@ -358,19 +398,15 @@ export default function Registrants() {
       transparent={false}
       onRequestClose={closeWaiversModal}
     >
-      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-        <StatusBar 
-          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
-          backgroundColor={colors.background} 
-          translucent={false}
-        />
+      <SafeAreaProvider>
+      <AppLayout key="waivers-modal" contentStyle={[styles.modalContainer, { backgroundColor: colors.background }]}> 
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
           <View style={styles.modalTitleContainer}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Waivers - {selectedEventForWaivers?.EventName}
             </Text>
-            <Text style={[styles.modalSubtitle, { color: colors.text }]}>
-              {selectedEventForWaivers && new Date(selectedEventForWaivers.showStart).toLocaleDateString()}
+            <Text style={[styles.modalSubtitle, { color: colors.text }]}> 
+              {selectedEventForWaivers && formatAppDateTime(selectedEventForWaivers.showStart)}
             </Text>
           </View>
           <TouchableOpacity
@@ -406,7 +442,7 @@ export default function Registrants() {
         ) : (
           <FlatList
             data={waivers}
-            keyExtractor={(item) => item.Ref}
+            keyExtractor={(item, index) => item.Ref ? `waiver-${item.Ref}` : `waiver-${index}`}
             renderItem={renderWaiverItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
@@ -419,35 +455,26 @@ export default function Registrants() {
             }
           />
         )}
-      </SafeAreaView>
+      </AppLayout>
+      </SafeAreaProvider>
     </Modal>
   );
 
   // Show loading screen while checking authentication or loading initial data
   if (!authChecked || (loading && registrations.length === 0)) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <StatusBar 
-          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
-          backgroundColor={colors.background} 
-          translucent={false}
-        />
+      <AppLayout key="loading" contentStyle={[styles.container, styles.centered]}> 
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.text }]}>
+        <Text style={[styles.loadingText, { color: colors.text }]}> 
           {!authChecked ? 'Authenticating...' : 'Loading registrations...'}
         </Text>
-      </SafeAreaView>
+      </AppLayout>
     );
   }
 
   if (error && registrations.length === 0) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <StatusBar 
-          barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
-          backgroundColor={colors.background} 
-          translucent={false}
-        />
+      <AppLayout key="error" contentStyle={[styles.container, styles.centered]}> 
         <Text style={[styles.errorText, { color: '#EF4444' }]}>Error: {error}</Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
@@ -459,24 +486,33 @@ export default function Registrants() {
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-      </SafeAreaView>
+      </AppLayout>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar 
-        barStyle={colors.background === '#000000' ? 'light-content' : 'dark-content'} 
-        backgroundColor={colors.background} 
-        translucent={false}
-      />
+    <AppLayout key="main" contentStyle={[styles.container, styles.pageTightPadding]}> 
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Registrations</Text>
       </View>
 
+      <View style={[styles.searchContainer, { borderColor: colors.border, backgroundColor: colors.card }]}> 
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search registrations..."
+          placeholderTextColor={colors.text + '88'}
+          style={[styles.searchInput, { color: colors.text }]}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
       <FlatList
-        data={registrations}
-        keyExtractor={(item) => item.id}
+        data={filteredRegistrations}
+        keyExtractor={(item, index) => item.id ? `registration-${item.id}` : `registration-${index}`}
         renderItem={renderRegistrationItem}
         refreshControl={
           <RefreshControl
@@ -548,7 +584,7 @@ export default function Registrants() {
           }}
         />
       )}
-    </SafeAreaView>
+    </AppLayout>
   );
 }
 
@@ -558,7 +594,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   headerTitle: {
@@ -652,15 +688,30 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   listContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingTop: 20,
     paddingBottom: 100,
   },
   itemCard: {
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
+  },
+  pageTightPadding: {
+    paddingHorizontal: 8,
+  },
+  searchContainer: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+  },
+  searchInput: {
+    fontSize: 16,
   },
   itemHeader: {
     flexDirection: 'row',

@@ -309,7 +309,7 @@ export default function Analytics() {
                     {event.EventName || event.title || event.name || 'Unnamed Event'}
                   </Text>
                   <Text style={[styles.eventDate, { color: colors.secondary }]}>
-                    {event.showStart ? new Date(event.showStart).toLocaleDateString() : 'No date'}
+                    {event.showStart ? require('../../utils/date').formatAppDateTime(event.showStart) : 'No date'}
                   </Text>
                   <Text style={[styles.eventVenue, { color: colors.secondary }]} numberOfLines={1}>
                     {event.VenueName || event.venue || 'No venue'}

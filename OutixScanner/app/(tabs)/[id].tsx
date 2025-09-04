@@ -1,45 +1,47 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-  BarChart,
-  Calendar,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  MapPin,
-  Ticket,
-  UserCheck,
-  Users
+    BarChart,
+    Calendar,
+    ChevronDown,
+    ChevronUp,
+    Clock,
+    MapPin,
+    Ticket,
+    UserCheck,
+    Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-  clearManualProxyIP,
-  getCheckedInGuestList,
-  getCurrentProxyIP,
-  getCurrentProxyURL,
-  getEvents,
-  getGuestList,
-  scanQRCode,
-  setManualProxyIP,
-  testProxyConnectivity,
-  unscanQRCode,
-  validateQRCode
+    clearManualProxyIP,
+    getCheckedInGuestList,
+    getCurrentProxyIP,
+    getCurrentProxyURL,
+    getEvents,
+    getGuestList,
+    scanQRCode,
+    setManualProxyIP,
+    testProxyConnectivity,
+    unscanQRCode,
+    validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
+import { formatAppDateTime } from '../../utils/date';
 
 // Mock data types
 interface Ticket {
@@ -323,9 +325,27 @@ export default function EventDetail() {
       if (guestListData && Array.isArray(guestListData)) {
         // Map API guest data to our format, preserving local scan states
         const attendees = guestListData.map(guest => {
+          // Helper function to extract guest name from API data
+          const extractGuestName = (guest: any): string => {
+            if (guest.purchased_by && guest.purchased_by.trim()) {
+              return guest.purchased_by.trim();
+            } else if (guest.admit_name && guest.admit_name.trim()) {
+              return guest.admit_name.trim();
+            } else if (guest.name && guest.name.trim()) {
+              return guest.name.trim();
+            } else if (guest.email && guest.email.trim()) {
+              return guest.email.trim();
+            } else if (guest.firstName || guest.lastName) {
+              return `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
+            } else if (guest.ticket_identifier) {
+              return `Ticket ${guest.ticket_identifier.slice(-6)}`;
+            }
+            return 'Guest';
+          };
+          
           const baseAttendee = {
             id: guest.id || guest.guestId || String(Math.random()),
-            name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+            name: extractGuestName(guest),
             email: guest.email || 'N/A',
             ticketType: guest.ticketType || guest.ticket_type || 'General',
             scannedIn: guest.checkedIn || guest.checked_in || false,
@@ -402,26 +422,10 @@ export default function EventDetail() {
     };
 
   // Helper function to format date from API 
-  const formatDateFromAPI = (dateString: string): string => {
-    if (dateString === 'TBD') return 'TBD';
-    try {
-      const date = new Date(dateString);
-      return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
-    } catch (e) {
-      return dateString;
-    }
-  };
+  const formatDateFromAPI = (dateString: string): string => formatAppDateTime(dateString);
 
   // Helper function to format time from API
-  const formatTimeFromAPI = (timeString: string): string => {
-    if (timeString === 'TBD') return 'TBD';
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return timeString;
-    }
-  };
+  const formatTimeFromAPI = (timeString: string): string => formatAppDateTime(timeString);
 
   const handleBack = () => {
     router.back();
@@ -636,7 +640,7 @@ export default function EventDetail() {
     
     // Create timestamp for scan-in
     const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeString = formatAppDateTime(now);
     
     // Try to find attendee by name or email from validation result
     const ticketInfo = validationResult.msg.info;
@@ -1200,6 +1204,11 @@ export default function EventDetail() {
   // Main render function
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+        translucent={false}
+      />
       <Stack.Screen 
         options={{ 
           title: "",
