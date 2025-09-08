@@ -8,7 +8,7 @@
     "scheme": "outixscanner",
     "owner": "outix",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "backgroundColor": "#FF6B00"
     },
@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "co.outix.scanner"
+      "bundleIdentifier": "co.outix.checkin"
     },
     "android": {
       "adaptiveIcon": {
@@ -44,12 +44,6 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
-        }
-      ],
-      [
-        "expo-barcode-scanner",
-        {
-          "cameraPermission": "Allow OutixScanner to access your camera to scan QR codes."
         }
       ],
       [

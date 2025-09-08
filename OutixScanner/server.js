@@ -143,8 +143,8 @@ app.post('/api/auth', async (req, res) => {
   try {
     // Create form data for authentication using form-data package
     const formData = new FormData();
-    formData.append('username', req.body.username || 'Outix@thebend.co');
-    formData.append('password', req.body.password || 'Scan$9841');
+    formData.append('username', req.body.username);
+    formData.append('password', req.body.password);
     
     // Make the request to the actual API
     const response = await axios.post(`${BASE_URL}/auth`, formData, {

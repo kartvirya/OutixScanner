@@ -33,6 +33,28 @@ import {
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 
+// Helper function to format check-in time with better error handling
+const formatCheckInTime = (input: string | number | Date | null | undefined): string => {
+  if (!input) return 'Unknown time';
+  
+  try {
+    const date = new Date(input);
+    if (isNaN(date.getTime())) {
+      console.log('Invalid date input:', input);
+      return 'Unknown time';
+    }
+    
+    return new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(date);
+  } catch (error) {
+    console.log('Error formatting time:', error, 'Input:', input);
+    return 'Unknown time';
+  }
+};
+
 interface Attendee {
   id: string;
   name: string;
@@ -61,16 +83,9 @@ export default function AttendancePage() {
 
   useEffect(() => {
     initializeAudio();
+    // Load once on mount; users can pull-to-refresh manually
     fetchEventAndAttendanceData();
-    
-    // Register for auto-refresh
-    const unsubscribe = onAttendanceRefresh(eventId, () => {
-      console.log('Attendance auto-refresh triggered for event', eventId);
-      fetchEventAndAttendanceData();
-    });
-    
-    return unsubscribe;
-  }, [eventId, onAttendanceRefresh]);
+  }, [eventId]);
 
   useEffect(() => {
     filterAttendees();
@@ -124,7 +139,7 @@ export default function AttendancePage() {
       console.log('Fetching checked-in guests for attendance...');
       const checkedInData = await getCheckedInGuestList(eventId);
       
-      if (checkedInData && Array.isArray(checkedInData)) {
+      if (checkedInData && Array.isArray(checkedInData) && checkedInData.length > 0) {
         // Helper function to extract guest name from API data
         const extractGuestName = (guest: any): string => {
           if (guest.purchased_by && guest.purchased_by.trim()) {
@@ -143,15 +158,56 @@ export default function AttendancePage() {
           return 'Guest';
         };
         
-        const attendees = checkedInData.map(guest => ({
-          id: guest.id || guest.guestId || String(Math.random()),
-          name: extractGuestName(guest),
-          email: guest.email || 'N/A',
-          ticketType: guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: true, // All guests from this endpoint are checked in
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
-          scanCode: guest.scanCode || guest.qrCode || undefined
-        }));
+        const attendees = checkedInData.map(guest => {
+          // Debug: Log the guest data to see what time fields are available
+          console.log('🔍 Guest time fields DEBUG:', {
+            id: guest.id,
+            name: extractGuestName(guest),
+            checkInTime: guest.checkInTime,
+            check_in_time: guest.check_in_time,
+            checkedin_date: guest.checkedin_date,
+            checkedin_time: guest.checkedin_time,
+            scan_time: guest.scan_time,
+            timestamp: guest.timestamp,
+            created_at: guest.created_at,
+            updated_at: guest.updated_at,
+            allFields: Object.keys(guest),
+            rawGuestData: guest
+          });
+
+          // Try multiple possible time field names
+          const timeField = guest.checkInTime || 
+                           guest.check_in_time || 
+                           guest.checkedin_date || 
+                           guest.checkedin_time || 
+                           guest.scan_time || 
+                           guest.timestamp || 
+                           guest.created_at || 
+                           guest.updated_at;
+
+          console.log('🕐 Time field found:', timeField, 'Type:', typeof timeField);
+
+          // Format the time properly if we have a valid time field
+          let formattedTime = formatCheckInTime(timeField);
+          
+          // Temporary fallback: if no time is found, use current time for testing
+          if (formattedTime === 'Unknown time' && !timeField) {
+            formattedTime = formatCheckInTime(new Date());
+            console.log('🔄 Using current time as fallback for testing');
+          }
+          
+          console.log('⏰ Formatted time result:', formattedTime);
+
+          return {
+            id: guest.id || guest.guestId || String(Math.random()),
+            name: extractGuestName(guest),
+            email: guest.email || 'N/A',
+            ticketType: guest.ticketType || guest.ticket_type || 'General',
+            scannedIn: true, // All guests from this endpoint are checked in
+            scanInTime: formattedTime,
+            scanCode: guest.scanCode || guest.qrCode || undefined
+          };
+        });
         
         console.log(`Found ${attendees.length} checked-in guests`);
         setCheckedInGuests(attendees);
@@ -484,10 +540,7 @@ export default function AttendancePage() {
     setRefreshing(true);
     try {
       await fetchEventAndAttendanceData();
-      // Also trigger refresh for other components
-      triggerAttendanceRefresh(eventId);
-      triggerGuestListRefresh(eventId);
-      triggerAnalyticsRefresh();
+      // Manual refresh only - no automatic triggers
     } finally {
       setRefreshing(false);
     }

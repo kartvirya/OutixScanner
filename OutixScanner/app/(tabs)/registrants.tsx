@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppLayout from '../../components/AppLayout';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
-import { getRegistrations, getWaivers, isAuthenticated, login, Registration, submitWaiver, Waiver } from '../../services/api';
+import { getRegistrations, getWaivers, isAuthenticated, Registration, submitWaiver, Waiver } from '../../services/api';
 import { formatAppDateTime } from '../../utils/date';
 
 export default function Registrants() {
@@ -27,29 +27,25 @@ export default function Registrants() {
   const [selectedWaiver, setSelectedWaiver] = useState<Waiver | null>(null);
   const [selectedRole, setSelectedRole] = useState<'driver' | 'crew'>('driver');
 
-  // Check authentication and auto-login if needed
+  // Check authentication status
   const checkAuthAndLogin = async () => {
     try {
       console.log('Checking authentication status...');
       const authenticated = await isAuthenticated();
       
       if (!authenticated) {
-        console.log('Not authenticated, attempting auto-login...');
-        // Try to login with the credentials we know work
-        const token = await login('outix@thebend.co', 'Scan$9841');
-        if (!token) {
-          throw new Error('Failed to authenticate. Please check your credentials.');
-        }
-        console.log('Auto-login successful');
+        console.log('Not authenticated - user must login');
+        setError('Please login to access this feature');
+        setAuthChecked(true);
+        return false;
       } else {
         console.log('Already authenticated');
+        setAuthChecked(true);
+        return true;
       }
-      
-      setAuthChecked(true);
-      return true;
     } catch (error) {
-      console.error('Authentication failed:', error);
-      setError(error instanceof Error ? error.message : 'Authentication failed');
+      console.error('Authentication check failed:', error);
+      setError('Authentication check failed. Please login again.');
       setAuthChecked(true);
       return false;
     }

@@ -103,6 +103,8 @@ function CustomTabBar() {
   
   console.log('Is on event detail page:', isOnEventDetailPage);
 
+  const hideForTicketAction = pathname.includes('/ticket-action');
+
   // Animate scanner tab appearance/disappearance
   useEffect(() => {
     if (isOnEventDetailPage) {
@@ -179,6 +181,11 @@ function CustomTabBar() {
   const handleTabPress = (route: string) => {
     router.push(route as any);
   };
+
+  // Hide the tab bar UI on ticket-action screen, but keep hooks above consistent
+  if (hideForTicketAction) {
+    return null;
+  }
 
   return (
     <View style={styles.tabBarContainer}>

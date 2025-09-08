@@ -165,8 +165,7 @@ const safeAsyncStorageSave = async (key: string, value: string): Promise<boolean
   }
 };
 
-// Mock JWT token for development since the real endpoint is returning 400
-const MOCK_JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6Ik91dGl4U2Nhbm5lciIsImlhdCI6MTUxNjIzOTAyMn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+// Removed mock JWT token - authentication should be handled through proper login flow
 
 export const login = async (username?: string, password?: string): Promise<string | null> => {
   try {
@@ -294,79 +293,8 @@ export const login = async (username?: string, password?: string): Promise<strin
       return authToken;
     }
     
-    // Show we're attempting automatic login
-    console.log("No token found, attempting automatic login with default credentials");
-
-    try {
-      // Try automatic login with default credentials
-      const formData = new URLSearchParams();
-      formData.append('username', 'Outix@thebend.co');
-      formData.append('password', 'Scan$9841');
-      
-      const response = await axios.post(`${BASE_URL}/auth`, formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 30000
-      });
-      
-      console.log("Auto-login response status:", response.status);
-      
-      // Success path - extract token from response
-      if (response.data && response.data.msg && response.data.msg.Auth_Token) {
-        const token = response.data.msg.Auth_Token;
-        console.log("Got auth token from auto-login API");
-        authToken = token;
-        isLoggedOut = false;
-        
-        // Store token in storage
-        await setStorageItem('auth_token', token);
-        
-        // Store user profile data if available in the response
-        if (response.data.msg) {
-          console.log("Storing user profile data from auto-login response");
-          await setStorageItem('user_profile', JSON.stringify(response.data.msg));
-        }
-        
-        return token;
-      }
-      
-      // Try to extract token from response if structure is different
-      if (response.data && response.status === 200) {
-        const token = extractTokenFromResponse(response.data);
-        if (token) {
-          console.log("Extracted token from auto-login API response");
-          authToken = token;
-          isLoggedOut = false;
-          await setStorageItem('auth_token', token);
-          
-          // Store user profile data from response
-          if (response.data) {
-            console.log("Storing user profile data from auto-login extracted response");
-            await setStorageItem('user_profile', JSON.stringify(response.data));
-          }
-          
-          return token;
-        }
-      }
-      
-      // If we reached here, API returned success but no token
-      console.warn("Auto-login API successful but no token found in response");
-    } catch (apiError: any) {
-      console.error("Auto-login API failed:", apiError.message || apiError);
-      
-      // Check specific error types
-      if (apiError.response) {
-        console.log("Auto-login response status:", apiError.response.status);
-        console.log("Auto-login response data:", apiError.response.data);
-      } else if (apiError.request) {
-        console.log("No response received from auto-login");
-      }
-    }
-    
-    // If we get here, both stored token check and API failed
-    // Don't use mock token anymore since we have direct API access
-    console.error("Authentication failed - no valid token available");
+    // No auto-login - user must authenticate through proper login flow
+    console.log("No token found - user must login through proper authentication flow");
     authToken = null;
     return null;
     
@@ -441,7 +369,27 @@ const customFetch = async (url: string, options: RequestInit = {}): Promise<Resp
   return fetch(url, finalOptions);
 };
 
-export const getEvents = async (): Promise<any[]> => {
+interface Event {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  imageUrl?: string;
+  // Additional properties that might be present in API responses
+  name?: string;
+  eventName?: string;
+  event_name?: string;
+  eventTitle?: string;
+  event_title?: string;
+  'Event Name'?: string;
+  EventName?: string;
+  display_name?: string;
+  displayName?: string;
+  [key: string]: unknown;
+}
+
+export const getEvents = async (): Promise<Event[]> => {
   try {
     // Make sure we have the token
     if (typeof authToken !== 'string' ) {
@@ -555,7 +503,27 @@ export const getEvents = async (): Promise<any[]> => {
   }
 };
 
-export const getGuestList = async (eventId: string): Promise<any[]> => {
+interface Guest {
+  id: string;
+  name: string;
+  email: string;
+  ticketType: string;
+  checkedIn?: boolean;
+  scannedIn?: boolean;
+  checkInTime?: string;
+  scanInTime?: string;
+  bookingId?: string;
+  ticketIdentifier?: string;
+  price?: string;
+  mobile?: string;
+  address?: string;
+  notes?: string;
+  qrCode?: string;
+  purchased_date?: string;
+  [key: string]: unknown;
+}
+
+export const getGuestList = async (eventId: string): Promise<Guest[]> => {
   try {
     // Make sure we have the token
     if (!authToken) {
@@ -708,7 +676,7 @@ export const getGuestList = async (eventId: string): Promise<any[]> => {
 
 // New function to fetch paginated guest list (most recent transactions first)
 export const getGuestListPaginated = async (eventId: string, page: number = 1, limit: number = 10): Promise<{
-  guests: any[];
+  guests: Guest[];
   totalCount: number;
   hasMore: boolean;
   currentPage: number;
@@ -750,13 +718,13 @@ export const getGuestListPaginated = async (eventId: string, page: number = 1, l
       if (a.scannedIn && b.scannedIn) {
         const aTime = a.checkedin_date || a.check_in_time || a.scanInTime || '0';
         const bTime = b.checkedin_date || b.check_in_time || b.scanInTime || '0';
-        return bTime.localeCompare(aTime);
+        return String(bTime).localeCompare(String(aTime));
       }
       
       // For non-checked-in guests, sort by purchase date (most recent first)
       const aDate = a.purchased_date || '0';
       const bDate = b.purchased_date || '0';
-      return bDate.localeCompare(aDate);
+      return String(bDate).localeCompare(String(aDate));
     });
     
     // Calculate pagination
@@ -801,7 +769,7 @@ export const getGuestListPaginated = async (eventId: string, page: number = 1, l
 };
 
 // New function to search guests from API
-export const searchGuestList = async (eventId: string, searchQuery: string): Promise<any[]> => {
+export const searchGuestList = async (eventId: string, searchQuery: string): Promise<Guest[]> => {
   try {
     // Make sure we have the token
     if (!authToken) {
@@ -844,8 +812,8 @@ export const searchGuestList = async (eventId: string, searchQuery: string): Pro
     
     // Sort search results by relevance (exact matches first, then partial matches)
     return filteredGuests.sort((a, b) => {
-      const aName = (a.purchased_by || a.name || a.fullname || '').toLowerCase();
-      const bName = (b.purchased_by || b.name || b.fullname || '').toLowerCase();
+      const aName = String(a.purchased_by || a.name || a.fullname || '').toLowerCase();
+      const bName = String(b.purchased_by || b.name || b.fullname || '').toLowerCase();
       
       // Prioritize exact name matches
       if (aName === query && bName !== query) return -1;
@@ -872,7 +840,7 @@ export const searchGuestList = async (eventId: string, searchQuery: string): Pro
 };
 
 // New function to fetch only checked-in guests for attendance list
-export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => {
+export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> => {
   try {
     // Make sure we have the token
     if (!authToken) {
@@ -908,6 +876,14 @@ export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => 
       return [];
     }
 
+    // Debug: Log all guests to see their checkedin status
+    console.log('All guests checkedin status:', allGuests.map((guest: any) => ({
+      id: guest.id,
+      name: guest.purchased_by || guest.name,
+      checkedin: guest.checkedin,
+      checkedinType: typeof guest.checkedin
+    })));
+
     // Filter for only checked-in guests (checkedin === "1" or checkedin === 1)
     const checkedInGuests = allGuests.filter((guest: any) => 
       guest.checkedin === "1" || guest.checkedin === 1
@@ -915,6 +891,33 @@ export const getCheckedInGuestList = async (eventId: string): Promise<any[]> => 
 
     console.log(`Found ${checkedInGuests.length} checked-in guests out of ${allGuests.length} total guests`);
     
+    // Debug: Log sample checked-in guest data to see what time fields are available
+    if (checkedInGuests.length > 0) {
+      const sampleGuest = checkedInGuests[0];
+      console.log('Sample checked-in guest time fields:', {
+        id: sampleGuest.id,
+        name: sampleGuest.purchased_by || sampleGuest.name,
+        checkedin: sampleGuest.checkedin,
+        checkedin_date: sampleGuest.checkedin_date,
+        check_in_time: sampleGuest.check_in_time,
+        checkInTime: sampleGuest.checkInTime,
+        allFields: Object.keys(sampleGuest)
+      });
+    } else if (allGuests.length > 0) {
+      // If no checked-in guests, show sample of all guests for debugging
+      const sampleGuest = allGuests[0];
+      console.log('Sample guest (not checked in) time fields:', {
+        id: sampleGuest.id,
+        name: sampleGuest.purchased_by || sampleGuest.name,
+        checkedin: sampleGuest.checkedin,
+        checkedin_date: sampleGuest.checkedin_date,
+        check_in_time: sampleGuest.check_in_time,
+        checkInTime: sampleGuest.checkInTime,
+        allFields: Object.keys(sampleGuest)
+      });
+    }
+
+    // Return only checked-in guests (production behavior)
     return checkedInGuests;
   } catch (error) {
     console.error("Error fetching checked-in guest list:", error);
@@ -1008,7 +1011,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         return {
           id: profileData.UserID || profileData.id || '',
           name: profileData.LoggedName || profileData.ClientName || profileData.name || 'Outix Scanner',
-          email: profileData.email || 'Outix@thebend.co',
+          email: profileData.email || 'user@example.com',
           role: profileData.role || profileData.userRole || 'Event Manager',
           eventsCreated: profileData.eventsCreated || profileData.created || 12,
           eventsAttended: profileData.eventsAttended || profileData.attended || 8,
@@ -1033,7 +1036,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
           return {
             id: profileData.UserID || profileData.id || '',
             name: profileData.LoggedName || profileData.ClientName || profileData.name || 'Outix Scanner',
-            email: profileData.email || 'Outix@thebend.co',
+            email: profileData.email || 'user@example.com',
             role: profileData.role || profileData.userRole || 'Event Manager',
             eventsCreated: profileData.eventsCreated || profileData.created || 12,
             eventsAttended: profileData.eventsAttended || profileData.attended || 8,
@@ -1060,7 +1063,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         return {
           id: userData.id || userData.userId || userData.UserID || '',
           name: userData.name || userData.fullName || userData.LoggedName || userData.ClientName || 'Outix Scanner',
-          email: userData.email || 'Outix@thebend.co',
+          email: userData.email || 'user@example.com',
           role: userData.role || userData.userRole || 'Event Manager',
           eventsCreated: userData.eventsCreated || userData.created || 12,
           eventsAttended: userData.eventsAttended || userData.attended || 8,
@@ -1076,7 +1079,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     const defaultProfile = {
       id: 'default_user',
       name: "Outix Scanner User",
-      email: "Outix@thebend.co", 
+      email: "user@example.com", 
       role: "Event Manager",
       eventsCreated: 12,
       eventsAttended: 8,
@@ -1093,7 +1096,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return {
       id: 'error_fallback',
       name: "Outix Scanner",
-      email: "Outix@thebend.co",
+      email: "user@example.com",
       role: "Event Manager", 
       eventsCreated: 0,
       eventsAttended: 0,
@@ -1119,7 +1122,7 @@ const extractUserData = (data: any): UserProfile => {
   // Look for email in common fields
   if (data.email) email = data.email;
   else if (data.userEmail) email = data.userEmail;
-  else email = 'Outix@thebend.co';
+  else email = 'user@example.com';
   
   // Look for role in common fields
   if (data.role) role = data.role;
@@ -1438,12 +1441,12 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
 // Export storage functions for testing
 export { getStorageItem, removeStorageItem, setStorageItem };
 
-export const getGroupTickets = async (eventId: string, qrData: string): Promise<any> => {
+export const getGroupTickets = async (eventId: string, qrData: string, preValidation?: any): Promise<any> => {
   try {
     console.log('🔍 getGroupTickets called with:', { eventId, qrData });
     
-    // First validate the ticket to get purchaser info
-    const validation = await validateQRCode(eventId, qrData);
+    // Use caller-provided validation when available to avoid duplicate API calls
+    const validation = preValidation ? preValidation : await validateQRCode(eventId, qrData);
     console.log('📋 Validation result:', validation);
     
     if (!validation) {
@@ -1515,10 +1518,27 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     
     console.log('Total guests found:', allGuests.length);
     
+    // Try to locate the scanned ticket in the guest list first. This lets us
+    // derive reliable grouping keys (booking_reference/booking_id) even when the
+    // validation payload does not include purchaser info on success responses.
+    const scannedGuest: any | undefined = allGuests.find((g: any) => g.ticket_identifier === qrData);
+    if (scannedGuest) {
+      purchaserReferenceNum = purchaserReferenceNum || scannedGuest.booking_reference || null;
+      purchaserBookingId = purchaserBookingId || scannedGuest.booking_id || null;
+      purchaserEmail = purchaserEmail || scannedGuest.email || null;
+      purchaserName = purchaserName || scannedGuest.purchased_by || scannedGuest.fullname || null;
+      console.log('🔑 Derived grouping keys from scanned guest:', {
+        purchaserReferenceNum,
+        purchaserBookingId,
+        purchaserEmail,
+        purchaserName
+      });
+    }
+
     // Filter attendees by same purchaser email, name, or booking ID
     // Note: guest list structure uses different field names
     console.log('🔍 Filtering guests by purchaser info:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
-    console.log('🔍 Sample guest booking references:', allGuests.slice(0, 3).map(g => ({
+    console.log('🔍 Sample guest booking references:', allGuests.slice(0, 3).map((g: any) => ({
       ticket_identifier: g.ticket_identifier,
       booking_reference: g.booking_reference,
       booking_id: g.booking_id
@@ -1563,15 +1583,27 @@ export const getGroupTickets = async (eventId: string, qrData: string): Promise<
     if (groupTickets.length === 0) {
       console.log('⚠️ No group tickets found, checking if scanned ticket exists in guest list');
       console.log('🔍 Looking for QR data:', qrData);
-      console.log('🔍 Available ticket identifiers:', allGuests.slice(0, 5).map(g => g.ticket_identifier));
+      console.log('🔍 Available ticket identifiers:', allGuests.slice(0, 5).map((g: any) => g.ticket_identifier));
       
-      const scannedTicket = allGuests.find((attendee: any) => attendee.ticket_identifier === qrData);
+      const scannedTicket = scannedGuest || allGuests.find((attendee: any) => attendee.ticket_identifier === qrData);
       if (scannedTicket) {
         console.log('✅ Found scanned ticket in guest list, creating single-ticket group');
-        groupTickets.push(scannedTicket);
+        // Before falling back to single, try one last time to expand by booking reference
+        const bookingRef = scannedTicket.booking_reference || scannedTicket.booking_id;
+        if (bookingRef) {
+          const candidates = allGuests.filter((g: any) => (g.booking_reference === bookingRef || g.booking_id === bookingRef));
+          if (candidates.length > 0) {
+            console.log(`🔗 Expanded group via booking reference (${bookingRef}):`, candidates.length);
+            groupTickets.push(...candidates);
+          } else {
+            groupTickets.push(scannedTicket);
+          }
+        } else {
+          groupTickets.push(scannedTicket);
+        }
       } else {
         console.log('❌ Scanned ticket not found in guest list');
-        console.log('🔍 First few guest ticket identifiers:', allGuests.slice(0, 3).map(g => ({
+        console.log('🔍 First few guest ticket identifiers:', allGuests.slice(0, 3).map((g: any) => ({
           ticket_identifier: g.ticket_identifier,
           booking_reference: g.booking_reference
         })));

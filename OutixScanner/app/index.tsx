@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import AppLayout from "../components/AppLayout";
 import { useStorage } from "../context/StorageContext";
 import { useTheme } from "../context/ThemeContext";
-import { isAuthenticated, login } from "../services/api";
+import { isAuthenticated } from "../services/api";
 
 export default function Index() {
   const { colors } = useTheme();
@@ -28,22 +28,9 @@ export default function Index() {
           return;
         }
         
-        console.log('User not authenticated, attempting login...');
-        
-        // If not authenticated, attempt to login
-        const token = await login();
-        
-        // If we have a token now, user is authenticated
-        if (token) {
-          console.log('Login successful, user authenticated');
-          // Store token securely
-          await setItem('auth_token', token);
-          setIsAuthed(true);
-        } else {
-          console.log('Login failed, redirecting to login page');
-          // No token, redirect to login
-          setIsAuthed(false);
-        }
+        console.log('User not authenticated, redirecting to login page');
+        // No auto-login - user must authenticate through proper login flow
+        setIsAuthed(false);
       } catch (err) {
         console.error("Authentication error:", err);
         setError("Failed to authenticate. Please try again.");

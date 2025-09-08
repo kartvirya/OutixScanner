@@ -31,7 +31,7 @@ export default function Profile() {
       setUser({
         id: 'fallback',
         name: "Outix Test",
-        email: "outix@thebend.co",
+        email: "user@example.com",
         role: "Event Manager",
         eventsCreated: 0,
         eventsAttended: 0,
@@ -130,7 +130,7 @@ export default function Profile() {
                 {user?.name || "Outix Test"}
               </Text>
               <Text style={[styles.userEmail, { color: colors.secondary }]}>
-                {user?.email || "outix@thebend.co"}
+                {user?.email || "user@example.com"}
               </Text>
               <View style={[styles.roleBadge, { backgroundColor: `${colors.primary}15` }]}>
                 <Text style={[styles.roleText, { color: colors.primary }]}>
@@ -164,7 +164,7 @@ export default function Profile() {
             <View style={styles.detailInfo}>
               <Text style={[styles.detailLabel, { color: colors.text }]}>Email Address</Text>
               <Text style={[styles.detailValue, { color: colors.secondary }]}>
-                {user?.email || "outix@thebend.co"}
+                {user?.email || "user@example.com"}
               </Text>
             </View>
           </View>

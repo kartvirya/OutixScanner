@@ -1,6 +1,7 @@
-import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { TimeoutManager } from '../utils/timeout';
 import { getSoundData } from './soundGenerator';
 
 // Settings for feedback preferences
@@ -21,6 +22,9 @@ let feedbackSettings: FeedbackSettings = {
 
 // Sound cache
 const soundCache = new Map<string, Audio.Sound>();
+
+// Timeout manager for cleanup
+const timeoutManager = new TimeoutManager();
 
 // Initialize audio mode
 export const initializeAudio = async () => {
@@ -206,7 +210,7 @@ export const soundFeedback = {
       if (sound) {
         await sound.playAsync();
         // Clean up after a short delay
-        setTimeout(async () => {
+        timeoutManager.setTimeout(async () => {
           try {
             await sound.unloadAsync();
           } catch (e) {
@@ -225,7 +229,7 @@ export const soundFeedback = {
       const sound = await createPleasantTone(1200, 80, 'success'); // Pleasant success tone
       if (sound) {
         await sound.playAsync();
-        setTimeout(async () => {
+        timeoutManager.setTimeout(async () => {
           try {
             await sound.unloadAsync();
           } catch (e) {
@@ -244,7 +248,7 @@ export const soundFeedback = {
       const sound = await createPleasantTone(500, 120, 'error'); // Gentle error tone
       if (sound) {
         await sound.playAsync();
-        setTimeout(async () => {
+        timeoutManager.setTimeout(async () => {
           try {
             await sound.unloadAsync();
           } catch (e) {
@@ -263,7 +267,7 @@ export const soundFeedback = {
       const sound = await createPleasantTone(800, 60, 'scan'); // Quick scan beep
       if (sound) {
         await sound.playAsync();
-        setTimeout(async () => {
+        timeoutManager.setTimeout(async () => {
           try {
             await sound.unloadAsync();
           } catch (e) {
@@ -282,7 +286,7 @@ export const soundFeedback = {
       const sound = await createPleasantTone(900, 70, 'notification');
       if (sound) {
         await sound.playAsync();
-        setTimeout(async () => {
+        timeoutManager.setTimeout(async () => {
           try {
             await sound.unloadAsync();
           } catch (e) {
@@ -419,6 +423,10 @@ export const enableSubtleSounds = () => {
 // Cleanup function
 export const cleanupSounds = async () => {
   try {
+    // Clear all timeouts first
+    timeoutManager.clearAll();
+    
+    // Then clean up sounds
     for (const [name, sound] of soundCache.entries()) {
       await sound.unloadAsync();
       soundCache.delete(name);

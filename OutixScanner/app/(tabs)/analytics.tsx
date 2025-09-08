@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Clock, DollarSign, TrendingUp, UserCheck, Users } from 'lucide-react-native';
+import { Calendar, Clock, TrendingUp, UserCheck, Users } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,13 +7,21 @@ import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
 
+interface EventSummary {
+  id: string;
+  title: string;
+  date: string;
+  totalTickets: number;
+  checkedIn: number;
+  attendanceRate: number;
+}
+
 interface AnalyticsData {
   totalEvents: number;
   totalTickets: number;
   totalCheckedIn: number;
-  totalRevenue: number;
   averageAttendanceRate: number;
-  recentEvents: any[];
+  recentEvents: EventSummary[];
 }
 
 export default function Analytics() {
@@ -34,7 +42,6 @@ export default function Analytics() {
       
       let totalTickets = 0;
       let totalCheckedIn = 0;
-      let totalRevenue = 0;
       let attendanceRates: number[] = [];
       
       // Process each event to get guest statistics
@@ -55,13 +62,6 @@ export default function Analytics() {
             attendanceRates.push(attendanceRate);
           }
           
-          // Calculate revenue (estimate based on ticket prices if available)
-          const eventRevenue = guestList.reduce((sum, guest) => {
-            const price = parseFloat(guest.price || guest.ticket_price || '0');
-            return sum + price;
-          }, 0);
-          totalRevenue += eventRevenue;
-          
           console.log(`Event ${eventId}: ${guestList.length} tickets, ${checkedInGuests.length} checked in`);
         } catch (eventError) {
           console.warn(`Error processing event ${event.id}:`, eventError);
@@ -77,7 +77,6 @@ export default function Analytics() {
         totalEvents: events.length,
         totalTickets,
         totalCheckedIn,
-        totalRevenue,
         averageAttendanceRate,
         recentEvents: events.slice(0, 3) // Get 3 most recent events
       };
@@ -93,7 +92,6 @@ export default function Analytics() {
         totalEvents: 0,
         totalTickets: 0,
         totalCheckedIn: 0,
-        totalRevenue: 0,
         averageAttendanceRate: 0,
         recentEvents: []
       });
@@ -105,21 +103,13 @@ export default function Analytics() {
 
   useEffect(() => {
     fetchAnalyticsData();
-    
-    // Register for auto-refresh
-    const unsubscribe = onAnalyticsRefresh(() => {
-      console.log('Analytics auto-refresh triggered');
-      fetchAnalyticsData();
-    });
-    
-    return unsubscribe;
-  }, [onAnalyticsRefresh]);
+    // Manual refresh only - no auto-refresh registration
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchAnalyticsData();
-    // Also trigger refresh for other components
-    triggerAnalyticsRefresh();
+    // Manual refresh only - no automatic triggers
   };
 
   if (loading) {
@@ -133,14 +123,6 @@ export default function Analytics() {
     );
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const formatPercentage = (value: number) => {
     return `${value.toFixed(1)}%`;
@@ -231,31 +213,6 @@ export default function Analytics() {
           </View>
         </View>
 
-        {/* Financial Stats */}
-        <View style={[styles.financialCard, { backgroundColor: colors.card }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Financial</Text>
-            <View style={[styles.titleAccent, { backgroundColor: '#34C759' }]} />
-          </View>
-          
-          <View style={styles.financialContent}>
-            <LinearGradient
-              colors={['#34C75925', '#34C75915']}
-              style={styles.financialIconContainer}
-            >
-              <DollarSign size={28} color="#34C759" />
-            </LinearGradient>
-            <View style={styles.financialInfo}>
-              <Text style={[styles.financialValue, { color: colors.text }]}>
-                {formatCurrency(analyticsData?.totalRevenue || 0)}
-              </Text>
-              <Text style={[styles.financialLabel, { color: colors.secondary }]}>Total Revenue</Text>
-              <View style={styles.financialBadge}>
-                <Text style={styles.financialBadgeText}>All Events</Text>
-              </View>
-            </View>
-          </View>
-        </View>
 
         {/* Pending Check-ins */}
         <View style={[styles.pendingCard, { backgroundColor: colors.card }]}>
@@ -367,13 +324,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
   },
-  financialCard: {
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-  },
   pendingCard: {
     borderRadius: 20,
     padding: 24,
@@ -431,44 +381,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 0.2,
-  },
-  financialContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  financialIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  financialInfo: {
-    flex: 1,
-  },
-  financialValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 6,
-    letterSpacing: -0.5,
-  },
-  financialLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  financialBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#34C75915',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  financialBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#34C759',
   },
   pendingContent: {
     flexDirection: 'row',

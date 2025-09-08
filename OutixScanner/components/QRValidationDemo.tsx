@@ -14,7 +14,7 @@ import { getGroupTickets, scanGroupTickets, scanQRCode, unscanGroupTickets, unsc
 interface TestResult {
   success: boolean;
   message: string;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 const QRValidationDemo: React.FC = () => {

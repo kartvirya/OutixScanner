@@ -2,15 +2,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Check, LogIn, Square, UserCheck } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import SuccessModal from '../../components/SuccessModal';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { scanGroupTickets, scanQRCode, unscanGroupTickets, unscanQRCode } from '../../services/api';
@@ -34,6 +35,8 @@ interface Purchaser {
   bookingId: string;
 }
 
+export const options = { title: 'Ticket scan' } as const;
+
 export default function TicketActionScreen() {
   const { colors, isDark } = useTheme();
   const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
@@ -50,6 +53,14 @@ export default function TicketActionScreen() {
 
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successData, setSuccessData] = useState<{
+    type: 'check-in' | 'check-out' | 'group-check-in' | 'group-check-out';
+    guestName?: string;
+    ticketType?: string;
+    count: number;
+    message?: string;
+  } | null>(null);
 
   // Initialize selected tickets
   useEffect(() => {
@@ -145,25 +156,22 @@ export default function TicketActionScreen() {
       triggerAttendanceRefresh(eventId);
       triggerAnalyticsRefresh();
 
-      // Show brief success message then auto-navigate back
-      Alert.alert(
-        '✅ Success',
-        `Successfully ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} ${selectedTickets.size} ticket(s)`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Return to scanner
-              router.push('/(tabs)/scanner');
-            },
-          },
-        ]
-      );
-
-      // Auto-navigate back after 1.5 seconds
-      setTimeout(() => {
-        router.push('/(tabs)/scanner');
-      }, 1500);
+      // Show success modal
+      const isGroupOperation = selectedTickets.size > 1;
+      const firstTicket = tickets.find(t => selectedTickets.has(t.id));
+      
+      setSuccessData({
+        type: isGroupOperation 
+          ? (scanMode === 'scan-in' ? 'group-check-in' : 'group-check-out')
+          : (scanMode === 'scan-in' ? 'check-in' : 'check-out'),
+        guestName: firstTicket?.name,
+        ticketType: firstTicket?.ticketType,
+        count: selectedTickets.size,
+        message: isGroupOperation 
+          ? `Successfully ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} ${selectedTickets.size} tickets`
+          : undefined
+      });
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error processing tickets:', error);
       feedback.error();
@@ -177,9 +185,17 @@ export default function TicketActionScreen() {
     router.push('/(tabs)/scanner');
   };
 
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    setSuccessData(null);
+    // Return to scanner
+    router.push('/(tabs)/scanner');
+  };
+
   const isSmallScreen = screenHeight < 700;
   const isVerySmallScreen = screenHeight < 600;
   const FOOTER_HEIGHT = isVerySmallScreen ? 64 : 72;
+  const TAB_BAR_HEIGHT = 0; // tab bar is hidden on this screen
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -191,48 +207,6 @@ export default function TicketActionScreen() {
           minHeight: isVerySmallScreen ? 70 : 80
         }
       ]}>
-        {/* Action buttons placed above the title */}
-        <View style={styles.headerButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.headerButton,
-              { backgroundColor: isDark ? '#3A3A3C' : '#e0e0e0' }
-            ]}
-            onPress={handleCancel}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.headerButtonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.headerButton,
-              { backgroundColor: colors.primary, opacity: selectedTickets.size === 0 ? 0.5 : 1 }
-            ]}
-            onPress={handleConfirm}
-            disabled={selectedTickets.size === 0 || isProcessing}
-            activeOpacity={0.7}
-          >
-            {isProcessing ? (
-              <Text style={[styles.headerButtonText, { color: '#FFFFFF' }]}>
-                Processing...
-              </Text>
-            ) : (
-              <View style={styles.buttonContent}>
-                {scanMode === 'scan-in' ? (
-                  <LogIn size={isSmallScreen ? 18 : 20} color="#FFFFFF" />
-                ) : (
-                  <UserCheck size={isSmallScreen ? 18 : 20} color="#FFFFFF" />
-                )}
-                <Text style={[styles.headerButtonText, { color: '#FFFFFF' }]}>
-                  {scanMode === 'scan-in' ? 'Check In' : 'Check Out'}
-                  {selectedTickets.size > 0 && ` (${selectedTickets.size})`}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
         <Text style={[
           styles.headerTitle, 
           { 
@@ -256,9 +230,9 @@ export default function TicketActionScreen() {
       <ScrollView
         style={styles.ticketList}
         contentContainerStyle={{
-          paddingTop: 8,
-          paddingBottom: Math.max(insets?.bottom || 0, 20) + 40,
-          paddingHorizontal: 4
+          paddingTop: 6,
+          paddingBottom: Math.max(insets?.bottom || 0, 12) + FOOTER_HEIGHT + TAB_BAR_HEIGHT + 12,
+          paddingHorizontal: 8
         }}
         showsVerticalScrollIndicator={true}
         bounces={true}
@@ -272,8 +246,8 @@ export default function TicketActionScreen() {
                 backgroundColor: selectedTickets.has(ticket.id)
                   ? colors.primary
                   : colors.card,
-                minHeight: isVerySmallScreen ? 65 : 75,
-                marginBottom: isSmallScreen ? 8 : 12,
+                minHeight: isVerySmallScreen ? 60 : 70,
+                marginBottom: 8,
               },
             ]}
             onPress={() => handleTicketSelect(ticket.id)}
@@ -302,7 +276,7 @@ export default function TicketActionScreen() {
                     color: selectedTickets.has(ticket.id)
                       ? colors.background
                       : colors.text,
-                    fontSize: isSmallScreen ? 12 : 14,
+                    fontSize: isSmallScreen ? 12 : 13,
                   },
                 ]}
                 numberOfLines={1}
@@ -326,14 +300,74 @@ export default function TicketActionScreen() {
             </View>
           </TouchableOpacity>
         ))}
-        
-        {/* Add some extra space if tickets list is short */}
-        {tickets.length < 3 && (
-          <View style={{ minHeight: 200 }} />
-        )}
       </ScrollView>
 
-      {/* Footer removed since actions are now in header */}
+      {/* Bottom action footer */}
+      <View
+        style={[
+          styles.footer,
+          {
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+            paddingBottom: Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT,
+            paddingTop: 10,
+            height: FOOTER_HEIGHT + Math.max(insets.bottom, 8),
+          },
+        ]}
+      >
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.cancelButton,
+              { backgroundColor: isDark ? '#3A3A3C' : '#e0e0e0', flex: 1 },
+            ]}
+            onPress={handleCancel}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#000000' }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.confirmButton,
+              { backgroundColor: scanMode === 'scan-in' ? '#22C55E' : colors.primary, flex: 1, opacity: selectedTickets.size === 0 ? 0.5 : 1 },
+            ]}
+            onPress={handleConfirm}
+            disabled={selectedTickets.size === 0 || isProcessing}
+            activeOpacity={0.7}
+          >
+            {isProcessing ? (
+              <Text style={[styles.buttonText, styles.confirmButtonText]}>Processing...</Text>
+            ) : (
+              <View style={styles.buttonContent}>
+                {scanMode === 'scan-in' ? (
+                  <LogIn size={18} color="#FFFFFF" />
+                ) : (
+                  <UserCheck size={18} color="#FFFFFF" />
+                )}
+                <Text style={[styles.buttonText, styles.confirmButtonText]}>
+                  {scanMode === 'scan-in' ? 'Check In' : 'Check Out'}
+                  {selectedTickets.size > 0 && ` (${selectedTickets.size})`}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Success Modal */}
+      {successData && (
+        <SuccessModal
+          visible={showSuccessModal}
+          onClose={handleSuccessModalClose}
+          type={successData.type}
+          guestName={successData.guestName}
+          ticketType={successData.ticketType}
+          count={successData.count}
+          message={successData.message}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -344,32 +378,16 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  headerButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
     paddingBottom: 8,
-  },
-  headerButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  headerButtonText: {
-    fontWeight: '700',
+    borderBottomWidth: 1,
   },
   headerTitle: {
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subTitle: {
     opacity: 0.7,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   ticketList: {
     flex: 1,
@@ -419,6 +437,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingVertical: 4,
     gap: 12,
     alignItems: 'stretch',
   },
@@ -426,8 +445,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
   },
   cancelButton: {
     // Additional cancel button styles if needed
@@ -444,7 +463,8 @@ const styles = StyleSheet.create({
   buttonText: {
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+    fontSize: 16,
   },
   cancelButtonText: {
     // Cancel button text color is set dynamically

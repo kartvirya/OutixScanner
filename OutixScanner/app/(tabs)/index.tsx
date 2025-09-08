@@ -6,8 +6,8 @@ import { ActivityIndicator, FlatList, Image, Modal, RefreshControl, ScrollView, 
 import AppLayout from "../../components/AppLayout";
 import { EventImagePlaceholder } from "../../components/EventImagePlaceholder";
 import { useTheme } from "../../context/ThemeContext";
-import { getEvents, login } from "../../services/api";
-import { formatAppDateTime } from "../../utils/date";
+import { getEvents, isAuthenticated } from "../../services/api";
+import { formatAppDate, formatAppTime } from "../../utils/date";
 
 // Define event type
 interface Event {
@@ -16,14 +16,15 @@ interface Event {
   date: string;
   time: string;
   location: string;
-  imageUrl: string;
+  imageUrl?: string;
+  [key: string]: unknown;
 }
 
 // Define grouped event type
 interface GroupedEvent {
   title: string;
   location: string;
-  imageUrl: string;
+  imageUrl?: string;
   dates: {
     id: string;
     date: string;
@@ -68,11 +69,20 @@ const mockEvents: Event[] = [
 ];
 
 // Event Item Component with proper image error handling
-const EventItem: React.FC<{ 
-  item: Event; 
-  colors: any; 
-  onPress: () => void; 
-}> = ({ item, colors, onPress }) => {
+interface EventItemProps {
+  item: Event;
+  colors: {
+    text: string;
+    background: string;
+    card: string;
+    border: string;
+    primary: string;
+    secondary?: string;
+  };
+  onPress: () => void;
+}
+
+const EventItem: React.FC<EventItemProps> = ({ item, colors, onPress }) => {
   const [imageError, setImageError] = useState(false);
   
   // Reset image error when item changes
@@ -82,8 +92,8 @@ const EventItem: React.FC<{
   
   // Check if we have a valid image URL from Outix
   const hasImageUrl = Boolean(item.imageUrl);
-  const isOutixUrl = hasImageUrl && item.imageUrl.startsWith('https://www.outix.co');
-  const isNotUnsplash = hasImageUrl && !item.imageUrl.includes('images.unsplash.com');
+  const isOutixUrl = hasImageUrl && item.imageUrl?.startsWith('https://www.outix.co');
+  const isNotUnsplash = hasImageUrl && !item.imageUrl?.includes('images.unsplash.com');
   const hasValidImage = hasImageUrl && isOutixUrl && isNotUnsplash && !imageError;
   
   console.log(`Event: ${item.title}`);
@@ -180,11 +190,20 @@ const EventItem: React.FC<{
 };
 
 // Grouped Event Item Component
-const GroupedEventItem: React.FC<{ 
-  item: GroupedEvent; 
-  colors: any; 
-  onPress: () => void; 
-}> = ({ item, colors, onPress }) => {
+interface GroupedEventItemProps {
+  item: GroupedEvent;
+  colors: {
+    text: string;
+    background: string;
+    card: string;
+    border: string;
+    primary: string;
+    secondary?: string;
+  };
+  onPress: () => void;
+}
+
+const GroupedEventItem: React.FC<GroupedEventItemProps> = ({ item, colors, onPress }) => {
   const [imageError, setImageError] = useState(false);
   
   // Reset image error when item changes
@@ -194,8 +213,8 @@ const GroupedEventItem: React.FC<{
   
   // Check if we have a valid image URL from Outix
   const hasImageUrl = Boolean(item.imageUrl);
-  const isOutixUrl = hasImageUrl && item.imageUrl.startsWith('https://www.outix.co');
-  const isNotUnsplash = hasImageUrl && !item.imageUrl.includes('images.unsplash.com');
+  const isOutixUrl = hasImageUrl && item.imageUrl?.startsWith('https://www.outix.co');
+  const isNotUnsplash = hasImageUrl && !item.imageUrl?.includes('images.unsplash.com');
   const hasValidImage = hasImageUrl && isOutixUrl && isNotUnsplash && !imageError;
   
   const hasMultipleDates = item.dates.length > 1;
@@ -306,16 +325,12 @@ export default function Index() {
     setError(null);
     
     try {
-      let token = null;
-      // Try to get token from storage
-      try {
-        const tokenResult = await login();
-        if (tokenResult) {
-          token = tokenResult;
-        }
-      } catch (loginErr) {
-        console.error("Authentication error:", loginErr);
-        setError("Authentication failed. Using cached data.");
+      // Check if user is authenticated before making API calls
+      const authenticated = await isAuthenticated();
+      if (!authenticated) {
+        console.log("User not authenticated - cannot fetch events");
+        setError("Please login to view events");
+        return;
       }
 
       // Fetch events from API
@@ -334,12 +349,12 @@ export default function Index() {
       
       if (Array.isArray(eventsData) && eventsData.length > 0) {
         // Map the API response to our Event interface
-        const formattedEvents = eventsData.map(event => {
+        const formattedEvents = eventsData.map((event: any) => {
           console.log("Event mapping - original event:", JSON.stringify(event, null, 2));
           let imageUrl = event.imageUrl || event.image || event.EventImage || null;
           
           // Ensure the image URL is absolute and not relative
-          if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+          if (imageUrl && typeof imageUrl === 'string' && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
             // If it's a relative URL, prepend the correct base URL
             const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl;
             imageUrl = `https://www.outix.co/uploads/images/events/${cleanImageUrl}`;
@@ -348,11 +363,11 @@ export default function Index() {
           console.log("Event mapping - final imageUrl:", imageUrl);
           
           return {
-          id: event.id || event.eventId || event.EventId || String(event._id || '0'),
-          title: event.title || event.name || event.EventName || event.event_name || 'Unnamed Event',
-          date: formatDateFromAPI(event.date || event.showStart || event.event_date || 'TBD'),
-          time: formatTimeFromAPI(event.time || event.showStart || event.event_time || 'TBD'),
-          location: event.location || event.venue || event.VenueName || 'TBD',
+          id: String(event.id || event.eventId || event.EventId || event._id || '0'),
+          title: String(event.title || event.name || event.EventName || event.event_name || 'Unnamed Event'),
+          date: formatDateFromAPI(String(event.date || event.showStart || event.event_date || 'TBD')),
+          time: formatTimeFromAPI(String(event.time || event.showStart || event.event_time || 'TBD')),
+          location: String(event.location || event.venue || event.VenueName || 'TBD'),
             imageUrl: imageUrl
           };
         });
@@ -426,7 +441,7 @@ export default function Index() {
             groupedMockEventsMap.set(normalizedTitle, {
               title: cleanTitle || event.title,
               location: event.location,
-              imageUrl: event.imageUrl,
+              imageUrl: event.imageUrl || undefined,
               dates: [{
                 id: event.id,
                 date: event.date,
@@ -469,7 +484,7 @@ export default function Index() {
           groupedMockEventsMap.set(normalizedTitle, {
             title: cleanTitle || event.title,
             location: event.location,
-            imageUrl: event.imageUrl,
+            imageUrl: event.imageUrl || undefined,
             dates: [{
               id: event.id,
               date: event.date,
@@ -488,6 +503,7 @@ export default function Index() {
   };
 
   useEffect(() => {
+    // Load once on mount; users can pull-to-refresh
     fetchEvents();
   }, []);
 
@@ -496,11 +512,10 @@ export default function Index() {
     await fetchEvents(true);
   };
 
-  // Helper function to format date from API 
-  const formatDateFromAPI = (dateString: string): string => formatAppDateTime(dateString);
+  // Helper functions to format date and time separately from API values
+  const formatDateFromAPI = (dateString: string): string => formatAppDate(dateString);
 
-  // Helper function to format time from API
-  const formatTimeFromAPI = (timeString: string): string => formatAppDateTime(timeString);
+  const formatTimeFromAPI = (timeString: string): string => formatAppTime(timeString);
 
   const renderGroupedEventItem = ({ item }: { item: GroupedEvent }) => (
     <GroupedEventItem 

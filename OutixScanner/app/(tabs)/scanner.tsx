@@ -1,24 +1,25 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LogIn } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import ErrorModal from '../../components/ErrorModal';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-  QRValidationResponse,
-  getEvents,
-  getGroupTickets,
-  validateQRCode
+    QRValidationResponse,
+    getEvents,
+    getGroupTickets,
+    validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -62,6 +63,16 @@ export default function ScannerScreen() {
   const [isScanning, setIsScanning] = useState(true); // Add scanning control state
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Add header expansion state
   const [showCamera, setShowCamera] = useState(true); // Control camera visibility - start immediately
+  const [isNavigatingAway, setIsNavigatingAway] = useState(false); // Track when navigating away from scanner
+  const [showErrorModalState, setShowErrorModalState] = useState(false);
+  const [errorData, setErrorData] = useState<{
+    type: 'already-scanned' | 'not-checked-in' | 'invalid-ticket' | 'general';
+    title?: string;
+    message?: string;
+    guestName?: string;
+    ticketType?: string;
+    checkedInDate?: string;
+  } | null>(null);
   
   // Scanner states
   const [isProcessingGroup, setIsProcessingGroup] = useState(false);
@@ -73,33 +84,26 @@ export default function ScannerScreen() {
     setIsScanning(true);
   }, []);
 
-  // Additional effect to ensure camera state is maintained (with debouncing)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!showCamera) {
-        console.log('🔄 Camera was closed, reopening...');
-        setShowCamera(true);
-      }
-      if (!isScanning) {
-        console.log('🔄 Scanning was paused, resuming...');
-        setIsScanning(true);
-      }
-    }, 100); // Small delay to prevent rapid state changes
-    
-    return () => clearTimeout(timer);
-  }, [showCamera, isScanning]);
+  // Removed auto-resume effect to prevent duplicate scans; resume is now explicit
 
   // Ensure camera is ready when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Scanner screen focused - ensuring camera is ready');
+      
+      // Reset navigation flag when coming back to scanner
+      if (isNavigatingAway) {
+        console.log('🔄 Resetting navigation flag - back to scanner');
+        setIsNavigatingAway(false);
+      }
+      
       // Force camera restart by briefly closing and reopening
       setShowCamera(false);
       setTimeout(() => {
         setShowCamera(true);
         setIsScanning(true);
       }, 50);
-    }, [])
+    }, [isNavigatingAway])
   );
 
   useEffect(() => {
@@ -208,14 +212,9 @@ export default function ScannerScreen() {
   const handleClose = () => {
     feedback.buttonPress();
     
-    // Check if we have a selected event (came from event detail page)
-    // If so, navigate back to that specific event detail page
-    if (selectedEventId && selectedEventId !== '') {
-      router.push(`/(tabs)/${selectedEventId}`);
-    } else {
-      // Otherwise, just go back to previous screen
+    // Always go back to the previous screen in the navigation stack
+    // This ensures proper navigation flow regardless of how the user got to the scanner
     router.back();
-    }
   };
 
   const handleSelectEvent = () => {
@@ -229,13 +228,45 @@ export default function ScannerScreen() {
     setShowCamera(true);
   }, []);
 
+  const showErrorModal = useCallback((errorInfo: {
+    type: 'already-scanned' | 'not-checked-in' | 'invalid-ticket' | 'general';
+    title?: string;
+    message?: string;
+    guestName?: string;
+    ticketType?: string;
+    checkedInDate?: string;
+  }) => {
+    setErrorData(errorInfo);
+    setShowErrorModalState(true);
+  }, []);
+
+  const handleErrorModalClose = useCallback(() => {
+    setShowErrorModalState(false);
+    setErrorData(null);
+    // Resume scanning
+    setIsScanning(true);
+    setShowCamera(true);
+  }, []);
+
+  // Prevent duplicate processing of the same code within a short window
+  const lastProcessedRef = useRef<{ data: string; time: number }>({ data: '', time: 0 });
 
   const handleScanResult = useCallback(async (data: string) => {
+    const now = Date.now();
+    if (lastProcessedRef.current.data === data && now - lastProcessedRef.current.time < 3000) {
+      console.log('⚠️ Ignoring duplicate scan of the same code within 3s');
+      return;
+    }
+    lastProcessedRef.current = { data, time: now };
     // IMMEDIATE FAIL-SAFE: Resume scanning after 8 seconds no matter what
     const emergencyResumeTimeout = setTimeout(() => {
       console.log('🚨 EMERGENCY: Force resuming scanning after 8 seconds');
       setIsScanning(true);
+      setShowCamera(true);
     }, 8000);
+    
+    // Store timeout reference for cleanup
+    const timeoutRef = emergencyResumeTimeout;
     
     try {
       console.log('QR Code scanned:', data);
@@ -310,13 +341,15 @@ export default function ScannerScreen() {
         } catch (validationError) {
           console.error('❌ Validation error:', validationError);
           feedback.error();
-          Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.', [
-            { text: 'OK', onPress: () => {
-              console.log('🔄 Resuming scanning after validation error');
-              setIsScanning(true);
-              setShowCamera(true);
-            }}
-          ]);
+          
+          // Show error modal instead of alert
+          showErrorModal({
+            type: 'general',
+            title: 'Validation Error',
+            message: 'Failed to validate QR code. Please try again.',
+            guestName: undefined,
+            ticketType: undefined
+          });
           return;
         }
       }
@@ -341,7 +374,7 @@ export default function ScannerScreen() {
       
       try {
         console.log('🔍 Fetching group tickets for QR:', data);
-        const groupResult = await getGroupTickets(currentEventId, data);
+        const groupResult = await getGroupTickets(currentEventId, data, validationResult);
         console.log('📋 Group result:', groupResult);
         
         // If we found multiple tickets for the same purchaser, it's a group booking
@@ -398,6 +431,7 @@ export default function ScannerScreen() {
             feedback.success();
             setShowCamera(false); // Turn off camera
             setIsScanning(false);
+            setIsNavigatingAway(true); // Mark that we're navigating away
             router.push({
               pathname: '/(tabs)/ticket-action',
               params: {
@@ -410,29 +444,39 @@ export default function ScannerScreen() {
             });
             return;
           } else {
-            // No remaining tickets to process - scanned ticket was already processed
+            // No remaining tickets to process in the group
             console.log('No additional tickets to process in group');
-            
-            // Trigger refresh and resume scanning
+
+            // Construct a clearer message depending on scan mode
+            const purchaserName = groupResult?.purchaser?.name || scannedTicket?.name || 'Group';
+            const message = scanMode === 'scan-in'
+              ? 'All tickets in this group are already checked in.'
+              : 'No tickets in this group are currently checked in.';
+
+            // Haptic/error feedback and a visible log/modal
+            feedback.qrScanError();
+            showErrorModal({
+              type: 'already-scanned',
+              title: scanMode === 'scan-in' ? 'Already Checked In' : 'Nothing To Check Out',
+              message,
+              guestName: purchaserName,
+              ticketType: 'Group Booking',
+              checkedInDate: undefined
+            });
+
+            // Also trigger refreshes
             triggerGuestListRefresh(currentEventId);
             triggerAttendanceRefresh(currentEventId);
             triggerAnalyticsRefresh();
-            
-            // Show brief success message and resume scanning
-            Alert.alert(
-              '✅ Success',
-              'Ticket processed successfully. No additional tickets to process.',
-              [
-                { 
-                  text: 'Continue Scanning',
-                  onPress: () => {
-                    console.log('🔄 Resuming scanning after group processing complete');
-                    setIsScanning(true);
-                    setShowCamera(true);
-                  }
-                }
-              ]
-            );
+
+            // Fail-safe: auto-resume scanning if user doesn't interact
+            setTimeout(() => {
+              if (!isScanning) {
+                console.log('⏳ Auto-resuming scanning after group with no remaining tickets');
+                setIsScanning(true);
+                setShowCamera(true);
+              }
+            }, 3000);
             return;
           }
         }
@@ -446,13 +490,55 @@ export default function ScannerScreen() {
       if (scanMode === 'scan-in') {
         console.log('Scan in mode - checking validation result:', validationResult);
         
-        // For scan-in, some validation errors might still allow scan attempts
+        // For scan-in, check if ticket is already scanned
         if (validationResult.error) {
           let errorMessage = 'This QR code is not valid for this event.';
           if (typeof validationResult.msg === 'string') {
             errorMessage = validationResult.msg;
           } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
             errorMessage = validationResult.msg.message;
+          }
+          
+          // Check if this is an "already scanned" error
+          const isAlreadyScannedError = errorMessage.toLowerCase().includes('already') || 
+                                       errorMessage.toLowerCase().includes('scanned') ||
+                                       errorMessage.toLowerCase().includes('checked in') ||
+                                       errorMessage.toLowerCase().includes('cannot check in') ||
+                                       validationResult.status === 409 ||
+                                       validationResult.status === 400;
+          
+          if (isAlreadyScannedError) {
+            // Extract guest information for better error message
+            let guestName = 'Guest';
+            let ticketType = 'Ticket';
+            let checkedInDate = 'Unknown time';
+            
+            if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+              const info = (validationResult.msg as any).info;
+              guestName = info?.fullname || 'Guest';
+              ticketType = info?.ticket_title || 'Ticket';
+              checkedInDate = info?.checkedin_date ? new Date(info.checkedin_date).toLocaleString() : 'Unknown time';
+            }
+            
+            // Show immediate error for already scanned ticket
+            feedback.qrScanError();
+            showErrorModal({
+              type: 'already-scanned',
+              title: 'Already Scanned Ticket',
+              message: 'Cannot check in.',
+              guestName,
+              ticketType,
+              checkedInDate
+            });
+            // Fail-safe: if the modal isn't dismissed, auto-resume scanning after 3s
+            setTimeout(() => {
+              if (!isScanning) {
+                console.log('⏳ Auto-resuming scanning after already-scanned notice');
+                setIsScanning(true);
+                setShowCamera(true);
+              }
+            }, 3000);
+            return;
           }
           
           // Check if this is a blocking error that prevents scan-in
@@ -491,16 +577,43 @@ export default function ScannerScreen() {
         console.log('Scan out mode - checking validation result:', validationResult);
         
         // For scan-out, we expect the ticket to be already checked in
-        // So if validation returns an error saying "already checked in" or similar,
-        // we should proceed with the unscan operation
-      if (validationResult.error) {
-        let errorMessage = 'This QR code is not valid for this event.';
-        if (typeof validationResult.msg === 'string') {
-          errorMessage = validationResult.msg;
-        } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
-          errorMessage = validationResult.msg.message;
-        }
-        
+        if (validationResult.error) {
+          let errorMessage = 'This QR code is not valid for this event.';
+          if (typeof validationResult.msg === 'string') {
+            errorMessage = validationResult.msg;
+          } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
+            errorMessage = validationResult.msg.message;
+          }
+          
+          // Check if this is a "not checked in" error (ticket exists but not checked in)
+          const isNotCheckedInError = errorMessage.toLowerCase().includes('not checked in') ||
+                                     errorMessage.toLowerCase().includes('not scanned') ||
+                                     errorMessage.toLowerCase().includes('not admitted') ||
+                                     errorMessage.toLowerCase().includes('cannot check out');
+          
+          if (isNotCheckedInError) {
+            // Extract guest information for better error message
+            let guestName = 'Guest';
+            let ticketType = 'Ticket';
+            
+            if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+              const info = (validationResult.msg as any).info;
+              guestName = info?.fullname || 'Guest';
+              ticketType = info?.ticket_title || 'Ticket';
+            }
+            
+            // Show immediate error for not checked in ticket
+            feedback.qrScanError();
+            showErrorModal({
+              type: 'not-checked-in',
+              title: 'Not Checked In',
+              message: 'Cannot check out. This ticket has not been checked in yet.',
+              guestName,
+              ticketType
+            });
+            return;
+          }
+          
           // Check if this is a "already checked in" error, which is expected for scan out
           const isAlreadyCheckedInError = errorMessage.toLowerCase().includes('already') || 
                                          errorMessage.toLowerCase().includes('scanned') ||
@@ -519,16 +632,38 @@ export default function ScannerScreen() {
                 setShowCamera(true);
               }} // Resume scanning when OK is pressed
             ]);
-        return;
+            return;
           }
           
           console.log('Ticket is already checked in - proceeding with scan out');
         } else {
-          // If validation succeeded, the ticket is valid but may not be checked in yet
-          console.log('Ticket is valid - proceeding with scan out attempt');
-      }
-      
-      feedback.success();
+          // If validation succeeded, check if ticket is actually checked in
+          const info = (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg)
+            ? (validationResult.msg as any).info
+            : {};
+          
+          const isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
+          
+          if (!isCheckedIn) {
+            // Ticket is valid but not checked in - show error
+            let guestName = info?.fullname || 'Guest';
+            let ticketType = info?.ticket_title || 'Ticket';
+            
+            feedback.qrScanError();
+            showErrorModal({
+              type: 'not-checked-in',
+              title: 'Not Checked In',
+              message: 'Cannot check out. This ticket has not been checked in yet.',
+              guestName,
+              ticketType
+            });
+            return;
+          }
+          
+          console.log('Ticket is valid and checked in - proceeding with scan out');
+        }
+        
+        feedback.success();
         console.log('Performing individual scan out...');
         
         // Ensure scanning is resumed even if performScanOut throws
@@ -575,6 +710,7 @@ export default function ScannerScreen() {
       // Turn off camera and navigate to ticket action screen for a single ticket
       setShowCamera(false);
       setIsScanning(false);
+      setIsNavigatingAway(true); // Mark that we're navigating away
 
       const info = (validationResult && typeof validationResult.msg === 'object' && 'info' in validationResult.msg)
         ? (validationResult.msg as any).info
@@ -601,7 +737,8 @@ export default function ScannerScreen() {
       });
     } catch (err) {
       console.error('Scan in redirect error:', err);
-        feedback.error();
+      setIsNavigatingAway(false); // Reset flag on error
+      feedback.error();
       Alert.alert('Error', 'Failed to open ticket action screen.');
     }
   };
@@ -611,6 +748,7 @@ export default function ScannerScreen() {
       // Navigate to ticket action screen for single ticket
       setShowCamera(false); // Turn off camera
       setIsScanning(false);
+      setIsNavigatingAway(true); // Mark that we're navigating away
       
       const info = (validationResult && typeof validationResult.msg === 'object' && 'info' in validationResult.msg)
         ? (validationResult.msg as any).info
@@ -638,7 +776,8 @@ export default function ScannerScreen() {
       
     } catch (err) {
       console.error('Scan out redirect error:', err);
-        feedback.error();
+      setIsNavigatingAway(false); // Reset flag on error
+      feedback.error();
       Alert.alert('Error', 'Failed to open ticket action screen.');
     }
   };
@@ -655,7 +794,16 @@ export default function ScannerScreen() {
 
   const customHeader = (
     <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
-      {/* Simple Event Name Only */}
+      {/* Back Button */}
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={handleClose}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.backButtonText, { color: colors.text }]}>← Back</Text>
+      </TouchableOpacity>
+      
+      {/* Event Name */}
       <TouchableOpacity 
         style={styles.simpleEventHeader}
         onPress={() => setIsHeaderExpanded(!isHeaderExpanded)}
@@ -668,7 +816,6 @@ export default function ScannerScreen() {
            (currentEventName && currentEventName !== '' ? currentEventName : 
             (currentEventId ? `Event #${currentEventId}` : 'Select Event'))}
         </Text>
-
       </TouchableOpacity>
     </View>
   );
@@ -730,20 +877,29 @@ export default function ScannerScreen() {
         <QRScanner
           key={`scanner-${currentEventId}`}
           onScan={handleScanResult}
-          onClose={() => {
-            console.log('🔄 QRScanner onClose called - keeping camera open');
-            // Don't close the camera, just ensure it stays open
-            setShowCamera(true);
-            setIsScanning(true);
-          }}
+          onClose={handleClose}
           customHeader={customHeader}
-          showCloseButton={false}
+          showCloseButton={true}
           headerTitle={scanMode === 'scan-in' ? 'Smart Check In' : 'Smart Check Out'}
           pauseScanning={!isScanning}
           onRequestResume={handleRequestResume}
           // Map internal 'scan-out' to QRScanner's 'passout'
           scanMode={scanMode === 'scan-out' ? 'passout' : 'scan-in' as QRScannerMode}
           onScanModeChange={(mode: QRScannerMode) => setScanMode(mode === 'passout' ? 'scan-out' : 'scan-in')}
+        />
+      )}
+
+      {/* Error Modal */}
+      {errorData && (
+        <ErrorModal
+          visible={showErrorModalState}
+          onClose={handleErrorModalClose}
+          type={errorData.type}
+          title={errorData.title}
+          message={errorData.message}
+          guestName={errorData.guestName}
+          ticketType={errorData.ticketType}
+          checkedInDate={errorData.checkedInDate}
         />
       )}
     </SafeAreaView>

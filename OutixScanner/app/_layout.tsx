@@ -99,12 +99,5 @@ export default function RootLayout() {
 export const expo = {
   name: "OutixScanner",
   slug: "outixscanner",
-  plugins: [
-    [
-      "expo-barcode-scanner",
-      {
-        "cameraPermission": "Allow OutixScanner to access your camera to scan QR codes."
-      }
-    ]
-  ]
+  plugins: []
 };

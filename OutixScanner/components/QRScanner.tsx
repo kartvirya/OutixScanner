@@ -67,8 +67,8 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
     const currentTime = Date.now();
     
-    // Prevent any scans within 4 seconds of the last scan (regardless of QR code content)
-    if ((currentTime - lastScanTime) < 4000) {
+    // Prevent any scans within 1200ms of the last scan for smoother UX
+    if ((currentTime - lastScanTime) < 1200) {
       // Silently ignore - no logging to reduce noise
       return;
     }
@@ -89,11 +89,9 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
     // Provide immediate feedback for successful scan
     feedback.qrScanSuccess();
     
-    // Call the parent's scan handler with a slight delay to ensure state is set
+    // Call the parent's scan handler immediately; parent handles duplicate guards
     console.log('📱 Calling parent onScan handler with data:', data);
-    setTimeout(() => {
-      onScan(data);
-    }, 50); // Small delay to ensure scan state is properly set
+    onScan(data);
     
     // Don't auto-reset - let parent control when to resume scanning
   };

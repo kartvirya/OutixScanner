@@ -35,6 +35,7 @@ import {
     validateQRCode
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
+import { formatAppTime } from '../../../utils/date';
 
 interface Attendee {
   id: string;
@@ -54,7 +55,7 @@ interface Attendee {
   address?: string;
   notes?: string;
   // Raw guest data for details page
-  rawData?: any;
+  rawData?: Record<string, unknown>;
 }
 
 export default function GuestListPage() {
@@ -198,24 +199,39 @@ export default function GuestListPage() {
       
       if (checkedInData && Array.isArray(checkedInData)) {
         // Map API checked-in guest data to our format
-        const attendees = checkedInData.map(guest => ({
+        const attendees = checkedInData.map(guest => {
+          // Try multiple possible time field names
+          const timeField = guest.checkInTime || 
+                           guest.check_in_time || 
+                           guest.checkedin_date || 
+                           guest.checkedin_time || 
+                           guest.scan_time || 
+                           guest.timestamp || 
+                           guest.created_at || 
+                           guest.updated_at;
+
+          // Format the time properly if we have a valid time field
+          const formattedTime = timeField ? formatAppTime(timeField) : 'Unknown time';
+
+          return {
             id: guest.id || guest.guestId || String(Math.random()),
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
-          ticketType: guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: true, // All guests from this endpoint are checked in
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
-          scanCode: guest.scanCode || undefined,
-          purchased_date: guest.purchased_date || undefined,
-          reference_num: guest.booking_reference || guest.reference_num || undefined,
-          booking_id: guest.booking_id || undefined,
-          ticket_identifier: guest.ticket_identifier || undefined,
-          price: guest.price || undefined,
-          mobile: guest.mobile || undefined,
-          address: guest.address || undefined,
-          notes: guest.notes || undefined,
-          rawData: guest
-        }));
+            ticketType: guest.ticketType || guest.ticket_type || 'General',
+            scannedIn: true, // All guests from this endpoint are checked in
+            scanInTime: formattedTime,
+            scanCode: guest.scanCode || undefined,
+            purchased_date: guest.purchased_date || undefined,
+            reference_num: guest.booking_reference || guest.reference_num || undefined,
+            booking_id: guest.booking_id || undefined,
+            ticket_identifier: guest.ticket_identifier || undefined,
+            price: guest.price || undefined,
+            mobile: guest.mobile || undefined,
+            address: guest.address || undefined,
+            notes: guest.notes || undefined,
+            rawData: guest
+          };
+        });
         
         setCheckedInGuests(attendees);
         
@@ -341,16 +357,9 @@ export default function GuestListPage() {
 
   useEffect(() => {
     initializeAudio();
+    // Load once on mount; users can pull-to-refresh manually
     fetchEventAndInitialData();
-    
-    // Register for auto-refresh
-    const unsubscribe = onGuestListRefresh(eventId, () => {
-      console.log('Guest list auto-refresh triggered for event', eventId);
-      refreshGuestList();
-    });
-    
-    return unsubscribe;
-  }, [eventId, onGuestListRefresh, fetchEventAndInitialData, refreshGuestList]);
+  }, [eventId, fetchEventAndInitialData]);
 
   // Sync check-in status whenever checked-in guests are updated and we have displayed guests
   useEffect(() => {
@@ -498,10 +507,7 @@ export default function GuestListPage() {
         fetchPaginatedGuests(1, true),
         fetchCheckedInGuests()
       ]);
-      // Also trigger refresh for other components
-      triggerGuestListRefresh(eventId);
-      triggerAttendanceRefresh(eventId);
-      triggerAnalyticsRefresh();
+      // Manual refresh only - no automatic triggers
     } finally {
       setRefreshing(false);
     }

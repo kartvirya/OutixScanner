@@ -4,7 +4,13 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 interface EventImagePlaceholderProps {
-  style?: any;
+  style?: {
+    width?: number | string;
+    height?: number | string;
+    borderRadius?: number;
+    backgroundColor?: string;
+    [key: string]: unknown;
+  };
 }
 
 export const EventImagePlaceholder: React.FC<EventImagePlaceholderProps> = ({ style }) => {

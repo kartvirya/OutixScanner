@@ -41,7 +41,7 @@ import {
     validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
-import { formatAppDateTime } from '../../utils/date';
+import { formatAppDateTime, formatAppTime } from '../../utils/date';
 
 // Mock data types
 interface Ticket {
@@ -181,16 +181,9 @@ export default function EventDetail() {
 
   useEffect(() => {
     initializeAudio();
+    // Load once on mount
     loadEventData();
-    
-    // Register for auto-refresh
-    const unsubscribe = onEventRefresh(eventId, () => {
-      console.log('Event auto-refresh triggered for event', eventId);
-      loadEventData();
-    });
-    
-    return unsubscribe;
-  }, [eventId, onEventRefresh]);
+  }, [eventId]);
 
   const loadEventData = async () => {
     setLoading(true);
@@ -399,15 +392,30 @@ export default function EventDetail() {
       
       if (checkedInData && Array.isArray(checkedInData)) {
         // Map API checked-in guest data to our format
-        const attendees = checkedInData.map(guest => ({
-          id: guest.id || guest.guestId || String(Math.random()),
-          name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
-          email: guest.email || 'N/A',
-          ticketType: guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: true, // All guests from this endpoint are checked in
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.checkedin_date || 'Unknown time',
-          scanCode: guest.scanCode || guest.qrCode || undefined
-        }));
+        const attendees = checkedInData.map(guest => {
+          // Try multiple possible time field names
+          const timeField = guest.checkInTime || 
+                           guest.check_in_time || 
+                           guest.checkedin_date || 
+                           guest.checkedin_time || 
+                           guest.scan_time || 
+                           guest.timestamp || 
+                           guest.created_at || 
+                           guest.updated_at;
+
+          // Format the time properly if we have a valid time field
+          const formattedTime = timeField ? formatAppTime(timeField) : 'Unknown time';
+
+          return {
+            id: guest.id || guest.guestId || String(Math.random()),
+            name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+            email: guest.email || 'N/A',
+            ticketType: guest.ticketType || guest.ticket_type || 'General',
+            scannedIn: true, // All guests from this endpoint are checked in
+            scanInTime: formattedTime,
+            scanCode: guest.scanCode || guest.qrCode || undefined
+          };
+        });
         
         console.log(`Found ${attendees.length} checked-in guests`);
         setCheckedInGuests(attendees);
