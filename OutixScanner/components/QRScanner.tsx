@@ -27,6 +27,13 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
   const [cameraKey, setCameraKey] = useState(0); // Add key to force camera remount
   const [lastScannedData, setLastScannedData] = useState<string>('');
   const [lastScanTime, setLastScanTime] = useState<number>(0);
+  // Local copy of scan mode to avoid a one-frame lag when parent updates it
+  const [localMode, setLocalMode] = useState<'scan-in' | 'passout'>(scanMode ?? 'scan-in');
+
+  // Keep in sync with parent changes
+  useEffect(() => {
+    setLocalMode(scanMode ?? 'scan-in');
+  }, [scanMode]);
 
   useEffect(() => {
     // Reset camera state when component mounts
@@ -77,7 +84,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
       type, 
       data, 
       dataLength: data.length,
-      scanMode: scanMode || 'unknown',
+      scanMode: localMode || 'unknown',
       timestamp: new Date().toISOString()
     });
     
@@ -195,7 +202,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
               <X size={24} color="#FFFFFF" />
             </TouchableOpacity>
               )}
-              <Text style={styles.headerText}>{headerTitle || 'Scan QR Code'}</Text>
+              <Text style={styles.headerText}>{headerTitle || (localMode === 'scan-in' ? 'Smart Check In' : 'Smart Check Out')}</Text>
             <View style={styles.placeholderRight} />
           </View>
           )}
@@ -203,21 +210,21 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
           {/* Scanner Area */}
           <View style={styles.scannerContainer}>
             {/* Scan Mode Toggle Overlay */}
-            {scanMode && onScanModeChange && (
+            {localMode && onScanModeChange && (
               <View style={styles.scanModeOverlay}>
                 <View style={styles.scanModeToggleContainer}>
                   <TouchableOpacity 
                     style={[
                       styles.scanModeButton,
-                      scanMode === 'scan-in' && styles.scanModeButtonActive,
-                      { backgroundColor: scanMode === 'scan-in' ? '#06D6A0' : 'rgba(0,0,0,0.6)' }
+                      localMode === 'scan-in' && styles.scanModeButtonActive,
+                      { backgroundColor: localMode === 'scan-in' ? '#06D6A0' : 'rgba(0,0,0,0.6)' }
                     ]}
-                    onPress={() => onScanModeChange('scan-in')}
+                    onPress={() => { setLocalMode('scan-in'); onScanModeChange('scan-in'); }}
                     activeOpacity={0.8}
                   >
                     <Text style={[
                       styles.scanModeButtonText, 
-                      { color: scanMode === 'scan-in' ? '#FFFFFF' : '#FFFFFF' }
+                      { color: localMode === 'scan-in' ? '#FFFFFF' : '#FFFFFF' }
                     ]}>
                       Check In
                     </Text>
@@ -226,15 +233,15 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
                   <TouchableOpacity 
                     style={[
                       styles.scanModeButton,
-                      scanMode === 'passout' && styles.scanModeButtonActive,
-                      { backgroundColor: scanMode === 'passout' ? '#F72585' : 'rgba(0,0,0,0.6)' }
+                      localMode === 'passout' && styles.scanModeButtonActive,
+                      { backgroundColor: localMode === 'passout' ? '#F72585' : 'rgba(0,0,0,0.6)' }
                     ]}
-                    onPress={() => onScanModeChange && onScanModeChange('passout')}
+                    onPress={() => { setLocalMode('passout'); onScanModeChange && onScanModeChange('passout'); }}
                     activeOpacity={0.8}
                   >
                     <Text style={[
                       styles.scanModeButtonText, 
-                      { color: scanMode === 'passout' ? '#FFFFFF' : '#FFFFFF' }
+                      { color: localMode === 'passout' ? '#FFFFFF' : '#FFFFFF' }
                     ]}>
                       Passout
                     </Text>

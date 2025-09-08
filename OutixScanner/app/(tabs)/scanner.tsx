@@ -206,7 +206,10 @@ export default function ScannerScreen() {
 
   const toggleScanMode = () => {
     feedback.buttonPress();
+    // Flip mode, ensure camera/scanner are immediately ready
     setScanMode(scanMode === 'scan-in' ? 'scan-out' : 'scan-in');
+    setShowCamera(true);
+    setIsScanning(true);
   };
 
   const handleClose = () => {
@@ -250,6 +253,13 @@ export default function ScannerScreen() {
 
   // Prevent duplicate processing of the same code within a short window
   const lastProcessedRef = useRef<{ data: string; time: number }>({ data: '', time: 0 });
+
+  // When the scan mode changes (check-in ↔︎ passout), allow immediate re-scan
+  // of the same QR code by clearing the duplicate suppression state.
+  useEffect(() => {
+    console.log('🔁 Scan mode changed to', scanMode, '- clearing last processed guard');
+    lastProcessedRef.current = { data: '', time: 0 };
+  }, [scanMode]);
 
   const handleScanResult = useCallback(async (data: string) => {
     const now = Date.now();
@@ -520,16 +530,17 @@ export default function ScannerScreen() {
               checkedInDate = info?.checkedin_date ? new Date(info.checkedin_date).toLocaleString() : 'Unknown time';
             }
             
-            // Show immediate error for already scanned ticket
+            // Show immediate status for already scanned ticket
             feedback.qrScanError();
             showErrorModal({
               type: 'already-scanned',
               title: 'Already Scanned Ticket',
-              message: 'Cannot check in.',
+              message: 'Ticket is already checked in.',
               guestName,
               ticketType,
               checkedInDate
             });
+            console.log('ℹ️ Ticket is already checked in');
             // Fail-safe: if the modal isn't dismissed, auto-resume scanning after 3s
             setTimeout(() => {
               if (!isScanning) {
@@ -602,15 +613,16 @@ export default function ScannerScreen() {
               ticketType = info?.ticket_title || 'Ticket';
             }
             
-            // Show immediate error for not checked in ticket
+            // Show immediate status for not-checked-in ticket
             feedback.qrScanError();
             showErrorModal({
               type: 'not-checked-in',
               title: 'Not Checked In',
-              message: 'Cannot check out. This ticket has not been checked in yet.',
+              message: 'Ticket is not checked in.',
               guestName,
               ticketType
             });
+            console.log('ℹ️ Ticket is not checked in');
             return;
           }
           
@@ -875,7 +887,7 @@ export default function ScannerScreen() {
       
       {showCamera && (
         <QRScanner
-          key={`scanner-${currentEventId}`}
+          key={`scanner-${currentEventId}-${scanMode}`}
           onScan={handleScanResult}
           onClose={handleClose}
           customHeader={customHeader}
