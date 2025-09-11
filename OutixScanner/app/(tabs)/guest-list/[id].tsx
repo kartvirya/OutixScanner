@@ -1,37 +1,37 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-    ArrowLeft,
-    ChevronDown,
-    Search,
-    User,
-    UserCheck,
-    Users
+  ArrowLeft,
+  ChevronDown,
+  Search,
+  User,
+  UserCheck,
+  Users
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    RefreshControl,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
 import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
-    getCheckedInGuestList,
-    getEvents,
-    getGuestListPaginated,
-    scanQRCode,
-    searchGuestList,
-    unscanQRCode,
-    validateQRCode
+  getCheckedInGuestList,
+  getEvents,
+  getGuestListPaginated,
+  scanQRCode,
+  searchGuestList,
+  unscanQRCode,
+  validateQRCode
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 import { formatAppTime } from '../../../utils/date';

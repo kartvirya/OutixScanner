@@ -1,8 +1,7 @@
 import { Calendar, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, RefreshControl, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AppLayout from '../../components/AppLayout';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
 import { getRegistrations, getWaivers, isAuthenticated, Registration, submitWaiver, Waiver } from '../../services/api';
@@ -529,8 +528,18 @@ export default function Registrants() {
             tintColor={colors.primary}
           />
         }
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          filteredRegistrations.length === 0 && styles.centered
+        ]}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Text style={[styles.errorText, { color: colors.text }]}>
+              No registrations available
+            </Text>
+          </View>
+        }
       />
 
       {renderWaiversModal()}

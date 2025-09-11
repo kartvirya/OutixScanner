@@ -925,11 +925,74 @@ export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> =
   }
 };
 
-// Note: checkInGuest function removed - use scanQRCode instead for check-in functionality
-// Check-in is now handled through QR code scanning with scanQRCode(eventId, scanCode)
-// Check-out is handled through unscanQRCode(eventId, scanCode)
+// Manual check-in function (different from QR scan)
+export const manualCheckIn = async (eventId: string, guestIdentifier: string): Promise<any> => {
+  try {
+    console.log(`🔧 Manual check-in for event ${eventId}, guest: ${guestIdentifier}`);
+    
+    // For manual check-in, we use a different endpoint or add a flag
+    // to indicate this is a manual operation, not a QR scan
+    const response = await api.post(`/scan/${eventId}`, 
+      new URLSearchParams({
+        'scanCode': guestIdentifier,
+        'manual': '1', // Flag to indicate manual check-in
+        'source': 'manual_checkin'
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 30000
+      }
+    );
+    
+    console.log('Manual check-in response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Manual check-in error:', error);
+    // Return error response format
+    return {
+      error: true,
+      msg: error.response?.data?.msg || error.message || 'Manual check-in failed',
+      status: error.response?.status || 500
+    };
+  }
+};
 
-// Note: generateSampleQRData function removed as we now use real ticket identifiers
+// Manual check-out function (different from QR unscan)
+export const manualCheckOut = async (eventId: string, guestIdentifier: string): Promise<any> => {
+  try {
+    console.log(`🔧 Manual check-out for event ${eventId}, guest: ${guestIdentifier}`);
+    
+    // For manual check-out, we use the unscan endpoint with a flag
+    const response = await api.post(`/unscan/${eventId}`,
+      new URLSearchParams({
+        'scanCode': guestIdentifier,
+        'manual': '1', // Flag to indicate manual operation
+        'source': 'manual_checkout'
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 30000
+      }
+    );
+    
+    console.log('Manual check-out response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Manual check-out error:', error);
+    // Return error response format
+    return {
+      error: true,
+      msg: error.response?.data?.msg || error.message || 'Manual check-out failed',
+      status: error.response?.status || 500
+    };
+  }
+};
+
+// Note: For QR code scanning, continue using scanQRCode and unscanQRCode
 
 // Utility function to get token
 export const getToken = (): string | null => {

@@ -14,9 +14,16 @@ const DEFAULT_SOUND_CONFIG: SoundConfig = {
   shouldCorrectPitch: true,
 };
 
-// Note: Sound cache removed as we create sounds on-demand for better performance
+// Sound file mappings - using macOS system sounds converted to MP3
+// These are high-quality notification sounds from macOS
+const SOUND_FILES = {
+  'checkin-success': require('../assets/sounds/checkin-success.mp3'), // Glass sound - bright and pleasant
+  'checkout-success': require('../assets/sounds/checkout-success.mp3'), // Hero sound - warm completion
+  'checkin-error': require('../assets/sounds/error.mp3'), // Basso sound - clear error tone
+  'already-scanned': require('../assets/sounds/notification.mp3'), // Pop sound - neutral notification
+} as const;
 
-// Create a high-quality sound using Web Audio API-style synthesis
+// Create a sound using imported audio files
 export const createHighQualitySound = async (
   type: 'checkin-success' | 'checkout-success' | 'checkin-error' | 'already-scanned',
   config: Partial<SoundConfig> = {}
@@ -24,32 +31,24 @@ export const createHighQualitySound = async (
   try {
     const finalConfig = { ...DEFAULT_SOUND_CONFIG, ...config };
     
-    // Create different sound patterns for different types
-    let audioData = '';
+    // Configure audio mode for better playback
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+      staysActiveInBackground: false,
+    });
     
-    switch (type) {
-      case 'checkin-success':
-        // iPhone-style success chime - ascending three-tone melody
-        audioData = generateCheckInSuccessSound();
-        break;
-      case 'checkout-success':
-        // Gentle confirmation tone - warm and pleasant
-        audioData = generateCheckOutSuccessSound();
-        break;
-      case 'checkin-error':
-        // Clear error notification - distinctive but not harsh
-        audioData = generateCheckInErrorSound();
-        break;
-      case 'already-scanned':
-        // Gentle notification - neutral and informative
-        audioData = generateAlreadyScannedSound();
-        break;
-      default:
-        return null;
+    // Use the imported sound file
+    const soundFile = SOUND_FILES[type];
+    if (!soundFile) {
+      console.error(`No sound file found for ${type}`);
+      return null;
     }
 
     const { sound } = await Audio.Sound.createAsync(
-      { uri: `data:audio/wav;base64,${audioData}` },
+      soundFile,
       {
         shouldPlay: false,
         volume: finalConfig.volume,
@@ -60,7 +59,7 @@ export const createHighQualitySound = async (
 
     return sound;
   } catch (error) {
-    console.warn(`Failed to create high-quality sound for ${type}:`, error);
+    console.warn(`Failed to create sound for ${type}:`, error);
     return null;
   }
 };
@@ -90,11 +89,6 @@ export const playSoundWithCleanup = async (
   }
 };
 
-// Import the sound generation functions
-import {
-    generateAlreadyScannedSound,
-    generateCheckInErrorSound,
-    generateCheckInSuccessSound,
-    generateCheckOutSuccessSound
-} from './soundGenerator';
+// Sound generator functions are no longer needed
+// We're using imported macOS system sounds (Glass, Hero, Basso, Pop) for better quality
 
