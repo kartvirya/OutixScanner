@@ -38,12 +38,15 @@ const formatCheckInTime = (input: string | number | Date | null | undefined): st
   if (!input) return 'Unknown time';
   
   try {
+    // The API returns checkedin_date as a string in format like "2024-01-15 14:30:00"
+    // or as an ISO string or timestamp
     const date = new Date(input);
     if (isNaN(date.getTime())) {
       console.log('Invalid date input:', input);
       return 'Unknown time';
     }
     
+    // Format to show only time in 12-hour format
     return new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -158,58 +161,95 @@ export default function AttendancePage() {
           return 'Guest';
         };
         
-        const attendees = checkedInData.map(guest => {
-          // Debug: Log the guest data to see what time fields are available
-          console.log('🔍 Guest time fields DEBUG:', {
-            id: guest.id,
-            name: extractGuestName(guest),
-            checkInTime: guest.checkInTime,
-            check_in_time: guest.check_in_time,
-            checkedin_date: guest.checkedin_date,
-            checkedin_time: guest.checkedin_time,
-            scan_time: guest.scan_time,
-            timestamp: guest.timestamp,
-            created_at: guest.created_at,
-            updated_at: guest.updated_at,
-            allFields: Object.keys(guest),
-            rawGuestData: guest
-          });
-
-          // Try multiple possible time field names
-          const timeField = guest.checkInTime || 
-                           guest.check_in_time || 
-                           guest.checkedin_date || 
-                           guest.checkedin_time || 
-                           guest.scan_time || 
-                           guest.timestamp || 
-                           guest.created_at || 
-                           guest.updated_at;
-
-          console.log('🕐 Time field found:', timeField, 'Type:', typeof timeField);
-
-          // Format the time properly if we have a valid time field
-          let formattedTime = formatCheckInTime(timeField);
-          
-          // Temporary fallback: if no time is found, use current time for testing
-          if (formattedTime === 'Unknown time' && !timeField) {
-            formattedTime = formatCheckInTime(new Date());
-            console.log('🔄 Using current time as fallback for testing');
+        const attendees = checkedInData.map((guest, index) => {
+          // More comprehensive debug logging
+          if (index < 3) { // Log first 3 guests for debugging
+            console.log(`🔍 Guest #${index + 1} Full Data:`, JSON.stringify(guest, null, 2));
           }
           
-          console.log('⏰ Formatted time result:', formattedTime);
+          // Try multiple possible time field names
+          const possibleTimeFields = [
+            guest.checkedin_date,
+            guest.checkedinDate,
+            guest.check_in_time,
+            guest.checkInTime,
+            guest.scanInTime,
+            guest.scanned_at,
+            guest.scanTime
+          ];
+          
+          // Find the first non-empty time field
+          const timeField = possibleTimeFields.find(field => 
+            field !== null && 
+            field !== undefined && 
+            field !== '' &&
+            field !== '0000-00-00 00:00:00' // Skip invalid MySQL dates
+          );
 
-          return {
+          console.log(`🕐 Guest "${extractGuestName(guest)}" time search:`, {
+            checkedin_date: guest.checkedin_date,
+            found: timeField,
+            type: typeof timeField
+          });
+
+          // Format the time properly if we have a valid time field
+          let formattedTime: string | undefined;
+          
+          if (timeField && timeField !== '0000-00-00 00:00:00') {
+            formattedTime = formatCheckInTime(timeField);
+            console.log(`⏰ Formatted time for "${extractGuestName(guest)}": ${formattedTime}`);
+            
+            // If formatting returned 'Unknown time', try alternative parsing
+            if (formattedTime === 'Unknown time' && typeof timeField === 'string') {
+              // Try parsing MySQL datetime format (YYYY-MM-DD HH:MM:SS)
+              const mysqlMatch = timeField.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+              if (mysqlMatch) {
+                const [_, year, month, day, hour, minute] = mysqlMatch;
+                const hourNum = parseInt(hour);
+                const period = hourNum >= 12 ? 'PM' : 'AM';
+                const hour12 = hourNum === 0 ? 12 : (hourNum > 12 ? hourNum - 12 : hourNum);
+                formattedTime = `${hour12}:${minute} ${period}`;
+                console.log(`⏰ Manually parsed MySQL time: ${formattedTime}`);
+              }
+            }
+          } else {
+            // These are checked-in guests, so show a default time if none available
+            console.log(`⚠️ No valid check-in time for guest: ${extractGuestName(guest)}`);
+            // Don't show any time if we don't have valid data
+            formattedTime = undefined;
+          }
+
+          // Map the guest data to our local Attendee structure
+          const attendee = {
             id: guest.id || guest.guestId || String(Math.random()),
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
-            ticketType: guest.ticketType || guest.ticket_type || 'General',
+            // Check for ticket type fields - avoid ticket_title as it may contain event name
+            // Look for ticket_type, ticketType, or category fields instead
+            ticketType: guest.ticket_type || guest.ticketType || guest.category || guest.ticket_category || 'General',
             scannedIn: true, // All guests from this endpoint are checked in
             scanInTime: formattedTime,
-            scanCode: guest.scanCode || guest.qrCode || undefined
+            scanCode: guest.scanCode || guest.qrCode || guest.ticket_identifier || undefined
           };
+          
+          // Debug log to see what's being set
+          if (index < 3) {
+            console.log(`📋 Attendee #${index + 1} final data:`, {
+              name: attendee.name,
+              ticketType: attendee.ticketType,
+              scanInTime: attendee.scanInTime,
+              hasTime: !!attendee.scanInTime
+            });
+          }
+          
+          return attendee;
         });
         
         console.log(`Found ${attendees.length} checked-in guests`);
+        console.log('First 3 attendees with times:', attendees.slice(0, 3).map(a => ({
+          name: a.name,
+          time: a.scanInTime
+        })));
         setCheckedInGuests(attendees);
       } else {
         console.log('No checked-in guests found');
@@ -354,6 +394,7 @@ export default function AttendancePage() {
 
   const performScanIn = async (scanCode: string, validationResult: any) => {
     try {
+      // Optimistically update UI, then replace with authoritative server time
       await updateLocalScanIn(scanCode, validationResult);
       
       const scanResult = await scanQRCode(eventId, scanCode);
@@ -388,6 +429,8 @@ export default function AttendancePage() {
         'Guest Checked In Successfully',
         `${ticketInfo?.fullname || 'Guest'} has been checked in.\n\n${successMessage}`
       );
+      // Replace optimistic time with server data
+      await fetchCheckedInGuests();
       
     } catch (error) {
       console.error('Scan in error:', error);
@@ -447,9 +490,6 @@ export default function AttendancePage() {
   };
 
   const updateLocalScanIn = async (scanCode: string, validationResult: any) => {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
     const ticketInfo = validationResult.msg.info;
     const newAttendee: Attendee = {
       id: `attendee_${Date.now()}`,
@@ -457,13 +497,14 @@ export default function AttendancePage() {
       email: ticketInfo.email,
       ticketType: ticketInfo.ticket_title,
       scannedIn: true,
-      scanInTime: timeString,
+      // Do not use device time to avoid showing incorrect current time.
+      // Leave undefined so UI shows placeholder until server refresh provides authoritative time.
+      scanInTime: undefined,
       scanCode: scanCode
     };
     
     setCheckedInGuests(prev => [...prev, newAttendee]);
-    
-    console.log(`Checked in ${ticketInfo.fullname} at ${timeString}`);
+    console.log(`Checked in ${ticketInfo.fullname} (awaiting server time)`);
     feedback.checkIn();
     
     // Trigger refresh for other components
@@ -482,7 +523,7 @@ export default function AttendancePage() {
     );
     
     console.log(`Checked out ${ticketInfo.fullname}`);
-    feedback.success();
+    feedback.checkOut();
     
     // Trigger refresh for other components
     triggerGuestListRefresh(eventId);
@@ -577,7 +618,13 @@ export default function AttendancePage() {
             style={styles.backButton}
             onPress={() => {
               feedback.buttonPress();
-              router.back();
+              // Use canGoBack to check if we can go back, otherwise navigate to event details
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                // Navigate to event details page as fallback
+                router.replace(`/(tabs)/${eventId}`);
+              }
             }}
           >
             <ArrowLeft size={20} color="#FF6B00" />
@@ -662,11 +709,9 @@ export default function AttendancePage() {
                   <View style={[styles.ticketBadge, { backgroundColor: '#FF6B00' }]}>
                     <Text style={styles.ticketText}>{item.ticketType}</Text>
                   </View>
-                  {item.scanInTime && (
-                    <Text style={[styles.timeText, { color: '#22C55E' }]}>
-                      {item.scanInTime}
-                    </Text>
-                  )}
+                  <Text style={[styles.timeText, { color: '#22C55E' }]}>
+                    {item.scanInTime || 'Checked In'}
+                  </Text>
                 </View>
               </View>
             </View>

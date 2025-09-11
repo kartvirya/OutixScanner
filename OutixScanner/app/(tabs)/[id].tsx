@@ -436,7 +436,13 @@ export default function EventDetail() {
   const formatTimeFromAPI = (timeString: string): string => formatAppDateTime(timeString);
 
   const handleBack = () => {
-    router.back();
+    // Check if we can go back in the navigation stack
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      // Navigate to home as fallback
+      router.replace('/(tabs)');
+    }
   };
 
   const handleOpenScanner = (mode: 'validate' | 'scanIn' | 'scanOut' = 'validate', attendee?: Attendee) => {
@@ -462,7 +468,7 @@ export default function EventDetail() {
       const validationResult = await validateQRCode(eventId, data);
       
       if (!validationResult) {
-        feedback.error();
+        feedback.checkInError();
         Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.');
         setScanMode('validate');
         return;
@@ -521,7 +527,7 @@ export default function EventDetail() {
       
     } catch (error) {
       console.error('QR scan error:', error);
-      feedback.error();
+      feedback.checkInError();
       Alert.alert(
         'Error',
         'An unexpected error occurred while processing the QR code.'
@@ -547,7 +553,7 @@ export default function EventDetail() {
           errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
         }
         
-        feedback.error();
+        feedback.checkInError();
         Alert.alert('Scan In Failed', errorMessage + '\n\nLocal attendance has been updated.');
         return;
       }
@@ -585,7 +591,7 @@ export default function EventDetail() {
       // Still update local state for demo purposes
       await updateLocalScanIn(scanCode, validationResult);
       
-      feedback.error();
+      feedback.checkInError();
       Alert.alert('Scan In Error', 'Failed to scan in guest via API. Local attendance has been updated.');
     }
   };
@@ -605,13 +611,13 @@ export default function EventDetail() {
           errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
         }
         
-        feedback.error();
+        feedback.checkInError();
         Alert.alert('Scan Out Failed', errorMessage + '\n\nLocal attendance has been updated.');
         return;
       }
       
       // Success - show confirmation with feedback
-      feedback.success();
+      feedback.checkOut();
       
       // Get message from response
       let successMessage = 'Unscan successful';
@@ -638,7 +644,7 @@ export default function EventDetail() {
       // Still update local state for demo purposes
       await updateLocalScanOut(scanCode, validationResult);
       
-      feedback.error();
+      feedback.checkInError();
       Alert.alert('Scan Out Error', 'Failed to scan out guest via API. Local attendance has been updated.');
     }
   };

@@ -215,9 +215,18 @@ export default function ScannerScreen() {
   const handleClose = () => {
     feedback.buttonPress();
     
-    // Always go back to the previous screen in the navigation stack
-    // This ensures proper navigation flow regardless of how the user got to the scanner
-    router.back();
+    // Check if we can go back in the navigation stack
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      // Navigate to event details page as fallback
+      const eventId = selectedEventId || paramEventId || currentEventId;
+      if (eventId) {
+        router.replace(`/(tabs)/${eventId}`);
+      } else {
+        router.replace('/(tabs)');
+      }
+    }
   };
 
   const handleSelectEvent = () => {
@@ -350,7 +359,7 @@ export default function ScannerScreen() {
           validationResult = await Promise.race([validationPromise, validationTimeout]);
         } catch (validationError) {
           console.error('❌ Validation error:', validationError);
-          feedback.error();
+          feedback.checkInError();
           
           // Show error modal instead of alert
           showErrorModal({
@@ -438,7 +447,7 @@ export default function ScannerScreen() {
             console.log('Setting up group redirect with scanned ticket pre-selected');
             
             // Navigate to ticket action screen for group tickets
-            feedback.success();
+            scanMode === 'scan-in' ? feedback.checkIn() : feedback.checkOut();
             setShowCamera(false); // Turn off camera
             setIsScanning(false);
             setIsNavigatingAway(true); // Mark that we're navigating away
@@ -464,7 +473,7 @@ export default function ScannerScreen() {
               : 'No tickets in this group are currently checked in.';
 
             // Haptic/error feedback and a visible log/modal
-            feedback.qrScanError();
+            feedback.alreadyScanned();
             showErrorModal({
               type: 'already-scanned',
               title: scanMode === 'scan-in' ? 'Already Checked In' : 'Nothing To Check Out',
@@ -531,7 +540,7 @@ export default function ScannerScreen() {
             }
             
             // Show immediate status for already scanned ticket
-            feedback.qrScanError();
+            feedback.alreadyScanned();
             showErrorModal({
               type: 'already-scanned',
               title: 'Already Scanned Ticket',
@@ -561,7 +570,7 @@ export default function ScannerScreen() {
           
           if (isBlockingError) {
             // This is a real error that prevents scan-in
-            feedback.qrScanError();
+            feedback.checkInError();
             Alert.alert('Invalid QR Code', errorMessage, [
               { text: 'OK', onPress: () => {
                 console.log('🔄 Resuming scanning after invalid QR code (scan-in)');
@@ -577,7 +586,7 @@ export default function ScannerScreen() {
           console.log('Validation successful - proceeding with scan in');
         }
         
-        feedback.success();
+        feedback.checkIn();
         console.log('Performing individual scan in...');
         await performScanIn(data, validationResult);
         return;
@@ -614,7 +623,7 @@ export default function ScannerScreen() {
             }
             
             // Show immediate status for not-checked-in ticket
-            feedback.qrScanError();
+            feedback.checkInError();
             showErrorModal({
               type: 'not-checked-in',
               title: 'Not Checked In',
@@ -636,7 +645,7 @@ export default function ScannerScreen() {
           
           if (!isAlreadyCheckedInError) {
             // This is a real error (ticket not valid, wrong event, etc.)
-            feedback.qrScanError();
+            feedback.checkInError();
             Alert.alert('Invalid QR Code', errorMessage, [
               { text: 'OK', onPress: () => {
                 console.log('🔄 Resuming scanning after invalid QR code (scan-out)');
@@ -661,7 +670,7 @@ export default function ScannerScreen() {
             let guestName = info?.fullname || 'Guest';
             let ticketType = info?.ticket_title || 'Ticket';
             
-            feedback.qrScanError();
+            feedback.checkInError();
             showErrorModal({
               type: 'not-checked-in',
               title: 'Not Checked In',
@@ -675,7 +684,7 @@ export default function ScannerScreen() {
           console.log('Ticket is valid and checked in - proceeding with scan out');
         }
         
-        feedback.success();
+        feedback.checkOut();
         console.log('Performing individual scan out...');
         
         // Ensure scanning is resumed even if performScanOut throws
@@ -690,7 +699,7 @@ export default function ScannerScreen() {
       }
       
       // This shouldn't be reached, but just in case
-      feedback.qrScanError();
+      feedback.checkInError();
       Alert.alert('Error', 'Unknown scan mode or validation issue.', [
         { text: 'OK', onPress: () => {
           console.log('🔄 Resuming scanning after unknown error');

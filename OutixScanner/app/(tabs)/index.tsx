@@ -2,7 +2,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Calendar, CalendarX, ChevronRight, Clock, MapPin } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, Modal, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppLayout from "../../components/AppLayout";
 import { EventImagePlaceholder } from "../../components/EventImagePlaceholder";
 import { useTheme } from "../../context/ThemeContext";
@@ -309,7 +310,8 @@ const GroupedEventItem: React.FC<GroupedEventItemProps> = ({ item, colors, onPre
 };
 
 export default function Index() {
-  const { colors, setSelectedEventId, setSelectedEventName } = useTheme();
+  const { colors, isDarkMode, setSelectedEventId, setSelectedEventName } = useTheme();
+  const insets = useSafeAreaInsets();
   const [events, setEvents] = useState<Event[]>([]);
   const [groupedEvents, setGroupedEvents] = useState<GroupedEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -546,15 +548,15 @@ export default function Index() {
   };
 
   return (
-    <AppLayout withPadding={false}>
+    <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <View style={[styles.container, { backgroundColor: colors.background }]}> 
-      <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Loading events...</Text>
-        </View>
-      ) : (
+        <Text style={[styles.header, { color: colors.text }]}>Upcoming Events</Text>
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text }]}>Loading events...</Text>
+          </View>
+        ) : (
         <>
           {error && (
             <View style={[styles.errorContainer, { backgroundColor: colors.card }]}>
@@ -587,7 +589,7 @@ export default function Index() {
             )}
           />
         </>
-      )}
+        )}
       </View>
       
       {/* Date Selection Modal */}
@@ -659,22 +661,24 @@ export default function Index() {
           </View>
         </View>
       </Modal>
-    </AppLayout>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
   header: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
-    marginBottom: 12,
-    color: "#000000",
+    marginBottom: 16,
+    marginTop: 16,
   },
   listContainer: {
     paddingBottom: 120, // Space for navigation bar + extra padding

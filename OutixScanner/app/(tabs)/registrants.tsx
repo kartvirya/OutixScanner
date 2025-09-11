@@ -1,7 +1,7 @@
 import { Calendar, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, FlatList, Modal, Platform, RefreshControl, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppLayout from '../../components/AppLayout';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
@@ -9,7 +9,8 @@ import { getRegistrations, getWaivers, isAuthenticated, Registration, submitWaiv
 import { formatAppDateTime } from '../../utils/date';
 
 export default function Registrants() {
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [waivers, setWaivers] = useState<Waiver[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,6 +102,14 @@ export default function Registrants() {
       
       const data = await getWaivers(eventId);
       console.log('Waivers loaded:', data.length, 'items');
+      
+      // Debug: Log waiver status values
+      if (data.length > 0) {
+        console.log('Sample waiver statuses:');
+        data.slice(0, 3).forEach(waiver => {
+          console.log(`- ${waiver['Driver Rider Name'] || waiver.ItemName}: WaiverSigned = "${waiver.WaiverSigned}"`);
+        });
+      }
       
       // Check for duplicate Ref values
       const refs = data.map(item => item.Ref);
@@ -283,10 +292,10 @@ export default function Registrants() {
         </View>
         <View style={[
           styles.waiverStatusBadge,
-          { backgroundColor: item.WaiverSigned === 'Yes' ? '#10B981' : '#EF4444' }
+          { backgroundColor: item.WaiverSigned && item.WaiverSigned.toLowerCase() === 'yes' ? '#10B981' : '#EF4444' }
         ]}>
           <Text style={styles.waiverStatusText}>
-            {item.WaiverSigned === 'Yes' ? 'Signed' : 'Pending'}
+            {item.WaiverSigned && item.WaiverSigned.toLowerCase() === 'yes' ? 'Signed' : 'Pending'}
           </Text>
         </View>
       </View>
@@ -362,7 +371,7 @@ export default function Registrants() {
       )}
 
       {/* Waiver Actions - only show if waiver is not signed */}
-      {item.WaiverSigned !== 'Yes' && item.WaiverLink && (
+      {(!item.WaiverSigned || item.WaiverSigned.toLowerCase() !== 'yes') && item.WaiverLink && (
         <View style={styles.waiverActions}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Waiver Signing Required</Text>
           <View style={styles.waiverButtonsContainer}>
@@ -394,9 +403,8 @@ export default function Registrants() {
       transparent={false}
       onRequestClose={closeWaiversModal}
     >
-      <SafeAreaProvider>
-      <AppLayout key="waivers-modal" contentStyle={[styles.modalContainer, { backgroundColor: colors.background }]}> 
-        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.modalHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <View style={styles.modalTitleContainer}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>
               Waivers - {selectedEventForWaivers?.EventName}
@@ -451,43 +459,46 @@ export default function Registrants() {
             }
           />
         )}
-      </AppLayout>
-      </SafeAreaProvider>
+      </SafeAreaView>
     </Modal>
   );
 
   // Show loading screen while checking authentication or loading initial data
   if (!authChecked || (loading && registrations.length === 0)) {
     return (
-      <AppLayout key="loading" contentStyle={[styles.container, styles.centered]}> 
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.text }]}> 
-          {!authChecked ? 'Authenticating...' : 'Loading registrations...'}
-        </Text>
-      </AppLayout>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}> 
+            {!authChecked ? 'Authenticating...' : 'Loading registrations...'}
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error && registrations.length === 0) {
     return (
-      <AppLayout key="error" contentStyle={[styles.container, styles.centered]}> 
-        <Text style={[styles.errorText, { color: '#EF4444' }]}>Error: {error}</Text>
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            setError(null);
-            setAuthChecked(false);
-            loadRegistrations();
-          }}
-        >
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </AppLayout>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: '#EF4444' }]}>Error: {error}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={() => {
+              setError(null);
+              setAuthChecked(false);
+              loadRegistrations();
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <AppLayout key="main" contentStyle={[styles.container, styles.pageTightPadding]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Registrations</Text>
       </View>
@@ -580,7 +591,7 @@ export default function Registrants() {
           }}
         />
       )}
-    </AppLayout>
+    </SafeAreaView>
   );
 }
 
@@ -590,7 +601,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 16,
     borderBottomWidth: 1,
   },
   headerTitle: {
@@ -753,6 +764,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   loadingText: {
     marginTop: 16,

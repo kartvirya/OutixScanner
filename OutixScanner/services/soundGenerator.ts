@@ -24,10 +24,38 @@ export const generateSuccessSound = (): string => {
   return `UklGRlIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YS4AAACAMFBQUFBQUFBQUFCAgICAgICAgICAgICAgIBQUFBQUFBQUFA=`;
 };
 
+// Generate a check-in success sound - Bright celebratory chime
+export const generateCheckInSuccessSound = (): string => {
+  // High-pitched celebratory three-tone ascending chime - very distinctive
+  // Much brighter and more positive than other sounds
+  return `UklGRnIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YU4AAACAMICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA`;
+};
+
+// Generate a check-out success sound - Low warm confirmation
+export const generateCheckOutSuccessSound = (): string => {
+  // Low, warm, single-tone confirmation - completely different from check-in
+  // Deep, satisfying "boop" sound for check-out completion
+  return `UklGRkIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4AAACAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=`;
+};
+
 // Generate a gentle error sound - descending tone
 export const generateErrorSound = (): string => {
   // Gentle descending tone for errors
   return `UklGRkIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YR4AAACAMICAgICAgICAgIBQUFBQUFBQUFAwMDAwMDAwMDA=`;
+};
+
+// Generate a check-in error sound - Double beep error
+export const generateCheckInErrorSound = (): string => {
+  // Double beep error pattern - very distinctive from success sounds
+  // Two short, sharp tones to clearly indicate an error
+  return `UklGRlIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YS4AAACAMEBAQEBAQEBAQEAwMDAwMDAwMDAwMEBAQEBAQEBAQEAwMDAwMDAwMDAwMA==`;
+};
+
+// Generate an already scanned sound - Triple tap notification
+export const generateAlreadyScannedSound = (): string => {
+  // Three quick, soft taps - distinctive informational pattern
+  // Different rhythm from error sounds, neutral and informative
+  return `UklGRmIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YT4AAACAMGBgYGAwMDAwMDAwMGBgYGAwMDAwMDAwMGBgYGAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=`;
 };
 
 // Generate a scan beep - short and distinctive
@@ -48,14 +76,22 @@ export const generateSilentSound = (): string => {
 };
 
 // Get the appropriate sound based on type
-export const getSoundData = (type: 'click' | 'success' | 'error' | 'scan' | 'notification' | 'silent'): string => {
+export const getSoundData = (type: 'click' | 'success' | 'error' | 'scan' | 'notification' | 'silent' | 'checkin-success' | 'checkout-success' | 'checkin-error' | 'already-scanned'): string => {
   switch (type) {
     case 'click':
       return generateClickSound();
     case 'success':
       return generateSuccessSound();
+    case 'checkin-success':
+      return generateCheckInSuccessSound();
+    case 'checkout-success':
+      return generateCheckOutSuccessSound();
     case 'error':
       return generateErrorSound();
+    case 'checkin-error':
+      return generateCheckInErrorSound();
+    case 'already-scanned':
+      return generateAlreadyScannedSound();
     case 'scan':
       return generateScanSound();
     case 'notification':

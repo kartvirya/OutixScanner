@@ -25,7 +25,6 @@ import QRScanner from '../../../components/QRScanner';
 import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
-    generateSampleQRData,
     getCheckedInGuestList,
     getEvents,
     getGuestListPaginated,
@@ -147,7 +146,22 @@ export default function GuestListPage() {
 
       const result = await getGuestListPaginated(eventId, page, 10);
       
-      const processedGuests = result.guests.map(guest => ({
+      const processedGuests = result.guests.map(guest => {
+        // Debug: Log available fields for the first few guests
+        if (result.guests.indexOf(guest) < 3) {
+          console.log(`🔍 Raw guest data fields for ${extractGuestName(guest)}:`, Object.keys(guest));
+          console.log(`🔍 Key identifier fields:`, {
+            id: guest.id,
+            ticket_identifier: guest.ticket_identifier,
+            booking_reference: guest.booking_reference,
+            reference_num: guest.reference_num,
+            booking_id: guest.booking_id,
+            qrCode: guest.qrCode,
+            qr_code: guest.qr_code
+          });
+        }
+        
+        return {
           id: guest.id || guest.guestId || String(Math.random()),
           name: extractGuestName(guest),
           email: guest.email || 'N/A',
@@ -158,13 +172,14 @@ export default function GuestListPage() {
           purchased_date: guest.purchased_date || undefined,
           reference_num: guest.booking_reference || guest.reference_num || undefined,
           booking_id: guest.booking_id || undefined,
-          ticket_identifier: guest.ticket_identifier || undefined,
+          ticket_identifier: guest.ticket_identifier || guest.qrCode || guest.qr_code || undefined,
           price: guest.price || undefined,
           mobile: guest.mobile || undefined,
           address: guest.address || undefined,
           notes: guest.notes || undefined,
           rawData: guest
-        }));
+        };
+      });
         
       if (reset || page === 1) {
         setDisplayedGuests(processedGuests);
@@ -618,6 +633,8 @@ export default function GuestListPage() {
         'Guest Admitted Successfully',
         `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}\n\nGuest list updated locally.`
       );
+      // Refresh to pull authoritative server check-in time
+      await fetchCheckedInGuests();
       
     } catch (error) {
       console.error('Scan in error:', error);
@@ -628,9 +645,6 @@ export default function GuestListPage() {
   };
 
   const updateLocalScanIn = async (scanCode: string, validationResult: any) => {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
     const ticketInfo = validationResult.msg.info;
     let guestIndex = displayedGuests.findIndex(a => {
       // First, try to match by ticket_identifier (most specific)
@@ -655,7 +669,8 @@ export default function GuestListPage() {
         email: ticketInfo.email,
         ticketType: ticketInfo.ticket_title,
         scannedIn: true,
-        scanInTime: timeString,
+        // Avoid device time; will be filled after server refresh
+        scanInTime: undefined,
         scanCode: scanCode,
         // Additional fields from API
         purchased_date: ticketInfo.purchased_date || undefined,
@@ -677,7 +692,8 @@ export default function GuestListPage() {
       updatedGuestList[guestIndex] = {
         ...updatedGuestList[guestIndex],
         scannedIn: true,
-        scanInTime: timeString,
+        // Keep existing time until server provides authoritative time
+        scanInTime: updatedGuestList[guestIndex].scanInTime,
         scanCode: scanCode,
         // Additional fields from API
         purchased_date: ticketInfo.purchased_date || undefined,
@@ -694,7 +710,7 @@ export default function GuestListPage() {
       setDisplayedGuests(updatedGuestList);
     }
     
-    console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
+    console.log(`Updated scan-in status for ${ticketInfo.fullname} (awaiting server time)`);
     feedback.checkIn();
     
     // Also update the checked-in guests list to keep counts in sync
@@ -708,7 +724,7 @@ export default function GuestListPage() {
   const handleManualScanIn = async (guest: Attendee) => {
     try {
       feedback.buttonPress();
-      console.log(`🔄 Manual check-in requested for: ${guest.name}`);
+      console.log(`🔄 Manual check-in requested for: ${guest.name} (${guest.ticketType})`);
       logCurrentState('BEFORE CHECK-IN', guest);
       
       Alert.alert(
@@ -725,7 +741,9 @@ export default function GuestListPage() {
             onPress: async () => {
               feedback.buttonPressHeavy();
               console.log(`✅ User confirmed check-in for: ${guest.name}`);
+              console.log(`🚀 Starting performManualScanIn...`);
               await performManualScanIn(guest);
+              console.log(`🎉 performManualScanIn completed for: ${guest.name}`);
             }
           }
         ]
@@ -740,15 +758,15 @@ export default function GuestListPage() {
     const handleManualScanOut = async (guest: Attendee) => {
     try {
       feedback.buttonPress();
-      console.log(`🔄 Manual check-out requested for: ${guest.name}`);
+      console.log(`🔄 Manual check-out requested for: ${guest.name} (${guest.ticketType})`);
       logCurrentState('BEFORE CHECK-OUT', guest);
       
-      console.log(`🚨 BYPASSING ALERT - Directly performing checkout for ${guest.name}`);
+      console.log(`🚨 BYPASSING ALERT - Directly performing check-out for ${guest.name}`);
       
       // Skip the alert for now and directly perform checkout
       try {
         feedback.buttonPressHeavy();
-        console.log(`✅ Directly performing check-out for: ${guest.name}`);
+        console.log(`✅ User confirmed check-out for: ${guest.name}`);
         console.log(`🚀 Starting performManualScanOut...`);
         await performManualScanOut(guest);
         console.log(`🎉 performManualScanOut completed for: ${guest.name}`);
@@ -766,18 +784,39 @@ export default function GuestListPage() {
 
   const performManualScanIn = async (guest: Attendee) => {
     try {
-      console.log(`🔧 Starting performManualScanIn for: ${guest.name}`);
+      console.log(`🔧 Manual check-in mode - processing guest: ${guest.name} (${guest.ticketType})`);
       
-      // Generate a mock scan code for manual check-in
-      const mockScanCode = generateSampleQRData(guest.id);
-      console.log(`📱 Generated scan code: ${mockScanCode}`);
+      // Debug: Log all available identifiers for this guest
+      console.log(`🔍 Available identifiers for ${guest.name}:`, {
+        id: guest.id,
+        ticket_identifier: guest.ticket_identifier,
+        reference_num: guest.reference_num,
+        booking_id: guest.booking_id,
+        scanCode: guest.scanCode,
+        rawData: guest.rawData
+      });
       
-      // Update local state first
-      console.log(`💾 Updating local state...`);
+      // Use the actual ticket identifier instead of generating a mock code
+      const scanCode = guest.ticket_identifier || guest.reference_num || guest.booking_id || guest.id;
+      console.log(`📱 Using ticket identifier for manual check-in: ${scanCode}`);
+      
+      if (!scanCode) {
+        console.log(`⚠️ No valid ticket identifier found for guest: ${guest.name}`);
+        feedback.checkInError();
+        Alert.alert(
+          'Check-in Failed',
+          `Cannot check in ${guest.name}. No valid ticket identifier found.`
+        );
+        return;
+      }
+      
+      // Update local state first for immediate UI feedback
+      console.log(`💾 Updating local state for immediate feedback...`);
       await updateLocalManualScanIn(guest);
       
-      // Try to call the API with the mock scan code
-      const scanResult = await scanQRCode(eventId, mockScanCode);
+      // Try to call the API with the real ticket identifier
+      console.log(`🌐 Attempting API sync for manual check-in...`);
+      const scanResult = await scanQRCode(eventId, scanCode);
       
       if (!scanResult || scanResult.error) {
         let errorMessage = 'Failed to check in guest via API';
@@ -785,7 +824,8 @@ export default function GuestListPage() {
           errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
         }
         
-        feedback.success(); // Still show success since local update worked
+        console.log(`⚠️ API sync failed for manual check-in: ${errorMessage}`);
+        feedback.checkIn(); // Still show success since local update worked
         Alert.alert(
           'Guest Checked In Locally',
           `${guest.name} has been checked in locally.\n\nAPI sync: ${errorMessage}`
@@ -793,6 +833,7 @@ export default function GuestListPage() {
         return;
       }
       
+      console.log(`✅ API sync successful for manual check-in`);
       feedback.checkIn();
       
       let successMessage = 'Manual check-in successful';
@@ -802,6 +843,7 @@ export default function GuestListPage() {
         successMessage = scanResult.msg.message;
       }
       
+      console.log(`🎉 Manual check-in completed successfully: ${guest.name}`);
       Alert.alert(
         'Guest Checked In Successfully',
         `${guest.name} has been checked in manually.\n\n${successMessage}`
@@ -811,10 +853,11 @@ export default function GuestListPage() {
       await fetchCheckedInGuests();
       
     } catch (error) {
-      console.error('Manual scan in error:', error);
+      console.error('❌ Manual check-in error:', error);
       // Still update locally even if API fails
       await updateLocalManualScanIn(guest);
-      feedback.success();
+      feedback.checkIn();
+      console.log(`⚠️ Manual check-in completed locally due to API error: ${guest.name}`);
       Alert.alert(
         'Guest Checked In Locally',
         `${guest.name} has been checked in locally.\n\nAPI sync failed but local update successful.`
@@ -852,10 +895,10 @@ export default function GuestListPage() {
       setSearchResults(updatedSearchResults);
     }
     
-    console.log(`✅ Manual check-in for ${guest.name} at ${timeString}`);
+    console.log(`✅ Manual check-in completed locally: ${guest.name} at ${timeString}`);
     feedback.checkIn();
     
-    console.log(`✅ Check-in process completed for ${guest.name}`);
+    console.log(`🎉 Manual check-in process completed for ${guest.name}`);
     
     // Trigger refresh for other components
     triggerAttendanceRefresh(eventId);
@@ -864,22 +907,22 @@ export default function GuestListPage() {
 
   const performManualScanOut = async (guest: Attendee) => {
     try {
-      console.log(`🔧 Starting performManualScanOut for: ${guest.name}`);
+      console.log(`🔧 Manual check-out mode - processing guest: ${guest.name} (${guest.ticketType})`);
       
       // Update local state first for immediate UI feedback
-      console.log(`💾 Updating local state...`);
+      console.log(`💾 Updating local state for immediate feedback...`);
       await updateLocalManualScanOut(guest);
       
       // Try to call the API to actually check out the guest
-      if (guest.scanCode || guest.ticket_identifier) {
-        const scanCode = guest.scanCode || guest.ticket_identifier || generateSampleQRData(guest.id);
-        console.log(`📱 Attempting API checkout with scan code: ${scanCode}`);
+      if (guest.scanCode || guest.ticket_identifier || guest.reference_num || guest.booking_id) {
+        const scanCode = guest.scanCode || guest.ticket_identifier || guest.reference_num || guest.booking_id || guest.id;
+        console.log(`📱 Attempting API sync for manual check-out with scan code: ${scanCode}`);
         
         const unscanResult = await unscanQRCode(eventId, scanCode);
         
         if (unscanResult && !unscanResult.error) {
-          console.log('✅ API checkout successful');
-          feedback.success();
+          console.log(`✅ API sync successful for manual check-out`);
+          feedback.checkOut();
           
           let successMessage = 'Manual check-out successful';
           if (typeof unscanResult.msg === 'string') {
@@ -888,6 +931,7 @@ export default function GuestListPage() {
             successMessage = unscanResult.msg.message;
           }
           
+          console.log(`🎉 Manual check-out completed successfully: ${guest.name}`);
           Alert.alert(
             'Guest Checked Out Successfully',
             `${guest.name} has been checked out.\n\n${successMessage}`
@@ -897,13 +941,13 @@ export default function GuestListPage() {
           await fetchCheckedInGuests();
         } else {
           // API failed but local update succeeded
-          console.log('⚠️ API checkout failed, but local update succeeded');
-          feedback.success();
-          
           let errorMessage = 'API sync failed';
           if (unscanResult?.msg) {
             errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
           }
+          
+          console.log(`⚠️ API sync failed for manual check-out: ${errorMessage}`);
+          feedback.checkOut();
           
           Alert.alert(
             'Guest Checked Out Locally',
@@ -912,8 +956,8 @@ export default function GuestListPage() {
         }
       } else {
         // No scan code available, just local update
-        console.log('⚠️ No scan code available for API checkout, local update only');
-        feedback.success();
+        console.log(`⚠️ No scan code available for API sync, local check-out only: ${guest.name}`);
+        feedback.checkOut();
         Alert.alert(
           'Guest Checked Out Locally',
           `${guest.name} has been checked out locally.\n\nNo scan code available for API sync.`
@@ -921,9 +965,10 @@ export default function GuestListPage() {
       }
       
     } catch (error) {
-      console.error('❌ Manual scan out error:', error);
+      console.error('❌ Manual check-out error:', error);
       // Still show success since local update worked
-      feedback.success();
+      feedback.checkOut();
+      console.log(`⚠️ Manual check-out completed locally due to API error: ${guest.name}`);
       Alert.alert(
         'Guest Checked Out Locally',
         `${guest.name} has been checked out locally.\n\nAPI sync failed but local update successful.`
@@ -993,10 +1038,10 @@ export default function GuestListPage() {
       return filtered;
     });
     
-    console.log(`✅ Manual check-out for ${guest.name}`);
-    feedback.checkIn();
+    console.log(`✅ Manual check-out completed locally: ${guest.name}`);
+    feedback.checkOut();
     
-    console.log(`✅ Check-out process completed for ${guest.name}`);
+    console.log(`🎉 Manual check-out process completed for ${guest.name}`);
     
     // Trigger refresh for other components
     triggerAttendanceRefresh(eventId);

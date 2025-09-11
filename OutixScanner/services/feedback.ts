@@ -2,6 +2,7 @@ import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { TimeoutManager } from '../utils/timeout';
+import { playSoundWithCleanup } from './audioService';
 import { getSoundData } from './soundGenerator';
 
 // Settings for feedback preferences
@@ -45,7 +46,7 @@ export const initializeAudio = async () => {
 const createPleasantTone = async (
   frequency: number = 800, 
   duration: number = 100,
-  type: 'click' | 'success' | 'error' | 'notification' | 'scan' = 'click'
+  type: 'click' | 'success' | 'error' | 'notification' | 'scan' | 'checkin-success' | 'checkout-success' | 'checkin-error' | 'already-scanned' = 'click'
 ): Promise<Audio.Sound | null> => {
   try {
     let audioData = '';
@@ -91,8 +92,16 @@ const generateSubtleTone = (frequency: number, duration: number, type: string): 
       return getSoundData('click');
     case 'success':
       return getSoundData('success');
+    case 'checkin-success':
+      return getSoundData('checkin-success');
+    case 'checkout-success':
+      return getSoundData('checkout-success');
     case 'error':
       return getSoundData('error');
+    case 'checkin-error':
+      return getSoundData('checkin-error');
+    case 'already-scanned':
+      return getSoundData('already-scanned');
     case 'scan':
       return getSoundData('scan');
     case 'notification':
@@ -280,6 +289,42 @@ export const soundFeedback = {
     }
   },
   
+  checkInSuccess: async () => {
+    if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
+    try {
+      await playSoundWithCleanup('checkin-success', { volume: 1.0, rate: 1.0 });
+    } catch (error) {
+      console.warn('Check-in success sound failed:', error);
+    }
+  },
+  
+  checkOutSuccess: async () => {
+    if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
+    try {
+      await playSoundWithCleanup('checkout-success', { volume: 0.9, rate: 0.8 });
+    } catch (error) {
+      console.warn('Check-out success sound failed:', error);
+    }
+  },
+  
+  checkInError: async () => {
+    if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
+    try {
+      await playSoundWithCleanup('checkin-error', { volume: 0.8, rate: 1.2 });
+    } catch (error) {
+      console.warn('Check-in error sound failed:', error);
+    }
+  },
+  
+  alreadyScanned: async () => {
+    if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
+    try {
+      await playSoundWithCleanup('already-scanned', { volume: 0.7, rate: 1.1 });
+    } catch (error) {
+      console.warn('Already scanned sound failed:', error);
+    }
+  },
+  
   notification: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
@@ -354,7 +399,28 @@ export const feedback = {
   checkIn: async () => {
     await Promise.all([
       hapticFeedback.heavy(),
-      soundFeedback.success(),
+      soundFeedback.checkInSuccess(),
+    ]);
+  },
+  
+  checkOut: async () => {
+    await Promise.all([
+      hapticFeedback.heavy(),
+      soundFeedback.checkOutSuccess(),
+    ]);
+  },
+  
+  checkInError: async () => {
+    await Promise.all([
+      hapticFeedback.error(),
+      soundFeedback.checkInError(),
+    ]);
+  },
+  
+  alreadyScanned: async () => {
+    await Promise.all([
+      hapticFeedback.warning(),
+      soundFeedback.alreadyScanned(),
     ]);
   },
   

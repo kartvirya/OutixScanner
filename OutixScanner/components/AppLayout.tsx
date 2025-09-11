@@ -9,7 +9,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children, withPadding = true }: AppLayoutProps) {
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <View style={[styles.content, withPadding && styles.padded]}>
         {children}
       </View>

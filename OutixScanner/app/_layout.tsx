@@ -20,7 +20,7 @@ function ThemedStatusBar() {
   const { isDark } = useTheme();
   return (
     <StatusBar 
-      barStyle={isDark ? "light-content" : "dark-content"} 
+      barStyle={isDark ? "light-content" : "dark-content"}
       backgroundColor="transparent"
       translucent={true}
     />
