@@ -22,6 +22,7 @@ import {
   View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
+import SuccessModal from '../../../components/SuccessModal';
 import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
@@ -81,6 +82,12 @@ export default function GuestListPage() {
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [searchResults, setSearchResults] = useState<Attendee[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalType, setSuccessModalType] = useState<'check-in' | 'check-out'>('check-in');
+  const [successModalGuest, setSuccessModalGuest] = useState<{ name: string; ticketType: string } | null>(null);
+  const [successModalMessage, setSuccessModalMessage] = useState<string>('');
   
   // Debounce search
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -803,10 +810,17 @@ export default function GuestListPage() {
       if (!scanCode) {
         console.log(`⚠️ No valid ticket identifier found for guest: ${guest.name}`);
         feedback.checkInError();
-        Alert.alert(
-          'Check-in Failed',
-          `Cannot check in ${guest.name}. No valid ticket identifier found.`
-        );
+        // Still allow manual check-in even without scan code
+        console.log(`📦 Proceeding with local-only check-in for: ${guest.name}`);
+        
+        // Update local state for immediate UI feedback
+        await updateLocalManualScanIn(guest);
+        
+        // Show success modal with warning about no API sync
+        setSuccessModalType('check-in');
+        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+        setSuccessModalMessage('Guest has been checked in locally. No ticket identifier available for API sync.');
+        setShowSuccessModal(true);
         return;
       }
       
@@ -826,17 +840,18 @@ export default function GuestListPage() {
         
         console.log(`⚠️ API sync failed for manual check-in: ${errorMessage}`);
         feedback.checkIn(); // Still show success since local update worked
-        Alert.alert(
-          'Guest Checked In Locally',
-          `${guest.name} has been checked in locally.\n\nAPI sync: ${errorMessage}`
-        );
+        // Use SuccessModal with warning message
+        setSuccessModalType('check-in');
+        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+        setSuccessModalMessage(`Guest has been checked in locally. API sync: ${errorMessage}`);
+        setShowSuccessModal(true);
         return;
       }
       
       console.log(`✅ API sync successful for manual check-in`);
       feedback.checkIn();
       
-      let successMessage = 'Manual check-in successful';
+      let successMessage = '';
       if (typeof scanResult.msg === 'string') {
         successMessage = scanResult.msg;
       } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
@@ -844,10 +859,11 @@ export default function GuestListPage() {
       }
       
       console.log(`🎉 Manual check-in completed successfully: ${guest.name}`);
-      Alert.alert(
-        'Guest Checked In Successfully',
-        `${guest.name} has been checked in manually.\n\n${successMessage}`
-      );
+      // Use SuccessModal instead of Alert
+      setSuccessModalType('check-in');
+      setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+      setSuccessModalMessage(successMessage || 'Guest has been checked in successfully.');
+      setShowSuccessModal(true);
       
       // Refresh checked-in guests list after successful API call
       await fetchCheckedInGuests();
@@ -858,10 +874,11 @@ export default function GuestListPage() {
       await updateLocalManualScanIn(guest);
       feedback.checkIn();
       console.log(`⚠️ Manual check-in completed locally due to API error: ${guest.name}`);
-      Alert.alert(
-        'Guest Checked In Locally',
-        `${guest.name} has been checked in locally.\n\nAPI sync failed but local update successful.`
-      );
+      // Use SuccessModal with error message
+      setSuccessModalType('check-in');
+      setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+      setSuccessModalMessage('Guest has been checked in locally. API sync failed but local update successful.');
+      setShowSuccessModal(true);
     }
   };
 
@@ -932,10 +949,11 @@ export default function GuestListPage() {
           }
           
           console.log(`🎉 Manual check-out completed successfully: ${guest.name}`);
-          Alert.alert(
-            'Guest Checked Out Successfully',
-            `${guest.name} has been checked out.\n\n${successMessage}`
-          );
+          // Use SuccessModal instead of Alert
+          setSuccessModalType('check-out');
+          setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+          setSuccessModalMessage(successMessage || 'Guest has been checked out successfully.');
+          setShowSuccessModal(true);
           
           // Refresh checked-in guests list after successful API call
           await fetchCheckedInGuests();
@@ -949,15 +967,22 @@ export default function GuestListPage() {
           console.log(`⚠️ API sync failed for manual check-out: ${errorMessage}`);
           feedback.checkOut();
           
-          Alert.alert(
-            'Guest Checked Out Locally',
-            `${guest.name} has been checked out locally.\n\nAPI sync: ${errorMessage}`
-          );
+          // Use SuccessModal with warning message
+          setSuccessModalType('check-out');
+          setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+          setSuccessModalMessage(`Guest has been checked out locally. API sync: ${errorMessage}`);
+          setShowSuccessModal(true);
         }
       } else {
         // No scan code available, just local update
         console.log(`⚠️ No scan code available for API sync, local check-out only: ${guest.name}`);
         feedback.checkOut();
+        
+        // Use SuccessModal for local-only check-out
+        setSuccessModalType('check-out');
+        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
+        setSuccessModalMessage('Guest has been checked out locally.');
+        setShowSuccessModal(true);
         Alert.alert(
           'Guest Checked Out Locally',
           `${guest.name} has been checked out locally.\n\nNo scan code available for API sync.`
@@ -1080,42 +1105,62 @@ export default function GuestListPage() {
             style={styles.simpleBackButton}
             onPress={() => {
               feedback.buttonPress();
-              router.back();
+              // Navigate to event details page explicitly
+              router.push(`/(tabs)/${eventId}`);
             }}
           >
             <ArrowLeft size={20} color="#FF6B00" />
           </TouchableOpacity>
           <View style={styles.simpleHeaderContent}>
             <Text style={[styles.simpleTitle, { color: colors.text }]}>Guest List</Text>
-            <Text style={[styles.simpleSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
+            <Text style={[styles.simpleSubtitle, { color: colors.text + '99' }]}>{eventTitle}</Text>
           </View>
         </View>
         
-        {/* Simple Stats */}
-        <View style={styles.simpleStatsRow}>
-          <View style={styles.simpleStatItem}>
-            <Text style={[styles.simpleStatNumber, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
-            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Total</Text>
-          </View>
-          <View style={styles.simpleStatItem}>
-            <Text style={[styles.simpleStatNumber, { color: '#22C55E' }]}>{checkedInCount}</Text>
-            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Present</Text>
-          </View>
-          <View style={styles.simpleStatItem}>
-            <Text style={[styles.simpleStatNumber, { color: '#FF6B00' }]}>{attendancePercentage}%</Text>
-            <Text style={[styles.simpleStatLabel, { color: colors.secondary }]}>Rate</Text>
-          </View>
+        {/* Navigation Buttons */}
+        <View style={styles.navigationContainer}>
+          <TouchableOpacity 
+            style={[styles.navigationButton, { backgroundColor: '#4169E108' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              router.push(`/guest-list/${eventId}`);
+            }}
+          >
+            <View style={[styles.navigationIconContainer, { backgroundColor: '#4169E115' }]}>
+              <Users size={24} color="#4169E1" />
+            </View>
+            <View style={styles.navigationTextContainer}>
+              <Text style={[styles.navigationTitle, { color: colors.text }]}>Guest List</Text>
+              <Text style={[styles.navigationCount, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.navigationButton, { backgroundColor: '#4CAF5008' }]}
+            onPress={() => {
+              feedback.buttonPress();
+              router.push(`/attendance/${eventId}`);
+            }}
+          >
+            <View style={[styles.navigationIconContainer, { backgroundColor: '#4CAF5015' }]}>
+              <UserCheck size={24} color="#4CAF50" />
+            </View>
+            <View style={styles.navigationTextContainer}>
+              <Text style={[styles.navigationTitle, { color: colors.text }]}>Attendance</Text>
+              <Text style={[styles.navigationCount, { color: colors.text }]}>{checkedInCount}</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Simple Search and Filter */}
       <View style={[styles.simpleSearchContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.simpleSearchBar, { backgroundColor: colors.card }]}>
-          <Search size={16} color={colors.secondary} />
+          <Search size={16} color={colors.text + '99'} />
           <TextInput
             style={[styles.simpleSearchInput, { color: colors.text }]}
             placeholder="Search guests..."
-            placeholderTextColor={colors.secondary}
+            placeholderTextColor={colors.text + '99'}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -1210,7 +1255,7 @@ export default function GuestListPage() {
                 }}
               >
                 <Text style={[styles.modernGuestName, { color: colors.text }]}>{item.name}</Text>
-                <Text style={[styles.modernGuestEmail, { color: colors.secondary }]}>{item.email}</Text>
+                <Text style={[styles.modernGuestEmail, { color: colors.text + '99' }]}>{item.email}</Text>
                 <Text style={[styles.modernGuestTicket, { color: '#FF6B00' }]}>{item.ticketType}</Text>
               </TouchableOpacity>
               <View style={styles.modernGuestActions}>
@@ -1258,7 +1303,7 @@ export default function GuestListPage() {
                 return searchLoading ? (
                   <View style={styles.searchLoadingContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={[styles.searchLoadingText, { color: colors.secondary }]}>
+                    <Text style={[styles.searchLoadingText, { color: colors.text + '99' }]}>
                       Searching...
                     </Text>
                   </View>
@@ -1269,7 +1314,7 @@ export default function GuestListPage() {
                 return (
                   <View style={styles.loadMoreContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={[styles.loadMoreText, { color: colors.secondary }]}>
+                    <Text style={[styles.loadMoreText, { color: colors.text + '99' }]}>
                       Loading more guests...
                     </Text>
                   </View>
@@ -1293,7 +1338,7 @@ export default function GuestListPage() {
               if (!hasMore && !isSearchMode && displayedGuests.length > 0) {
                 return (
                   <View style={styles.endOfListContainer}>
-                    <Text style={[styles.endOfListText, { color: colors.secondary }]}>
+                    <Text style={[styles.endOfListText, { color: colors.text + '99' }]}>
                       All guests loaded ({totalGuestsFromAPI} total)
                     </Text>
                   </View>
@@ -1307,7 +1352,7 @@ export default function GuestListPage() {
           {/* Search/Filter Info */}
           {(isSearchMode || filterStatus !== 'all') && (
             <View style={[styles.searchInfoContainer, { backgroundColor: colors.card }]}>
-              <Text style={[styles.searchInfoText, { color: colors.secondary }]}>
+              <Text style={[styles.searchInfoText, { color: colors.text + '99' }]}>
                 {isSearchMode 
                   ? `Found ${filteredGuestList.length} guests matching "${searchQuery}"`
                   : `Showing ${filteredGuestList.length} guests (${filterStatus})`
@@ -1339,7 +1384,7 @@ export default function GuestListPage() {
                 : 'No guests registered'
             }
           </Text>
-          <Text style={[styles.emptySubtext, { color: colors.secondary }]}>
+          <Text style={[styles.emptySubtext, { color: colors.text + '99' }]}>
             {isSearchMode 
               ? 'Try a different search term or check spelling.'
               : searchQuery || filterStatus !== 'all' 
@@ -1382,6 +1427,20 @@ export default function GuestListPage() {
       >
         <QRScanner onScan={handleScanResult} onClose={handleCloseScanner} />
       </Modal>
+      
+      {/* Success Modal for manual check-in/check-out */}
+      <SuccessModal
+        visible={showSuccessModal}
+        onClose={() => {
+          setShowSuccessModal(false);
+          setSuccessModalGuest(null);
+          setSuccessModalMessage('');
+        }}
+        type={successModalType}
+        guestName={successModalGuest?.name}
+        ticketType={successModalGuest?.ticketType}
+        message={successModalMessage}
+      />
     </SafeAreaView>
   );
 }
@@ -1966,5 +2025,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  navigationContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
+  navigationButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  navigationIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navigationTextContainer: {
+    flex: 1,
+  },
+  navigationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  navigationCount: {
+    fontSize: 20,
+    fontWeight: '700',
   },
 }); 

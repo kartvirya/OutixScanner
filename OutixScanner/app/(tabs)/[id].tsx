@@ -6,15 +6,19 @@ import {
     ChevronUp,
     Clock,
     MapPin,
-    Ticket,
+    RefreshCw,
     UserCheck,
     Users
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
+    Dimensions,
     Modal,
+    Platform,
+    Pressable,
     RefreshControl,
     ScrollView,
     StatusBar,
@@ -23,7 +27,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -43,7 +47,12 @@ import {
 import { feedback, initializeAudio } from '../../services/feedback';
 import { formatAppDateTime, formatAppTime } from '../../utils/date';
 
-// Mock data types
+// Constants
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ANIMATION_DURATION = 300;
+const REFRESH_DEBOUNCE = 1000;
+
+// Types
 interface Ticket {
   id: string;
   type: string;
@@ -59,7 +68,7 @@ interface Attendee {
   ticketType: string;
   scannedIn: boolean;
   scanInTime?: string;
-  scanCode?: string; // Add scan code for QR functionality
+  scanCode?: string;
 }
 
 interface Event {
@@ -76,267 +85,174 @@ interface Event {
   attendees: Attendee[];
 }
 
-// Mock data
-const mockEvents: { [key: string]: Event } = {
-  '1': {
-    id: '1',
-    title: 'Team Meeting',
-    date: '2023-10-15',
-    time: '09:00 AM',
-    location: 'Conference Room A',
-    description: 'Monthly team meeting to discuss project progress and upcoming goals.',
-    totalTickets: 50,
-    ticketsSold: 32,
-    revenue: 1600,
-    tickets: [
-      { id: 't1', type: 'General', price: 50, sold: 20, available: 10 },
-      { id: 't2', type: 'VIP', price: 100, sold: 8, available: 2 },
-      { id: 't3', type: 'Early Bird', price: 40, sold: 4, available: 6 },
-    ],
-    attendees: [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:55 AM' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false },
-    ],
-  },
-  '2': {
-    id: '2',
-    title: 'Project Deadline',
-    date: '2023-10-20',
-    time: '05:00 PM',
-    location: 'Office',
-    description: 'Final review of project deliverables before submission to the client.',
-    totalTickets: 25,
-    ticketsSold: 15,
-    revenue: 750,
-    tickets: [
-      { id: 't1', type: 'Team Member', price: 0, sold: 10, available: 5 },
-      { id: 't2', type: 'Stakeholder', price: 150, sold: 5, available: 5 },
-    ],
-    attendees: [
-      { id: 'a1', name: 'Alex Johnson', email: 'alex@example.com', ticketType: 'Team Member', scannedIn: false },
-      { id: 'a2', name: 'Taylor Williams', email: 'taylor@example.com', ticketType: 'Stakeholder', scannedIn: false },
-      { id: 'a3', name: 'Jamie Rodriguez', email: 'jamie@example.com', ticketType: 'Team Member', scannedIn: false },
-    ],
-  },
-  '3': {
-    id: '3',
-    title: 'Client Presentation',
-    date: '2023-10-25',
-    time: '02:00 PM',
-    location: 'Meeting Room B',
-    description: 'Presentation of completed project to client stakeholders.',
-    totalTickets: 30,
-    ticketsSold: 22,
-    revenue: 1100,
-    tickets: [
-      { id: 't1', type: 'Presenter', price: 0, sold: 5, available: 0 },
-      { id: 't2', type: 'Client', price: 0, sold: 7, available: 3 },
-      { id: 't3', type: 'Observer', price: 50, sold: 10, available: 5 },
-    ],
-    attendees: [
-      { id: 'a1', name: 'Pat Smith', email: 'pat@example.com', ticketType: 'Presenter', scannedIn: false },
-      { id: 'a2', name: 'Jordan Lee', email: 'jordan@example.com', ticketType: 'Client', scannedIn: false },
-    ],
-  },
-  '4': {
-    id: '4',
-    title: 'Lunch with Colleagues',
-    date: '2023-10-18',
-    time: '12:30 PM',
-    location: 'Cafe Downtown',
-    description: 'Team lunch to celebrate project milestone achievement.',
-    totalTickets: 15,
-    ticketsSold: 12,
-    revenue: 0,
-    tickets: [
-      { id: 't1', type: 'Team Member', price: 0, sold: 12, available: 3 },
-    ],
-    attendees: [
-      { id: 'a1', name: 'Chris Morgan', email: 'chris@example.com', ticketType: 'Team Member', scannedIn: false },
-      { id: 'a2', name: 'Leslie Harper', email: 'leslie@example.com', ticketType: 'Team Member', scannedIn: false },
-    ],
-  },
-};
+// Cache management
+const eventCache = new Map<string, { data: Event; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// No tabs needed - merged into single view
+// Memoized components
+const StatItem = React.memo(({ 
+  icon, 
+  iconColor, 
+  iconBg, 
+  value, 
+  label, 
+  textColor, 
+  secondaryColor 
+}: {
+  icon: React.ReactNode;
+  iconColor: string;
+  iconBg: string;
+  value: number | string;
+  label: string;
+  textColor: string;
+  secondaryColor: string;
+}) => (
+  <View style={styles.statItem}>
+    <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
+      {icon}
+    </View>
+    <Text style={[styles.statValue, { color: textColor }]}>{value}</Text>
+    <Text style={[styles.statLabel, { color: secondaryColor }]}>{label}</Text>
+  </View>
+));
 
-export default function EventDetail() {
-  const { colors, isDarkMode, setSelectedEventId, setSelectedEventName } = useTheme();
-  const { onEventRefresh, triggerEventRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
+const ActionButton = React.memo(({ 
+  icon, 
+  label, 
+  color, 
+  bgColor, 
+  onPress,
+  textColor 
+}: {
+  icon: React.ReactNode;
+  label: string;
+  color: string;
+  bgColor: string;
+  onPress: () => void;
+  textColor?: string;
+}) => (
+  <Pressable 
+    style={({ pressed }) => [
+      styles.actionItem,
+      { 
+        backgroundColor: bgColor,
+        borderColor: color + '30',
+      },
+      pressed && styles.actionPressed
+    ]}
+    onPress={onPress}
+    android_ripple={{ color: color + '20' }}
+  >
+    <View style={[styles.actionIconContainer, { backgroundColor: color }]}>
+      {icon}
+    </View>
+    <Text style={[styles.actionText, { color: textColor || color }]}>{label}</Text>
+  </Pressable>
+));
+
+export default function OptimizedEventDetail() {
+  const { colors, isDarkMode } = useTheme();
+  // Add secondary color fallback
+  const theme = {
+    ...colors,
+    secondary: colors.secondary || (isDarkMode ? '#9CA3AF' : '#6B7280')
+  };
+  const { 
+    triggerEventRefresh, 
+    triggerGuestListRefresh, 
+    triggerAttendanceRefresh, 
+    triggerAnalyticsRefresh 
+  } = useRefresh();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
+  // State management with optimized initial values
+  const [event, setEvent] = useState<Event | null>(() => {
+    const cached = eventCache.get(eventId);
+    return cached && Date.now() - cached.timestamp < CACHE_DURATION ? cached.data : null;
+  });
+  const [loading, setLoading] = useState(!event);
   const [refreshing, setRefreshing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate'); // Track scan mode
-  const [guestList, setGuestList] = useState<Attendee[]>([]); // Separate guest list state
-  const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState<number>(0); // Total guests from API
-  const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]); // Separate state for checked-in guests
-  const [isEventDetailsExpanded, setIsEventDetailsExpanded] = useState(false); // Event details expansion state
+  const [scanMode, setScanMode] = useState<'validate' | 'scanIn' | 'scanOut'>('validate');
+  const [guestList, setGuestList] = useState<Attendee[]>([]);
+  const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState(0);
+  const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]);
+  const [isEventDetailsExpanded, setIsEventDetailsExpanded] = useState(true);
 
+  // Animation values
+  const headerAnimation = useRef(new Animated.Value(0)).current;
+  const statsAnimation = useRef(new Animated.Value(0)).current;
+  const actionsAnimation = useRef(new Animated.Value(0)).current;
+  const progressAnimation = useRef(new Animated.Value(0)).current;
+
+  // Refs for optimization
+  const lastRefreshTime = useRef(0);
+  const isMounted = useRef(true);
+
+  // Initialize audio once
   useEffect(() => {
     initializeAudio();
-    // Load once on mount
-    loadEventData();
-  }, [eventId]);
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
-  const loadEventData = async () => {
+  // Optimized data loading with caching
+  const loadEventData = useCallback(async (forceRefresh = false) => {
+    if (!isMounted.current) return;
+
+    // Check cache first
+    if (!forceRefresh && eventCache.has(eventId)) {
+      const cached = eventCache.get(eventId);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setEvent(cached.data);
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(true);
     
     try {
-      // First try to get the event from the API
-      const eventsData = await getEvents();
+      // Parallel data fetching for better performance
+      const [eventsData, guestListData, checkedInData] = await Promise.all([
+        getEvents().catch(() => null),
+        getGuestList(eventId).catch(() => null),
+        getCheckedInGuestList(eventId).catch(() => null)
+      ]);
       
-      // Find the event with matching ID from the API response
+      if (!isMounted.current) return;
+
+      // Process event data
       let apiEvent = null;
-      if (Array.isArray(eventsData) && eventsData.length > 0) {
+      if (Array.isArray(eventsData)) {
         apiEvent = eventsData.find(e => 
           e.id === eventId || 
           e.eventId === eventId || 
-          e.EventId === eventId || 
-          String(e._id) === eventId
+          String(e.id) === eventId
         );
       }
-      
+
       if (apiEvent) {
-        // If found in API response, format it properly
-        const formattedEvent: Event = {
-          id: apiEvent.id || apiEvent.eventId || apiEvent.EventId || String(apiEvent._id || '0'),
-          title: apiEvent.title || apiEvent.name || apiEvent.EventName || 'Unnamed Event',
-          date: formatDateFromAPI(apiEvent.date || apiEvent.showStart || 'TBD'),
-          time: formatTimeFromAPI(apiEvent.time || apiEvent.showStart || 'TBD'),
-          location: apiEvent.location || apiEvent.venue || apiEvent.VenueName || 'TBD',
-          description: apiEvent.description || apiEvent.desc || 'No description available.',
-          // Set defaults for properties not in API
-          totalTickets: apiEvent.capacity || apiEvent.totalTickets || 100,
-          ticketsSold: 0, // Will be updated from guest list API
+        const eventData: Event = {
+          id: eventId,
+          title: apiEvent.name || apiEvent.title || apiEvent.EventName || 'Event',
+          date: formatAppDateTime(apiEvent.date || apiEvent.datetime || apiEvent.showStart || new Date().toISOString()),
+          time: formatAppTime(apiEvent.time || apiEvent.datetime || apiEvent.showStart || new Date().toISOString()),
+          location: apiEvent.location || apiEvent.venue || apiEvent.VenueName || 'Location TBD',
+          description: apiEvent.description || apiEvent.desc || '',
+          totalTickets: apiEvent.total_tickets || apiEvent.capacity || 100,
+          ticketsSold: 0,
           revenue: apiEvent.revenue || 0,
           tickets: [],
           attendees: []
         };
-        
-        setEvent(formattedEvent);
-        
-        // Update selected event in context
-        setSelectedEventId(formattedEvent.id);
-        setSelectedEventName(formattedEvent.title);
-      } else {
-        // If not found in API, try mock data as fallback
-        const mockEvent = mockEvents[eventId];
-        
-        if (!mockEvent) {
-          console.error("Event not found");
-          setLoading(false);
-          return;
-        }
-        
-        // Use mock event data
-        setEvent(mockEvent);
-        
-        // Update selected event in context
-        setSelectedEventId(mockEvent.id);
-        setSelectedEventName(mockEvent.title);
-      }
-      
-      // Fetch guest list from API
-      await fetchGuestList();
-      
-      // Fetch checked-in guests for attendance tab
-      await fetchCheckedInGuests();
-      
-    } catch (err) {
-      console.error("Failed to load event details:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // Separate function to fetch guest list
-  const fetchGuestList = async () => {
-    try {
-          const guestListData = await getGuestList(eventId);
-          
-      if (guestListData && Array.isArray(guestListData)) {
-            // Map API guest data to our format
-            const attendees = guestListData.map(guest => ({
-              id: guest.id || guest.guestId || String(Math.random()),
-              name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
-              email: guest.email || 'N/A',
-              ticketType: guest.ticketType || guest.ticket_type || 'General',
-              scannedIn: guest.checkedIn || guest.checked_in || false,
-              scanInTime: guest.checkInTime || guest.check_in_time || undefined,
-              scanCode: guest.scanCode || undefined
-            }));
-            
-        // Set guest list and total count from API
-        setGuestList(attendees);
-        setTotalGuestsFromAPI(attendees.length);
-        
-        // Update event with real guest list data and ticket count
-            setEvent(prev => {
-              if (!prev) return null;
-              return {
-                ...prev,
-            attendees: attendees,
-            ticketsSold: attendees.length // Use actual guest count from API
-              };
-            });
-      } else {
-        // No guests found
-        setGuestList([]);
-        setTotalGuestsFromAPI(0);
-        setEvent(prev => prev ? { ...prev, ticketsSold: 0, attendees: [] } : null);
-          }
-        } catch (err) {
-          console.error("Failed to fetch guest list:", err);
-      // Keep existing data on error
-      }
-    };
-
-  // Function to fetch guest list while preserving local scan-in changes
-  const fetchGuestListWithLocalPreservation = async () => {
-    try {
-      // Store current local scan states before fetching from API
-      const localScanStates = new Map();
-      guestList.forEach(guest => {
-        if (guest.scannedIn && guest.scanInTime) {
-          localScanStates.set(guest.email.toLowerCase(), {
-            scannedIn: guest.scannedIn,
-            scanInTime: guest.scanInTime,
-            scanCode: guest.scanCode
-          });
-        }
-      });
-
-      const guestListData = await getGuestList(eventId);
-      
-      if (guestListData && Array.isArray(guestListData)) {
-        // Map API guest data to our format, preserving local scan states
-        const attendees = guestListData.map(guest => {
-          // Helper function to extract guest name from API data
-          const extractGuestName = (guest: any): string => {
-            if (guest.purchased_by && guest.purchased_by.trim()) {
-              return guest.purchased_by.trim();
-            } else if (guest.admit_name && guest.admit_name.trim()) {
-              return guest.admit_name.trim();
-            } else if (guest.name && guest.name.trim()) {
-              return guest.name.trim();
-            } else if (guest.email && guest.email.trim()) {
-              return guest.email.trim();
-            } else if (guest.firstName || guest.lastName) {
-              return `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
-            } else if (guest.ticket_identifier) {
-              return `Ticket ${guest.ticket_identifier.slice(-6)}`;
-            }
-            return 'Guest';
-          };
-          
-          const baseAttendee = {
+        // Process guest list
+        if (guestListData && Array.isArray(guestListData)) {
+          const attendees = guestListData.map(guest => ({
             id: guest.id || guest.guestId || String(Math.random()),
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
@@ -344,681 +260,233 @@ export default function EventDetail() {
             scannedIn: guest.checkedIn || guest.checked_in || false,
             scanInTime: guest.checkInTime || guest.check_in_time || undefined,
             scanCode: guest.scanCode || undefined
-          };
+          }));
+          
+          eventData.attendees = attendees;
+          eventData.ticketsSold = attendees.length;
+          setGuestList(attendees);
+          setTotalGuestsFromAPI(attendees.length);
+        }
 
-          // Check if we have local scan state for this guest
-          const localState = localScanStates.get(baseAttendee.email.toLowerCase());
-          if (localState) {
-            // Preserve local scan state
-            return {
-              ...baseAttendee,
-              scannedIn: localState.scannedIn,
-              scanInTime: localState.scanInTime,
-              scanCode: localState.scanCode
-            };
-          }
-
-          return baseAttendee;
-        });
-        
-        // Set guest list and total count from API
-        setGuestList(attendees);
-        setTotalGuestsFromAPI(attendees.length);
-        
-        // Update event with real guest list data and ticket count
-        setEvent(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            attendees: attendees,
-            ticketsSold: attendees.length
-          };
-        });
-      } else {
-        // No guests found - keep existing local data
-        console.log('No guests found from API, keeping local data');
-      }
-    } catch (err) {
-      console.error("Failed to fetch guest list with preservation:", err);
-      // Keep existing data on error
-    }
-  };
-
-  // Function to fetch checked-in guests for attendance tab
-  const fetchCheckedInGuests = async () => {
-    try {
-      console.log('Fetching checked-in guests for attendance...');
-      const checkedInData = await getCheckedInGuestList(eventId);
-      
-      if (checkedInData && Array.isArray(checkedInData)) {
-        // Map API checked-in guest data to our format
-        const attendees = checkedInData.map(guest => {
-          // Try multiple possible time field names
-          const timeField = guest.checkInTime || 
-                           guest.check_in_time || 
-                           guest.checkedin_date || 
-                           guest.checkedin_time || 
-                           guest.scan_time || 
-                           guest.timestamp || 
-                           guest.created_at || 
-                           guest.updated_at;
-
-          // Format the time properly if we have a valid time field
-          const formattedTime = timeField ? formatAppTime(timeField) : 'Unknown time';
-
-          return {
-            id: guest.id || guest.guestId || String(Math.random()),
-            name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
+        // Process checked-in guests
+        if (checkedInData && Array.isArray(checkedInData)) {
+          const checkedIn = checkedInData.map(guest => ({
+            id: guest.id || String(Math.random()),
+            name: extractGuestName(guest),
             email: guest.email || 'N/A',
-            ticketType: guest.ticketType || guest.ticket_type || 'General',
-            scannedIn: true, // All guests from this endpoint are checked in
-            scanInTime: formattedTime,
-            scanCode: guest.scanCode || guest.qrCode || undefined
-          };
-        });
-        
-        console.log(`Found ${attendees.length} checked-in guests`);
-        setCheckedInGuests(attendees);
-      } else {
-        console.log('No checked-in guests found');
-        setCheckedInGuests([]);
+            ticketType: guest.ticketType || 'General',
+            scannedIn: true,
+            scanInTime: formatAppTime(guest.checkInTime || guest.check_in_time || new Date()),
+            scanCode: guest.scanCode || undefined
+          }));
+          setCheckedInGuests(checkedIn);
+        }
+
+        // Cache the event data
+        eventCache.set(eventId, { data: eventData, timestamp: Date.now() });
+        setEvent(eventData);
       }
     } catch (err) {
-      console.error("Failed to fetch checked-in guests:", err);
-      // Keep existing data on error
+      console.error("Failed to load event details:", err);
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+        startAnimations();
       }
-    };
-
-  // Helper function to format date from API 
-  const formatDateFromAPI = (dateString: string): string => formatAppDateTime(dateString);
-
-  // Helper function to format time from API
-  const formatTimeFromAPI = (timeString: string): string => formatAppDateTime(timeString);
-
-  const handleBack = () => {
-    // Check if we can go back in the navigation stack
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      // Navigate to home as fallback
-      router.replace('/(tabs)');
     }
-  };
+  }, [eventId]);
 
-  const handleOpenScanner = (mode: 'validate' | 'scanIn' | 'scanOut' = 'validate', attendee?: Attendee) => {
+  // Helper function to extract guest name
+  const extractGuestName = useCallback((guest: any): string => {
+    if (guest.purchased_by?.trim()) return guest.purchased_by.trim();
+    if (guest.admit_name?.trim()) return guest.admit_name.trim();
+    if (guest.name?.trim()) return guest.name.trim();
+    if (guest.email?.trim()) return guest.email.trim();
+    if (guest.firstName || guest.lastName) {
+      return `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
+    }
+    if (guest.ticket_identifier) {
+      return `Ticket ${guest.ticket_identifier.slice(-6)}`;
+    }
+    return 'Guest';
+  }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    loadEventData();
+  }, [loadEventData]);
+
+  // Animations
+  const startAnimations = useCallback(() => {
+    const animations = [
+      Animated.timing(headerAnimation, {
+        toValue: 1,
+        duration: ANIMATION_DURATION,
+        useNativeDriver: true
+      }),
+      Animated.timing(statsAnimation, {
+        toValue: 1,
+        duration: ANIMATION_DURATION,
+        delay: 100,
+        useNativeDriver: true
+      }),
+      Animated.timing(actionsAnimation, {
+        toValue: 1,
+        duration: ANIMATION_DURATION,
+        delay: 200,
+        useNativeDriver: true
+      }),
+      Animated.timing(progressAnimation, {
+        toValue: 1,
+        duration: ANIMATION_DURATION,
+        delay: 300,
+        useNativeDriver: true
+      })
+    ];
+
+    Animated.parallel(animations).start();
+  }, [headerAnimation, statsAnimation, actionsAnimation, progressAnimation]);
+
+  // Debounced refresh
+  const onRefresh = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastRefreshTime.current < REFRESH_DEBOUNCE) return;
+    
+    lastRefreshTime.current = now;
+    setRefreshing(true);
+    
+    try {
+      await loadEventData(true);
+    } finally {
+      if (isMounted.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [loadEventData]);
+
+  // Memoized calculations
+  const stats = useMemo(() => {
+    const checkedInCount = checkedInGuests.length;
+    const totalCount = totalGuestsFromAPI || 0;
+    const percentage = totalCount ? Math.round((checkedInCount / totalCount) * 100) : 0;
+    
+    return {
+      total: totalCount,
+      checkedIn: checkedInCount,
+      pending: totalCount - checkedInCount,
+      percentage
+    };
+  }, [checkedInGuests.length, totalGuestsFromAPI]);
+
+  // Navigation handlers
+  const handleNavigateToGuestList = useCallback(() => {
+    feedback.buttonPress();
+    // Use push to maintain navigation stack properly
+    router.push(`/guest-list/${eventId}`);
+  }, [eventId]);
+
+  const handleNavigateToAttendance = useCallback(() => {
+    feedback.buttonPress();
+    router.push(`/attendance/${eventId}`);
+  }, [eventId]);
+
+  // Scanner handlers
+  const handleOpenScanner = useCallback((mode: 'validate' | 'scanIn' | 'scanOut' = 'validate') => {
     feedback.buttonPress();
     setScanMode(mode);
     setShowScanner(true);
-  };
+  }, []);
 
-  const handleCloseScanner = () => {
-    feedback.buttonPress();
+  const handleCloseScanner = useCallback(() => {
     setShowScanner(false);
-    setScanMode('validate');
-  };
+  }, []);
 
-  const handleScanResult = async (data: string) => {
-    // Close scanner
-    setShowScanner(false);
-    
-    try {
-      console.log('QR Code scanned:', data, 'Mode:', scanMode);
-      
-      // First, validate the QR code
-      const validationResult = await validateQRCode(eventId, data);
-      
-      if (!validationResult) {
-        feedback.checkInError();
-        Alert.alert('Validation Error', 'Failed to validate QR code. Please try again.');
-        setScanMode('validate');
-        return;
-      }
-      
-      if (validationResult.error) {
-        feedback.qrScanError();
-        let errorMessage = 'This QR code is not valid for this event.';
-        if (typeof validationResult.msg === 'string') {
-          errorMessage = validationResult.msg;
-        } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
-          errorMessage = validationResult.msg.message;
-        }
-        
-        Alert.alert('Invalid QR Code', errorMessage);
-        setScanMode('validate');
-        return;
-      }
-      
-      // QR code is valid - provide success feedback
-      feedback.success();
-      
-      // Handle different scan modes
-      if (scanMode === 'scanIn') {
-        // Direct scan in operation
-        await performScanIn(data, validationResult);
-      } else if (scanMode === 'scanOut') {
-        // Direct scan out operation
-        await performScanOut(data, validationResult);
-      } else {
-        // Default validation mode - show options
-        let ticketInfo = null;
-        if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-          ticketInfo = validationResult.msg.info;
-        }
-        
-        Alert.alert(
-          'Valid Ticket Found',
-          `${ticketInfo?.fullname || 'Guest'}\n${ticketInfo?.ticket_title || 'Unknown ticket'}\nAvailable admits: ${ticketInfo?.available || 0}/${ticketInfo?.admits || 0}\nPrice: $${ticketInfo?.price || '0.00'}`,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => feedback.buttonPress()
-            },
-            {
-              text: 'Admit Guest',
-              onPress: async () => {
-                feedback.buttonPressHeavy();
-                await performScanIn(data, validationResult);
-              }
-            }
-          ]
-        );
-      }
-      
-    } catch (error) {
-      console.error('QR scan error:', error);
-      feedback.checkInError();
-      Alert.alert(
-        'Error',
-        'An unexpected error occurred while processing the QR code.'
-      );
-    } finally {
-      // Reset scan mode
-      setScanMode('validate');
+  const handleScanResult = useCallback(async (scannedData: string) => {
+    if (!scannedData) {
+      Alert.alert('Invalid QR Code', 'The scanned code is empty or invalid.');
+      return;
     }
-  };
 
-  const performScanIn = async (scanCode: string, validationResult: any) => {
     try {
-      // Always update local state first for immediate UI feedback
-      await updateLocalScanIn(scanCode, validationResult);
+      const validationResult = await validateQRCode(eventId, scannedData);
       
-      // Call API to scan in the guest using QR scanning endpoint
+      if (!validationResult || validationResult.error) {
+        feedback.checkInError();
+        Alert.alert('Invalid Ticket', validationResult?.msg || 'This QR code is not valid for this event.');
+        return;
+      }
+
+      if (scanMode === 'scanIn') {
+        await handleScanIn(scannedData, validationResult);
+      } else if (scanMode === 'scanOut') {
+        await handleScanOut(scannedData, validationResult);
+      } else {
+        feedback.success();
+        Alert.alert('Valid Ticket', 'This ticket is valid for the event.');
+      }
+    } catch (error) {
+      console.error('Scan error:', error);
+      feedback.checkInError();
+      Alert.alert('Scan Error', 'Failed to process the QR code. Please try again.');
+    } finally {
+      handleCloseScanner();
+    }
+  }, [eventId, scanMode]);
+
+  const handleScanIn = useCallback(async (scanCode: string, validationResult: any) => {
+    try {
       const scanResult = await scanQRCode(eventId, scanCode);
       
-      if (!scanResult || scanResult.error) {
-        // Show the actual error message from API
-        let errorMessage = 'Failed to scan in guest';
-        if (scanResult?.msg) {
-          errorMessage = typeof scanResult.msg === 'string' ? scanResult.msg : scanResult.msg.message;
-        }
+      if (scanResult?.success) {
+        feedback.checkIn();
+        Alert.alert('Check-in Successful', `${validationResult.msg?.info?.fullname || 'Guest'} has been checked in.`);
         
+        // Trigger refreshes
+        triggerGuestListRefresh(eventId);
+        triggerAttendanceRefresh(eventId);
+        triggerAnalyticsRefresh();
+        
+        // Reload data
+        await loadEventData(true);
+      } else {
         feedback.checkInError();
-        Alert.alert('Scan In Failed', errorMessage + '\n\nLocal attendance has been updated.');
-        return;
+        Alert.alert('Check-in Failed', scanResult?.msg || 'Failed to check in guest.');
       }
-      
-      // Success - show confirmation with feedback
-      feedback.checkIn();
-      
-      // Get message from response
-      let successMessage = 'Scan successful';
-      if (typeof scanResult.msg === 'string') {
-        successMessage = scanResult.msg;
-      } else if (scanResult.msg && typeof scanResult.msg === 'object' && 'message' in scanResult.msg) {
-        successMessage = scanResult.msg.message;
-      }
-      
-      // Use ticket info from validation result for display
-      let ticketInfo = null;
-      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-        ticketInfo = validationResult.msg.info;
-      }
-      
-      Alert.alert(
-        'Guest Admitted Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}\n\nAttendance count updated locally.`
-      );
-      
-      // Refresh checked-in guests list for attendance tab
-      setTimeout(async () => {
-        await fetchCheckedInGuests();
-      }, 1000);
-      
     } catch (error) {
-      console.error('Scan in error:', error);
-      
-      // Still update local state for demo purposes
-      await updateLocalScanIn(scanCode, validationResult);
-      
+      console.error('Scan-in error:', error);
       feedback.checkInError();
-      Alert.alert('Scan In Error', 'Failed to scan in guest via API. Local attendance has been updated.');
+      Alert.alert('Check-in Error', 'Failed to check in guest. Please try again.');
     }
-  };
+  }, [eventId, loadEventData, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh]);
 
-  const performScanOut = async (scanCode: string, validationResult: any) => {
+  const handleScanOut = useCallback(async (scanCode: string, validationResult: any) => {
     try {
-      // Always update local state first for immediate UI feedback
-      await updateLocalScanOut(scanCode, validationResult);
-      
-      // Call API to scan out the guest using QR unscanning endpoint
       const unscanResult = await unscanQRCode(eventId, scanCode);
       
-      if (!unscanResult || unscanResult.error) {
-        // Show the actual error message from API
-        let errorMessage = 'Failed to scan out guest';
-        if (unscanResult?.msg) {
-          errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
-        }
+      if (unscanResult && !unscanResult.error) {
+        feedback.checkOut();
+        Alert.alert('Scan-out Successful', `${validationResult.msg?.info?.fullname || 'Guest'} has been scanned out.`);
         
+        // Trigger refreshes
+        triggerGuestListRefresh(eventId);
+        triggerAttendanceRefresh(eventId);
+        triggerAnalyticsRefresh();
+        
+        // Reload data
+        await loadEventData(true);
+      } else {
         feedback.checkInError();
-        Alert.alert('Scan Out Failed', errorMessage + '\n\nLocal attendance has been updated.');
-        return;
+        Alert.alert('Scan-out Failed', unscanResult?.msg || 'Failed to scan out guest.');
       }
-      
-      // Success - show confirmation with feedback
-      feedback.checkOut();
-      
-      // Get message from response
-      let successMessage = 'Unscan successful';
-      if (typeof unscanResult.msg === 'string') {
-        successMessage = unscanResult.msg;
-      } else if (unscanResult.msg && typeof unscanResult.msg === 'object' && 'message' in unscanResult.msg) {
-        successMessage = unscanResult.msg.message;
-      }
-      
-      // Use ticket info from validation result for display
-      let ticketInfo = null;
-      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-        ticketInfo = validationResult.msg.info;
-      }
-      
-      Alert.alert(
-        'Guest Scanned Out Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been scanned out.\n\n${successMessage}\n\nAttendance count updated locally.`
-      );
-      
     } catch (error) {
-      console.error('Scan out error:', error);
-      
-      // Still update local state for demo purposes
-      await updateLocalScanOut(scanCode, validationResult);
-      
+      console.error('Scan-out error:', error);
       feedback.checkInError();
-      Alert.alert('Scan Out Error', 'Failed to scan out guest via API. Local attendance has been updated.');
+      Alert.alert('Scan-out Error', 'Failed to scan out guest. Please try again.');
     }
-  };
+  }, [eventId, loadEventData, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh]);
 
-  const updateLocalScanIn = async (scanCode: string, validationResult: any) => {
-    if (!event) return;
-    
-    // Create timestamp for scan-in
-    const now = new Date();
-    const timeString = formatAppDateTime(now);
-    
-    // Try to find attendee by name or email from validation result
-    const ticketInfo = validationResult.msg.info;
-    let attendeeIndex = event.attendees.findIndex(a => 
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
-    
-    // Also find in guest list
-    let guestIndex = guestList.findIndex(a => 
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
-    
-    if (attendeeIndex < 0) {
-      // If attendee not found, add them to the list
-      const newAttendee: Attendee = {
-        id: `guest_${Date.now()}`,
-        name: ticketInfo.fullname,
-        email: ticketInfo.email,
-        ticketType: ticketInfo.ticket_title,
-        scannedIn: true,
-        scanInTime: timeString,
-        scanCode: scanCode
-      };
-      
-      setEvent(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          attendees: [...prev.attendees, newAttendee]
-        };
-      });
-      
-      // Also add to guest list if not found there
-      if (guestIndex < 0) {
-        setGuestList(prev => [...prev, newAttendee]);
-        setTotalGuestsFromAPI(prev => prev + 1);
-      }
-    } else {
-      // Update existing attendee
-      const updatedAttendees = [...event.attendees];
-      updatedAttendees[attendeeIndex] = {
-        ...updatedAttendees[attendeeIndex],
-        scannedIn: true,
-        scanInTime: timeString,
-        scanCode: scanCode
-      };
-      
-      setEvent(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          attendees: updatedAttendees
-        };
-      });
-    }
-    
-    // Update guest list if attendee exists there
-    if (guestIndex >= 0) {
-      const updatedGuestList = [...guestList];
-      updatedGuestList[guestIndex] = {
-        ...updatedGuestList[guestIndex],
-        scannedIn: true,
-        scanInTime: timeString,
-        scanCode: scanCode
-      };
-      setGuestList(updatedGuestList);
-    }
-    
-    console.log(`Updated scan-in status for ${ticketInfo.fullname} at ${timeString}`);
-    feedback.checkIn();
-    
-    // Trigger refresh for other components
-    triggerGuestListRefresh(eventId);
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
-  };
-
-  const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
-    if (!event) return;
-    
-    // Try to find attendee by scan code or by name/email from validation result
-    const ticketInfo = validationResult.msg.info;
-    let attendeeIndex = event.attendees.findIndex(a => 
-      a.scanCode === scanCode ||
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
-    
-    // Also find in guest list
-    let guestIndex = guestList.findIndex(a => 
-      a.scanCode === scanCode ||
-      a.name.toLowerCase() === ticketInfo.fullname.toLowerCase() ||
-      a.email.toLowerCase() === ticketInfo.email.toLowerCase()
-    );
-    
-    if (attendeeIndex < 0 && guestIndex < 0) {
-      Alert.alert('Error', 'Cannot scan out: Attendee not found in the system');
-      return;
-    }
-    
-    // Update attendee scan-out status locally
-    if (attendeeIndex >= 0) {
-      const updatedAttendees = [...event.attendees];
-      updatedAttendees[attendeeIndex] = {
-        ...updatedAttendees[attendeeIndex],
-        scannedIn: false,
-        scanInTime: undefined,
-        scanCode: undefined
-      };
-      
-      setEvent(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          attendees: updatedAttendees
-        };
-      });
-    }
-    
-    // Update guest list if attendee exists there
-    if (guestIndex >= 0) {
-      const updatedGuestList = [...guestList];
-      updatedGuestList[guestIndex] = {
-        ...updatedGuestList[guestIndex],
-        scannedIn: false,
-        scanInTime: undefined,
-        scanCode: undefined
-      };
-      setGuestList(updatedGuestList);
-    }
-    
-    console.log(`Updated scan-out status for ${ticketInfo.fullname}`);
-    feedback.success();
-    
-    // Trigger refresh for other components
-    triggerGuestListRefresh(eventId);
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
-  };
-
-  const refreshGuestList = async () => {
-    try {
-      console.log('Refreshing guest list...');
-      await fetchGuestList();
-    } catch (error) {
-      console.error('Error refreshing guest list:', error);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await loadEventData();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleScanIn = async (attendeeId: string, attendeeName: string) => {
-    if (!event) return;
-    
-    // Open QR scanner in scan-in mode
-    const attendee = event.attendees.find(a => a.id === attendeeId);
-    handleOpenScanner('scanIn', attendee);
-  };
-
-  const handleScanOut = async (attendeeId: string, attendeeName: string) => {
-    if (!event) return;
-    
-    // Open QR scanner in scan-out mode
-    const attendee = event.attendees.find(a => a.id === attendeeId);
-    if (!attendee || !attendee.scannedIn) {
-      Alert.alert('Error', 'Cannot scan out: Guest is not currently scanned in');
-      return;
-    }
-    
-    handleOpenScanner('scanOut', attendee);
-  };
-
-  // Computed values using the guest list state
-  const checkedInCount = checkedInGuests.length; // Use the dedicated checked-in guests list
-  const totalGuestsCount = totalGuestsFromAPI || 0;
-  const attendancePercentage = totalGuestsCount ? Math.round((checkedInCount / totalGuestsCount) * 100) : 0;
-
-  // No tab bar needed - merged into single view
-
-  const renderMergedContent = () => {
-        return (
-      <View style={styles.modernContainer}>
-        {/* Compact Stats Row */}
-        <View style={[styles.compactStatsCard, { backgroundColor: colors.card }]}>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(255, 107, 0, 0.1)' }]}>
-                <Users size={20} color="#FF6B00" />
-                  </View>
-              <Text style={[styles.compactStatValue, { color: colors.text }]}>{totalGuestsCount}</Text>
-              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Total</Text>
-                </View>
-                
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
-                <UserCheck size={20} color="#22C55E" />
-                  </View>
-              <Text style={[styles.compactStatValue, { color: colors.text }]}>{checkedInCount}</Text>
-              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Present</Text>
-                </View>
-                
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-                <BarChart size={20} color="#3B82F6" />
-                  </View>
-              <Text style={[styles.compactStatValue, { color: colors.text }]}>{attendancePercentage}%</Text>
-              <Text style={[styles.compactStatLabel, { color: colors.secondary }]}>Rate</Text>
-                </View>
-              </View>
-            </View>
-
-        {/* Quick Actions Grid */}
-        <View style={[styles.actionsGrid, { backgroundColor: colors.card }]}>
-                <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: 'rgba(59, 130, 246, 0.05)' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    router.push(`/(tabs)/guest-list/${eventId}`);
-                  }}
-                >
-            <View style={[styles.compactActionIconContainer, { backgroundColor: '#3B82F6' }]}>
-                    <Users size={24} color="#FFFFFF" />
-                  </View>
-            <Text style={[styles.compactActionText, { color: colors.text }]}>TotalGuests</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-            style={[styles.actionItem, { backgroundColor: 'rgba(34, 197, 94, 0.05)' }]}
-                  onPress={() => {
-                    feedback.buttonPress();
-                    router.push(`/(tabs)/attendance/${eventId}`);
-                  }}
-                >
-            <View style={[styles.compactActionIconContainer, { backgroundColor: '#22C55E' }]}>
-                    <UserCheck size={24} color="#FFFFFF" />
-                  </View>
-            <Text style={[styles.compactActionText, { color: colors.text }]}>Attendance</Text>
-                </TouchableOpacity>
-              </View>
-
-        {/* Compact Attendance Overview */}
-        <View style={[styles.attendanceCompactCard, { backgroundColor: colors.card }]}>
-          <View style={styles.attendanceRowLayout}>
-            <View style={styles.attendanceCircleCompact}>
-              <Text style={[styles.attendancePercentText, { color: '#FF6B00' }]}>
-                      {attendancePercentage}%
-                    </Text>
-                </View>
-                
-            <View style={styles.attendanceDetailsSection}>
-              <Text style={[styles.attendanceTitleText, { color: colors.text }]}>Check-in Progress</Text>
-              <View style={styles.attendanceStatsRow}>
-                <View style={styles.attendanceStatCompact}>
-                  <Text style={[styles.attendanceStatValueCompact, { color: '#22C55E' }]}>{checkedInCount}</Text>
-                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Checked In</Text>
-                  </View>
-                <View style={styles.attendanceStatCompact}>
-                  <Text style={[styles.attendanceStatValueCompact, { color: colors.secondary }]}>{totalGuestsCount - checkedInCount}</Text>
-                  <Text style={[styles.attendanceStatLabelCompact, { color: colors.secondary }]}>Pending</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-        );
-  };
-
-  // Content for each tab is now rendered separately
-  const renderEventHeader = () => (
-    <TouchableOpacity 
-      style={[styles.compactHeader, { backgroundColor: colors.card }]}
-      onPress={() => setIsEventDetailsExpanded(!isEventDetailsExpanded)}
-      activeOpacity={0.7}
-    >
-      {!isEventDetailsExpanded ? (
-        // Compact view - only event name
-        <View style={styles.compactContent}>
-          <View style={styles.compactTitleSection}>
-            <Text style={[styles.compactTitle, { color: colors.text }]} numberOfLines={2}>
-              {event!.title}
-            </Text>
-            <ChevronDown size={20} color="#FF6B00" />
-              </View>
-                      </View>
-      ) : (
-        // Expanded view - full details
-        <View style={styles.expandedContent}>
-          <View style={styles.expandedTitleSection}>
-            <Text style={[styles.expandedTitle, { color: colors.text }]}>{event!.title}</Text>
-            <ChevronUp size={20} color="#FF6B00" />
-                </View>
-          
-          {/* Date and Time on same line */}
-          <View style={styles.dateTimeRow}>
-            <View style={styles.dateTimeItem}>
-              <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
-                <Calendar size={16} color="#FF6B00" />
-          </View>
-              <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.date}</Text>
-        </View>
-            <View style={styles.dateTimeItem}>
-              <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
-                <Clock size={16} color="#FF6B00" />
-          </View>
-              <Text style={[styles.dateTimeText, { color: colors.text }]}>{event!.time}</Text>
-        </View>
-          </View>
-          
-          {/* Location on separate line */}
-          <View style={styles.locationRow}>
-            <View style={[styles.compactIconContainer, { backgroundColor: 'rgba(255, 107, 0, 0.15)' }]}>
-              <MapPin size={16} color="#FF6B00" />
-            </View>
-            <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={2}>
-            {event!.location}
-          </Text>
-        </View>
-      </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const generateTestQRCode = () => {
-    const testQRCodes = [
-      'MOCK_QR_TEST_001',
-      'MOCK_QR_TEST_002', 
-      'MOCK_QR_TEST_003',
-      'MOCK_QR_TEST_004',
-      'MOCK_QR_TEST_005'
-    ];
-    
-    const randomQR = testQRCodes[Math.floor(Math.random() * testQRCodes.length)];
-    
-    Alert.alert(
-      'Test QR Code Generated',
-      `Use this QR code for testing:\n\n${randomQR}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Test Scan In', 
-          onPress: () => {
-            // Simulate scanning this QR code
-            handleScanResult(randomQR);
-          }
-        }
-      ]
-    );
-  };
-
-  const testNetworkConnectivity = async () => {
+  // Test network connectivity
+  const testNetworkConnectivity = useCallback(async () => {
     feedback.buttonPress();
     
     try {
@@ -1029,232 +497,320 @@ export default function EventDetail() {
       if (result.success) {
         Alert.alert(
           'Network Test Successful! ✅',
-          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}\n\nYour device can access the proxy server.`,
-          [
-            {
-              text: 'Change IP',
-              onPress: () => showManualIPOptions()
-            },
-            {
-              text: 'OK',
-              onPress: () => feedback.success()
-            }
-          ]
+          `Connection to proxy server successful.\n\nUsing: ${currentURL}\nDevice IP: ${currentIP}\nServer IP: ${result.ip}`,
+          [{ text: 'OK', onPress: () => feedback.success() }]
         );
       } else {
         Alert.alert(
           'Network Test Failed ❌',
-          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}\n\nPlease check if:\n1. Proxy server is running\n2. Device is on same network\n3. Firewall allows port 3000`,
-          [
-            {
-              text: 'Set Manual IP',
-              onPress: () => showManualIPOptions()
-            },
-            {
-              text: 'Use Default IP',
-              onPress: async () => {
-                await setManualProxyIP('192.168.18.102');
-                feedback.success();
-                Alert.alert('IP Set', 'Using default IP: 192.168.18.102\n\nTest connectivity again to verify.');
-              }
-            },
-            {
-              text: 'OK',
-              style: 'cancel'
-            }
-          ]
+          `Cannot connect to proxy server.\n\nTrying: ${currentURL}\nUsing IP: ${currentIP}\nError: ${result.error}`,
+          [{ text: 'OK', style: 'cancel' }]
         );
       }
     } catch (error) {
       Alert.alert('Network Test Error', 'Failed to test network connectivity');
     }
-  };
+  }, []);
 
-  const showManualIPOptions = () => {
-    Alert.alert(
-      'Network Configuration',
-      'Choose how to configure the proxy server IP:',
-      [
-        {
-          text: 'Use 192.168.18.102',
-          onPress: async () => {
-            await setManualProxyIP('192.168.18.102');
-            feedback.success();
-            Alert.alert('IP Set', 'Proxy IP set to: 192.168.18.102\n\nTest connectivity to verify it works.');
-          }
-        },
-        {
-          text: 'Enter Different IP',
-          onPress: () => showCustomIPInput()
-        },
-        {
-          text: 'Auto-Detect',
-          onPress: async () => {
-            await clearManualProxyIP();
-            feedback.buttonPress();
-            Alert.alert('Auto-Detection Enabled', 'Will use automatic IP detection.\n\nTest connectivity to see the detected IP.');
-          }
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showCustomIPInput = () => {
-    // Since Alert.prompt doesn't work on all platforms, provide common IP options
-    Alert.alert(
-      'Select IP Address',
-      'Choose a common IP range or cancel to keep current setting:',
-      [
-        {
-          text: '192.168.1.x',
-          onPress: () => showSpecificIPOptions('192.168.1')
-        },
-        {
-          text: '192.168.0.x',
-          onPress: () => showSpecificIPOptions('192.168.0')
-        },
-        {
-          text: '192.168.18.x',
-          onPress: () => showSpecificIPOptions('192.168.18')
-        },
-        {
-          text: '10.0.0.x',
-          onPress: () => showSpecificIPOptions('10.0.0')
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showSpecificIPOptions = (baseIP: string) => {
-    const commonEndings = ['100', '101', '102', '103', '105', '110'];
-    
-    Alert.alert(
-      `Select ${baseIP}.x`,
-      'Choose the last number for your IP address:',
-      [
-        ...commonEndings.map(ending => ({
-          text: `${baseIP}.${ending}`,
-          onPress: async () => {
-            const fullIP = `${baseIP}.${ending}`;
-            await setManualProxyIP(fullIP);
-            feedback.success();
-            Alert.alert('IP Set', `Proxy IP set to: ${fullIP}\n\nTest connectivity to verify it works.`);
-          }
-        })),
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
-  };
-
-  const showManualIPDialog = () => {
-    // This is now replaced by showManualIPOptions
-    showManualIPOptions();
-  };
-
+  // Loading state
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: "Event Details", headerShown: true }} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary || '#FF6B00'} />
           <Text style={[styles.loadingText, { color: colors.text }]}>Loading event details...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
+  // Error state
   if (!event) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: "Event Details", headerShown: true }} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>Event not found</Text>
           <TouchableOpacity 
-            onPress={handleBack} 
-            style={[styles.backButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
+            style={[styles.backButton, { backgroundColor: colors.primary || '#FF6B00' }]}
           >
-            <Text style={{ color: '#FFFFFF', fontWeight: '500' }}>Go Back</Text>
+            <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  // Render the merged content without tabs
-  const renderContent = () => {
-      return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {renderEventHeader()}
-        <ScrollView 
-          style={styles.scrollContainer} 
-          contentContainerStyle={styles.scrollContent} 
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
-            />
-          }
-        >
-          {renderMergedContent()}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // Main render function
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
-        translucent={false}
       />
-      <Stack.Screen 
-        options={{ 
-          title: "",
-          headerShown: false,
-          headerRight: () => null,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
       
-      {renderContent()}
-      
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* Animated Header */}
+        <Animated.View 
+          style={[
+            styles.header,
+            { 
+              backgroundColor: colors.card,
+              opacity: headerAnimation,
+              transform: [{
+                translateY: headerAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <Pressable
+            onPress={() => setIsEventDetailsExpanded(!isEventDetailsExpanded)}
+            style={styles.headerPressable}
+          >
+            <View style={styles.headerContent}>
+              <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={isEventDetailsExpanded ? undefined : 2}>
+                {event.title}
+              </Text>
+              <Animated.View
+                style={{
+                  transform: [{
+                    rotate: isEventDetailsExpanded ? '180deg' : '0deg'
+                  }]
+                }}
+              >
+                <ChevronDown size={20} color={colors.primary} />
+              </Animated.View>
+            </View>
+            
+            {isEventDetailsExpanded && (
+              <Animated.View style={styles.eventDetails}>
+                <View style={styles.detailRow}>
+                  <View style={[styles.detailIcon, { backgroundColor: colors.primary + '20' }]}>
+                    <Calendar size={16} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.detailText, { color: colors.text }]}>{event.date}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <View style={[styles.detailIcon, { backgroundColor: colors.primary + '20' }]}>
+                    <Clock size={16} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.detailText, { color: colors.text }]}>{event.time}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <View style={[styles.detailIcon, { backgroundColor: colors.primary + '20' }]}>
+                    <MapPin size={16} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.detailText, { color: colors.text }]} numberOfLines={2}>
+                    {event.location}
+                  </Text>
+                </View>
+              </Animated.View>
+            )}
+          </Pressable>
+        </Animated.View>
+
+        {/* Animated Stats Card */}
+        <Animated.View 
+          style={[
+            styles.statsCard,
+            { 
+              backgroundColor: colors.card,
+              opacity: statsAnimation,
+              transform: [{
+                translateY: statsAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <View style={styles.statsRow}>
+            <StatItem
+              icon={<Users size={20} color="#FF6B00" />}
+              iconColor="#FF6B00"
+              iconBg="rgba(255, 107, 0, 0.1)"
+              value={stats.total}
+              label="Total"
+              textColor={colors.text}
+              secondaryColor={theme.secondary}
+            />
+            
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            
+            <StatItem
+              icon={<UserCheck size={20} color="#22C55E" />}
+              iconColor="#22C55E"
+              iconBg="rgba(34, 197, 94, 0.1)"
+              value={stats.checkedIn}
+              label="Present"
+              textColor={colors.text}
+              secondaryColor={theme.secondary}
+            />
+            
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            
+            <StatItem
+              icon={<BarChart size={20} color="#3B82F6" />}
+              iconColor="#3B82F6"
+              iconBg="rgba(59, 130, 246, 0.1)"
+              value={`${stats.percentage}%`}
+              label="Rate"
+              textColor={colors.text}
+              secondaryColor={theme.secondary}
+            />
+          </View>
+        </Animated.View>
+
+        {/* Animated Action Buttons */}
+        <Animated.View 
+          style={[
+            styles.actionsGrid,
+            { 
+              backgroundColor: colors.card,
+              opacity: actionsAnimation,
+              transform: [{
+                scale: actionsAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.95, 1]
+                })
+              }],
+              borderWidth: 1,
+              borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
+            }
+          ]}
+        >
+          <ActionButton
+            icon={<Users size={22} color="#FFFFFF" />}
+            label="Guest List"
+            color="#3B82F6"
+            bgColor={isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)'}
+            onPress={handleNavigateToGuestList}
+            textColor={isDarkMode ? '#3B82F6' : '#2563EB'}
+          />
+          
+          <ActionButton
+            icon={<UserCheck size={22} color="#FFFFFF" />}
+            label="Attendance"
+            color="#22C55E"
+            bgColor={isDarkMode ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.08)'}
+            onPress={handleNavigateToAttendance}
+            textColor={isDarkMode ? '#22C55E' : '#16A34A'}
+          />
+        </Animated.View>
+
+        {/* Animated Progress Card */}
+        <Animated.View 
+          style={[
+            styles.progressCard,
+            { 
+              backgroundColor: colors.card,
+              opacity: progressAnimation,
+              transform: [{
+                translateY: progressAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressTitle, { color: colors.text }]}>Check-in Progress</Text>
+            <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+              <RefreshCw size={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.progressContent}>
+            <View style={styles.progressCircle}>
+              <Text style={[styles.progressPercentage, { color: colors.primary }]}>
+                {stats.percentage}%
+              </Text>
+            </View>
+            
+            <View style={styles.progressStats}>
+              <View style={styles.progressStat}>
+                <Text style={[styles.progressStatValue, { color: '#22C55E' }]}>{stats.checkedIn}</Text>
+                <Text style={[styles.progressStatLabel, { color: theme.secondary }]}>Checked In</Text>
+              </View>
+              
+              <View style={styles.progressStat}>
+                <Text style={[styles.progressStatValue, { color: theme.secondary }]}>{stats.pending}</Text>
+                <Text style={[styles.progressStatLabel, { color: theme.secondary }]}>Pending</Text>
+              </View>
+            </View>
+          </View>
+          
+          {/* Progress Bar */}
+          <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
+            <Animated.View 
+              style={[
+                styles.progressBar,
+                { 
+                  backgroundColor: colors.primary,
+                  width: `${stats.percentage}%`
+                }
+              ]}
+            />
+          </View>
+        </Animated.View>
+
+        {/* Quick Actions - Removed per request */}
+      </ScrollView>
+
+      {/* QR Scanner Modal */}
       <Modal
         visible={showScanner}
         animationType="slide"
         onRequestClose={handleCloseScanner}
         statusBarTranslucent
-        style={{ backgroundColor: colors.background }}
       >
         <QRScanner onScan={handleScanResult} onClose={handleCloseScanner} />
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
-
-// Helper function to generate colors for different ticket types
-const getTicketColor = (index: number) => {
-  const colors = ['#FF6B00', '#4CAF50', '#2196F3', '#9C27B0', '#FF3B30'];
-  return colors[index % colors.length];
-};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 14,
+    marginTop: 12,
+    fontWeight: '500',
   },
   errorContainer: {
     flex: 1,
@@ -1264,185 +820,81 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 16,
-    textAlign: 'center',
   },
   backButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
-    alignItems: 'center',
   },
-  scrollContainer: {
-    flex: 1,
+  backButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
-  scrollContent: {
-    paddingBottom: 120, // Space for navigation bar + extra padding
-  },
+  
+  // Header
   header: {
-    padding: 20,
-    marginBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  headerContent: {
-    gap: 16,
-  },
-  eventTitleSection: {
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  eventTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-    marginBottom: 2,
-  },
-  eventSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
-  },
-  eventMeta: {
-    gap: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-  },
-  metaTextContainer: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  metaLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 1,
-    opacity: 0.8,
-  },
-  metaText: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-  },
-  metaIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  // Compact Header Styles
-  compactHeader: {
-    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
     marginBottom: 12,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FF6B00',
-  },
-  compactContent: {
-    minHeight: 40,
-  },
-  compactTitleSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  compactTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    flex: 1,
-    marginRight: 12,
-    letterSpacing: -0.2,
-  },
-  expandedContent: {
-    gap: 12,
-  },
-  expandedTitleSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  expandedTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    flex: 1,
-    marginRight: 12,
-    letterSpacing: -0.3,
-  },
-  dateTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  dateTimeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
-  },
-  compactIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dateTimeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  locationText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-    lineHeight: 20,
-  },
-  // Modern Compact Design Styles
-  modernContainer: {
-    gap: 16,
-    paddingHorizontal: 16,
-  },
-  compactStatsCard: {
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
+    elevation: 4,
+  },
+  headerPressable: {
+    flex: 1,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  eventTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 12,
+    lineHeight: 24,
+  },
+  eventDetails: {
+    marginTop: 14,
+    gap: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  detailText: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 20,
+  },
+  
+  // Stats Card
+  statsCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
   },
   statsRow: {
@@ -1454,1065 +906,167 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
-  compactStatValue: {
-    fontSize: 20,
+  statValue: {
+    fontSize: 24,
     fontWeight: '700',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  compactStatLabel: {
+  statLabel: {
     fontSize: 12,
     fontWeight: '500',
   },
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    marginHorizontal: 8,
+    marginHorizontal: 12,
   },
+  
+  // Actions Grid
   actionsGrid: {
     flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 12,
     borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    padding: 12,
+    gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
   },
   actionItem: {
     flex: 1,
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  compactActionIconContainer: {
+  actionPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  actionIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  compactActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  attendanceCompactCard: {
-    borderRadius: 16,
-    padding: 16,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  
+  // Progress Card
+  progressCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
   },
-  attendanceRowLayout: {
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  progressTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  refreshButton: {
+    padding: 4,
+  },
+  progressContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  attendanceCircleCompact: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  progressCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: 'rgba(255, 107, 0, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 20,
   },
-  attendancePercentText: {
-    fontSize: 18,
+  progressPercentage: {
+    fontSize: 20,
     fontWeight: '700',
   },
-  attendanceDetailsSection: {
+  progressStats: {
     flex: 1,
-  },
-  attendanceTitleText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  attendanceStatsRow: {
     flexDirection: 'row',
-    gap: 20,
+    justifyContent: 'space-around',
   },
-  attendanceStatCompact: {
+  progressStat: {
     alignItems: 'center',
   },
-  attendanceStatValueCompact: {
-    fontSize: 18,
+  progressStatValue: {
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  attendanceStatLabelCompact: {
+  progressStatLabel: {
     fontSize: 12,
     fontWeight: '500',
   },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 16,
-    marginHorizontal: 20,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
-    borderRadius: 12,
-  },
-  activeTab: {
-    backgroundColor: '#FF6B00',
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  tabText: {
-    fontWeight: '600',
-    fontSize: 15,
-    textAlign: 'center',
-  },
-  tabContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  infoCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
+  progressBarContainer: {
+    height: 6,
+    borderRadius: 3,
     overflow: 'hidden',
   },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    letterSpacing: 0.5,
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 12,
-    opacity: 0.8,
-  },
-  cardHeader: {
-    flexDirection: 'column',
-    marginBottom: 8,
-  },
-  headerButtonGroup: {
+  
+  // Quick Actions
+  quickActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-  },
-  addButtonText: {
-    marginLeft: 4,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  ticketItem: {
-    width: 160,
-    padding: 16,
+  quickActionButton: {
+    flex: 1,
+    paddingVertical: 14,
     borderRadius: 12,
-    marginRight: 12,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  ticketHeader: {
-    marginBottom: 16,
-  },
-  ticketType: {
-    fontSize: 16,
+  quickActionText: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 4,
-  },
-  ticketPrice: {
-    fontSize: 14,
-  },
-  ticketStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  ticketStatItem: {
-    alignItems: 'center',
-  },
-  ticketStatValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  ticketStatLabel: {
-    fontSize: 12,
-  },
-  ticketList: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 30,
-    paddingTop: 40,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-    maxWidth: '80%',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  scanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  scanButtonText: {
     color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
   },
-  guestItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  guestAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    marginRight: 12,
-  },
-  guestDetails: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  guestName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  guestEmail: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  guestTypeRow: {
-    flexDirection: 'row',
-    marginTop: 2,
-  },
-  guestTicketType: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  guestStatus: {
-    justifyContent: 'center',
-    minWidth: 100,
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 6,
-  },
-  statusTime: {
-    fontSize: 12,
-    marginTop: 4,
-    opacity: 0.8,
-    textAlign: 'right',
-  },
-  guestList: {
-    marginTop: 8,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(200, 200, 200, 0.2)',
-  },
-  headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  headerButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  emptyGuestContainer: {
-    alignItems: 'center',
-    padding: 30,
-    paddingTop: 40,
-  },
-  emptyGuestText: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyGuestSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-    maxWidth: '80%',
-  },
-  emptyGuestButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  emptyGuestButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  scannerActionsCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  scannerButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-  },
-  scannerActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    minWidth: '30%',
-    justifyContent: 'center',
-  },
-  scannerActionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  emptyAttendanceContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyAttendanceText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptyAttendanceSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    opacity: 0.7,
-  },
-  emptyAttendanceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  emptyAttendanceButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '500',
-    marginLeft: 8,
-    fontSize: 16,
-  },
-  attendeeItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  attendeeAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    marginRight: 12,
-  },
-  attendeeDetails: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  attendeeName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  attendeeEmail: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  attendeeTypeRow: {
-    flexDirection: 'row',
-    marginTop: 2,
-  },
-  checkInTime: {
-    fontSize: 12,
-    marginTop: 4,
-    opacity: 0.8,
-  },
-  attendeeStatus: {
-    justifyContent: 'center',
-    minWidth: 100,
-    alignItems: 'flex-end',
-  },
-  networkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  attendeeTicketType: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  attendeeList: {
-    marginTop: 8,
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  refreshButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  syncButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  syncButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    minWidth: '45%',
-    justifyContent: 'center',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  statsCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-    gap: 12,
-  },
-  statCard: {
-    alignItems: 'center',
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  attendanceContainer: {
-    marginBottom: 24,
-  },
-  attendanceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  attendanceCircle: {
-    width: 60,
-    height: 60,
-    borderWidth: 3,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  attendancePercentage: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  attendanceLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  attendanceStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-  },
-  attendanceStatItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  attendanceStatIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  attendanceStatText: {
-    alignItems: 'center',
-  },
-  attendanceStatValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  attendanceStatLabel: {
-    fontSize: 14,
-  },
-  actionsCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    marginBottom: 8,
-    gap: 12,
-  },
-  actionCard: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 16,
-    flex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionCardText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  // New Beautiful Hero Stats Card
-  heroStatsCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  heroStatsHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  heroSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
-  },
-  heroStatsGrid: {
-    gap: 12,
-  },
-  heroStatCard: {
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  heroStatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  heroStatIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  heroStatValue: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  heroStatLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    letterSpacing: -0.1,
-  },
-  heroStatBar: {
-    height: 3,
-    borderRadius: 1.5,
-    width: '100%',
-  },
-  // Modern Actions Card
-  modernActionsCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  actionsHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  actionsTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  actionsSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
-  },
-  modernActionGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
-  },
-  modernActionCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 8,
-    backgroundColor: 'rgba(255, 107, 0, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 0, 0.1)',
-  },
-  modernActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  modernActionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
-    textAlign: 'center',
-    letterSpacing: -0.2,
-  },
-  modernActionDesc: {
-    fontSize: 13,
-    fontWeight: '500',
-    textAlign: 'center',
-    opacity: 0.8,
-    lineHeight: 18,
-  },
-  // Analytics Card Styles
-  analyticsCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  analyticsHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  analyticsTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  analyticsSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
-  },
-  analyticsGrid: {
-    gap: 12,
-  },
-  analyticsStatCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  analyticsStatIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  analyticsStatContent: {
-    flex: 1,
-  },
-  analyticsStatValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 2,
-  },
-  analyticsStatLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-    opacity: 0.8,
-  },
-  // Attendance Card Styles
-  attendanceCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6B00',
-  },
-  attendanceHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  attendanceTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  attendanceSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
-  },
-  attendanceContent: {
-    gap: 16,
-  },
-  attendanceMainStat: {
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  attendanceCircleNew: {
-    width: 100,
-    height: 100,
-    borderWidth: 5,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  attendancePercentageNew: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  attendanceRateLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: 3,
-  },
-  attendanceStatsNew: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 12,
-  },
-  attendanceStatNew: {
-    flex: 1,
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 107, 0, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 0, 0.1)',
-  },
-  attendanceStatIconNew: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  attendanceStatTextNew: {
-    alignItems: 'center',
-  },
-  attendanceStatValueNew: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 3,
-  },
-  attendanceStatLabelNew: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    letterSpacing: -0.1,
-  },
-}); 
+});

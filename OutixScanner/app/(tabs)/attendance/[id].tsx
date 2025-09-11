@@ -618,20 +618,15 @@ export default function AttendancePage() {
             style={styles.backButton}
             onPress={() => {
               feedback.buttonPress();
-              // Use canGoBack to check if we can go back, otherwise navigate to event details
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                // Navigate to event details page as fallback
-                router.replace(`/(tabs)/${eventId}`);
-              }
+              // Navigate to event details page explicitly
+              router.push(`/(tabs)/${eventId}`);
             }}
           >
             <ArrowLeft size={20} color="#FF6B00" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Live Attendance</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
+            <Text style={[styles.headerSubtitle, { color: colors.secondary || '#6B7280' }]}>{eventTitle}</Text>
           </View>
         </View>
       </View>
@@ -644,7 +639,7 @@ export default function AttendancePage() {
               <UserCheck size={20} color="#22C55E" />
             </View>
             <Text style={[styles.statValue, { color: colors.text }]}>{checkedInCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Present</Text>
+            <Text style={[styles.statLabel, { color: colors.secondary || '#6B7280' }]}>Present</Text>
           </View>
           
           <View style={styles.statDivider} />
@@ -654,7 +649,7 @@ export default function AttendancePage() {
               <Users size={20} color="#3B82F6" />
             </View>
             <Text style={[styles.statValue, { color: colors.text }]}>{totalGuestsFromAPI}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Total</Text>
+            <Text style={[styles.statLabel, { color: colors.secondary || '#6B7280' }]}>Total</Text>
           </View>
           
           <View style={styles.statDivider} />
@@ -664,7 +659,7 @@ export default function AttendancePage() {
               <Clock size={20} color="#FF6B00" />
             </View>
             <Text style={[styles.statValue, { color: colors.text }]}>{attendancePercentage}%</Text>
-            <Text style={[styles.statLabel, { color: colors.secondary }]}>Rate</Text>
+            <Text style={[styles.statLabel, { color: colors.secondary || '#6B7280' }]}>Rate</Text>
           </View>
         </View>
       </View>
@@ -672,11 +667,11 @@ export default function AttendancePage() {
       {/* Simple Search */}
       <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.searchBar, { backgroundColor: colors.card }]}>
-          <Search size={16} color={colors.secondary} />
+          <Search size={16} color={colors.secondary || '#6B7280'} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search for guests..."
-            placeholderTextColor={colors.secondary}
+            placeholderTextColor={colors.secondary || '#6B7280'}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />

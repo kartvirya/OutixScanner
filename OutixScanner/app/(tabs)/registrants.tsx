@@ -1,6 +1,6 @@
 import { Calendar, ClipboardList, FileCheck, Mail, MapPin, Phone, User, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Platform, RefreshControl, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, Platform, RefreshControl, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WaiverSigningModal from '../../components/WaiverSigningModal';
 import { useTheme } from '../../context/ThemeContext';
@@ -534,9 +534,15 @@ export default function Registrants() {
         ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.centered}>
-            <Text style={[styles.errorText, { color: colors.text }]}>
-              No registrations available
+          <View style={[styles.emptyStateContainer, { backgroundColor: colors.card }]}>
+            <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}15` }]}>
+              <ClipboardList size={48} color={colors.primary} />
+            </View>
+            <Text style={[styles.title, { color: colors.text }]}>
+              No Registrations
+            </Text>
+            <Text style={[styles.description, { color: colors.text + '88' }]}>
+              There are no registrations available at this time
             </Text>
           </View>
         }
@@ -603,6 +609,8 @@ export default function Registrants() {
     </SafeAreaView>
   );
 }
+
+const { width: screenWidth } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -982,5 +990,41 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  emptyStateContainer: {
+    width: screenWidth - 40,
+    maxWidth: 400,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+    marginTop: 40,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  description: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 }); 
