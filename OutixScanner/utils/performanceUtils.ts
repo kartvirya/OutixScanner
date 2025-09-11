@@ -128,6 +128,12 @@ export class DataCache<T> {
     };
   }
 
+  // Delete a specific key from cache
+  delete(key: string): void {
+    this.cache.delete(key);
+    this.saveToStorage();
+  }
+
   // Invalidate specific keys
   invalidate(pattern?: string | RegExp): void {
     if (!pattern) {

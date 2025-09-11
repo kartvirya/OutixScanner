@@ -1,12 +1,13 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar, Clock, TrendingUp, UserCheck, Users } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
-import { DataCache, usePerformanceMonitor } from '../../utils/performanceUtils';
+import { usePerformanceMonitor } from '../../utils/performanceUtils';
+import EventDropdown from '../../components/EventDropdown';
 
 interface EventSummary {
   id: string;
@@ -31,17 +32,7 @@ interface EventStats {
   checkedInCount: number;
 }
 
-// Initialize cache for analytics data with longer duration
-const analyticsCache = new DataCache<AnalyticsData>('analytics_cache', {
-  duration: 15 * 60 * 1000, // 15 minutes (increased for better performance)
-  persistent: true
-});
-
-const eventStatsCache = new DataCache<EventStats>('event_stats_cache', {
-  duration: 30 * 60 * 1000, // 30 minutes (increased for better performance)
-  persistent: true,
-  maxSize: 100  // Increased cache size
-});
+// Removed caching to prevent data cross-contamination between different event managers
 
 // Memoized stat item component for better performance
 const StatItem = React.memo<{
@@ -105,23 +96,16 @@ export default function Analytics() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isStaleData, setIsStaleData] = useState(false);
+  const [events, setEvents] = useState<any[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null); // null = All Events
   
   // Performance monitor after state hooks to ensure consistent hook order
   const { metrics, measureApiCall } = usePerformanceMonitor('Analytics');
 
-  // Fetch stats for a single event with caching and timeout
+  // Fetch stats for a single event without caching
   const fetchEventStats = useCallback(async (eventId: string): Promise<EventStats> => {
-    // Check cache first
-    const cacheKey = `event_stats_${eventId}`;
-    const cached = eventStatsCache.get(cacheKey);
-    if (cached) {
-      console.log(`Cache hit for event ${eventId}`);
-      return cached;
-    }
-
     // Create a timeout wrapper for API calls
-    const fetchWithTimeout = async (promise: Promise<any>, timeoutMs: number = 3000) => {
+    const fetchWithTimeout = async (promise: Promise<any>, timeoutMs: number = 15000) => {
       const timeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
       );
@@ -129,10 +113,11 @@ export default function Analytics() {
     };
 
     try {
-      // Fetch from API with timeout
+      console.log(`Fetching stats for event ${eventId}`);
+      // Fetch from API with longer timeout (15 seconds)
       const [guestList, checkedInGuests] = await Promise.all([
-        fetchWithTimeout(getGuestList(eventId)),
-        fetchWithTimeout(getCheckedInGuestList(eventId))
+        fetchWithTimeout(getGuestList(eventId), 15000),
+        fetchWithTimeout(getCheckedInGuestList(eventId), 15000)
       ]);
 
       const stats: EventStats = {
@@ -141,11 +126,10 @@ export default function Analytics() {
         checkedInCount: checkedInGuests.length
       };
 
-      // Cache the result
-      await eventStatsCache.set(cacheKey, stats);
+      console.log(`Stats fetched for event ${eventId}:`, stats);
       return stats;
     } catch (error) {
-      console.error(`Failed to fetch stats for event ${eventId}:`, error);
+      console.warn(`Failed to fetch stats for event ${eventId}:`, error);
       // Return default stats on error
       return {
         eventId,
@@ -155,41 +139,29 @@ export default function Analytics() {
     }
   }, []);
 
-  const fetchAnalyticsData = useCallback(async (forceRefresh = false) => {
+  const fetchAnalyticsData = useCallback(async () => {
     try {
-      console.log('Fetching analytics data...', { forceRefresh });
-      
-      // Check cache first unless force refresh
-      if (!forceRefresh) {
-        const cached = analyticsCache.get('main');
-        if (cached) {
-          console.log('Using cached analytics data');
-          setAnalyticsData(cached);
-          setIsStaleData(true);
-          setLoading(false);
-          // Return early - don't fetch in background to save time
-          return;
-        }
-      }
+      console.log('Fetching analytics data...');
 
       // Fetch events with performance monitoring
-      const events = await measureApiCall(
+      const evts = await measureApiCall(
         () => getEvents(),
         'getEvents'
       );
-      console.log('Events fetched:', events.length);
+      console.log('Events fetched:', evts.length);
+      setEvents(evts);
       
       // OPTIMIZATION: Only process first 3 events for overview stats
       // This reduces API calls from 20 to 6
-      const eventsToProcess = events.slice(0, 3);
+      const eventsToProcess = evts.slice(0, 3);
       
       // First, show basic data without detailed stats
       const basicAnalytics: AnalyticsData = {
-        totalEvents: events.length,
+        totalEvents: evts.length,
         totalTickets: 0,
         totalCheckedIn: 0,
         averageAttendanceRate: 0,
-        recentEvents: events.slice(0, 3)
+        recentEvents: evts.slice(0, 3)
       };
       
       // Show basic data immediately
@@ -215,7 +187,7 @@ export default function Analytics() {
             
             return stats;
           } catch (eventError) {
-            console.warn(`Error processing event ${event.id}:`, eventError);
+            console.warn(`Error processing event ${event.id || event.EventId}:`, eventError);
             return null;
           }
         })
@@ -235,40 +207,28 @@ export default function Analytics() {
         : 0;
       
       const analytics: AnalyticsData = {
-        totalEvents: events.length,
+        totalEvents: evts.length,
         totalTickets,
         totalCheckedIn,
         averageAttendanceRate,
-        recentEvents: events.slice(0, 3) // Get 3 most recent events
+        recentEvents: evts.slice(0, 3) // Get 3 most recent events
       };
       
       console.log('Analytics data computed:', analytics);
-      console.log('Cache stats:', eventStatsCache.getStats());
-      
-      // Cache the result
-      await analyticsCache.set('main', analytics);
       
       setAnalyticsData(analytics);
-      setIsStaleData(false);
       
-    } catch (error) {
-      console.error('Error fetching analytics data:', error);
+      } catch (error) {
+      console.warn('Error fetching analytics data:', error);
       
-      // Try to use cached data on error
-      const cached = analyticsCache.get('main');
-      if (cached) {
-        setAnalyticsData(cached);
-        setIsStaleData(true);
-      } else {
-        // Fallback to empty data
-        setAnalyticsData({
-          totalEvents: 0,
-          totalTickets: 0,
-          totalCheckedIn: 0,
-          averageAttendanceRate: 0,
-          recentEvents: []
-        });
-      }
+      // Fallback to empty data on error
+      setAnalyticsData({
+        totalEvents: 0,
+        totalTickets: 0,
+        totalCheckedIn: 0,
+        averageAttendanceRate: 0,
+        recentEvents: []
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -277,11 +237,29 @@ export default function Analytics() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Clear caches on manual refresh
-    await analyticsCache.clear();
-    await eventStatsCache.clear();
-    await fetchAnalyticsData(true); // Force refresh
-  }, [fetchAnalyticsData]);
+    if (selectedEventId) {
+      // Refresh stats for selected event
+      const stats = await fetchEventStats(selectedEventId);
+      const attendanceRate = stats.guestCount > 0 ? (stats.checkedInCount / stats.guestCount) * 100 : 0;
+      setAnalyticsData({
+        totalEvents: 1,
+        totalTickets: stats.guestCount,
+        totalCheckedIn: stats.checkedInCount,
+        averageAttendanceRate: attendanceRate,
+        recentEvents: []
+      });
+      setLoading(false);
+    } else {
+      await fetchAnalyticsData(); // Refresh for all events
+    }
+    // Refresh events list for dropdown as well
+    try {
+      const evts = await measureApiCall(() => getEvents(), 'getEvents');
+      setEvents(evts);
+    } catch (err) {
+      console.warn('Failed to refresh events list', err);
+    }
+  }, [fetchAnalyticsData, fetchEventStats, selectedEventId, measureApiCall]);
   
   // Callbacks and memos must be before any conditional returns
   const formatPercentage = useCallback((value: number) => {
@@ -298,26 +276,85 @@ export default function Analytics() {
     return Math.min(100, (analyticsData.totalCheckedIn / analyticsData.totalTickets) * 100);
   }, [analyticsData?.totalTickets, analyticsData?.totalCheckedIn]);
   
-  // useEffect must be after all other hooks to maintain consistent order
+  // Load events list on mount for dropdown
   useEffect(() => {
-    // Start with cached data immediately
-    const cached = analyticsCache.get('main');
-    if (cached) {
-      setAnalyticsData(cached);
-      setIsStaleData(true);
-      setLoading(false);
+    (async () => {
+      try {
+        const evts = await measureApiCall(() => getEvents(), 'getEvents');
+        setEvents(evts);
+      } catch (err) {
+        console.warn('Failed to fetch events list for dropdown on mount', err);
+      }
+    })();
+  }, [measureApiCall]);
+
+  // Fetch analytics based on selection
+  useEffect(() => {
+    if (selectedEventId === null) {
+      // All events mode: fetch fresh data
+      setLoading(true);
+      fetchAnalyticsData();
+    } else {
+      // Single event mode - always fetch fresh data for the selected event
+      (async () => {
+        setLoading(true);
+        try {
+          const stats = await fetchEventStats(selectedEventId);
+          const attendanceRate = stats.guestCount > 0 ? (stats.checkedInCount / stats.guestCount) * 100 : 0;
+          setAnalyticsData({
+            totalEvents: 1,
+            totalTickets: stats.guestCount,
+            totalCheckedIn: stats.checkedInCount,
+            averageAttendanceRate: attendanceRate,
+            recentEvents: []
+          });
+        } catch (err) {
+          console.warn('Failed to fetch single event analytics:', err);
+          // Show error state with zeros
+          setAnalyticsData({
+            totalEvents: 1,
+            totalTickets: 0,
+            totalCheckedIn: 0,
+            averageAttendanceRate: 0,
+            recentEvents: []
+          });
+        } finally {
+          setLoading(false);
+        }
+      })();
     }
-    
-    // Then fetch fresh data if cache is old or missing
-    const cacheAge = cached ? Date.now() - (cached as any).timestamp : Infinity;
-    if (!cached || cacheAge > 60000) { // Fetch if no cache or older than 1 minute
-      fetchAnalyticsData(false);
+  }, [selectedEventId, fetchAnalyticsData, fetchEventStats]);
+
+  // Shimmer animation for skeleton loader
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmerAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmerAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     }
-  }, [fetchAnalyticsData]);
+  }, [loading, shimmerAnim]);
+
+  const shimmerOpacity = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
 
   // Early return for loading state - must be after all hooks
   if (loading && !analyticsData) {
-    // Show skeleton loader for better perceived performance
+    // Show skeleton loader with shimmer effect
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 4 }]}>
         {/* Header */}
@@ -326,39 +363,65 @@ export default function Analytics() {
           <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>
             Track your event performance
           </Text>
+          <View style={{ marginTop: 12 }}>
+            <EventDropdown
+              events={events}
+              selectedEventId={selectedEventId}
+              onEventSelect={setSelectedEventId}
+              placeholder="All Events"
+            />
+          </View>
         </View>
         
-        {/* Skeleton Stats */}
-        <View style={[styles.overviewCard, { backgroundColor: colors.card }]}>
+        {/* Animated Loading Indicator */}
+        <View style={styles.loadingBanner}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.secondary, marginLeft: 12 }]}>
+            Loading analytics{selectedEventId ? ' for selected event' : ''}...
+          </Text>
+        </View>
+        
+        {/* Skeleton Stats with Shimmer */}
+        <Animated.View style={[styles.overviewCard, { backgroundColor: colors.card, opacity: shimmerOpacity }]}>
           <View style={styles.cardHeader}>
-            <View style={[styles.skeletonTitle, { backgroundColor: colors.border }]} />
-            <View style={[styles.titleAccent, { backgroundColor: colors.primary }]} />
+            <View style={[styles.skeletonTitle, { backgroundColor: colors.border + '40' }]} />
+            <View style={[styles.titleAccent, { backgroundColor: colors.primary + '30' }]} />
           </View>
           <View style={styles.statsGrid}>
             {[1, 2, 3, 4].map((i) => (
               <View key={i} style={styles.statItem}>
-                <View style={[styles.skeletonIcon, { backgroundColor: colors.border }]} />
-                <View style={[styles.skeletonValue, { backgroundColor: colors.border }]} />
-                <View style={[styles.skeletonLabel, { backgroundColor: colors.border }]} />
+                <LinearGradient
+                  colors={[colors.border + '20', colors.border + '40', colors.border + '20']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.skeletonIcon}
+                />
+                <View style={[styles.skeletonValue, { backgroundColor: colors.border + '30' }]} />
+                <View style={[styles.skeletonLabel, { backgroundColor: colors.border + '20' }]} />
               </View>
             ))}
           </View>
-        </View>
+        </Animated.View>
         
-        {/* Skeleton Pending Card */}
-        <View style={[styles.pendingCard, { backgroundColor: colors.card }]}>
+        {/* Skeleton Pending Card with Shimmer */}
+        <Animated.View style={[styles.pendingCard, { backgroundColor: colors.card, opacity: shimmerOpacity }]}>
           <View style={styles.cardHeader}>
-            <View style={[styles.skeletonTitle, { backgroundColor: colors.border }]} />
-            <View style={[styles.titleAccent, { backgroundColor: '#FF9500' }]} />
+            <View style={[styles.skeletonTitle, { backgroundColor: colors.border + '40' }]} />
+            <View style={[styles.titleAccent, { backgroundColor: '#FF9500' + '30' }]} />
           </View>
           <View style={styles.pendingContent}>
-            <View style={[styles.skeletonIcon, { backgroundColor: colors.border, width: 60, height: 60, borderRadius: 30 }]} />
+            <LinearGradient
+              colors={[colors.border + '20', colors.border + '40', colors.border + '20']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.skeletonIcon, { width: 60, height: 60, borderRadius: 30 }]}
+            />
             <View style={{ flex: 1 }}>
-              <View style={[styles.skeletonValue, { backgroundColor: colors.border, width: 100 }]} />
-              <View style={[styles.skeletonLabel, { backgroundColor: colors.border, width: 150 }]} />
+              <View style={[styles.skeletonValue, { backgroundColor: colors.border + '30', width: 100 }]} />
+              <View style={[styles.skeletonLabel, { backgroundColor: colors.border + '20', width: 150 }]} />
             </View>
           </View>
-        </View>
+        </Animated.View>
       </View>
     );
   }
@@ -374,14 +437,17 @@ export default function Analytics() {
               Track your event performance
             </Text>
           </View>
-          {isStaleData && (
-            <View style={[styles.staleBadge, { backgroundColor: colors.warning + '20' }]}>
-              <Text style={[styles.staleText, { color: colors.warning }]}>Cached</Text>
-            </View>
-          )}
+        </View>
+        <View style={{ marginTop: 12 }}>
+          <EventDropdown
+            events={events}
+            selectedEventId={selectedEventId}
+            onEventSelect={setSelectedEventId}
+            placeholder="All Events"
+          />
         </View>
         {__DEV__ && metrics.renderTime > 0 && (
-          <Text style={[styles.perfText, { color: colors.secondary }]}>
+          <Text style={[styles.perfText, { color: colors.secondary }]}> 
             Render: {metrics.renderTime}ms | API: {metrics.apiCallTime}ms
           </Text>
         )}
@@ -411,18 +477,18 @@ export default function Analytics() {
             <StatItem
               icon={<Calendar size={22} color={colors.primary} />}
               value={analyticsData?.totalEvents || 0}
-              label="Events"
+              label={selectedEventId ? "Event" : "Events"}
               colors={colors}
             />
             <StatItem
               icon={<Users size={22} color={colors.primary} />}
-              value={analyticsData?.totalTickets.toLocaleString() || 0}
+              value={analyticsData?.totalTickets?.toLocaleString() || 0}
               label="Tickets"
               colors={colors}
             />
             <StatItem
               icon={<UserCheck size={22} color="#34C759" />}
-              value={analyticsData?.totalCheckedIn.toLocaleString() || 0}
+              value={analyticsData?.totalCheckedIn?.toLocaleString() || 0}
               label="Checked In"
               colors={colors}
               gradientColors={['#34C75920', '#34C75910']}
@@ -473,10 +539,9 @@ export default function Analytics() {
             </View>
           </View>
         </View>
-
-        {/* Recent Events */}
-        {analyticsData?.recentEvents && analyticsData.recentEvents.length > 0 && (
-          <View style={[styles.recentEventsCard, { backgroundColor: colors.card }]}>
+        {/* Recent Events (only in All Events mode) */}
+        {selectedEventId === null && analyticsData?.recentEvents && analyticsData.recentEvents.length > 0 && (
+          <View style={[styles.recentEventsCard, { backgroundColor: colors.card }]}> 
             <View style={styles.cardHeader}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Events</Text>
               <View style={[styles.titleAccent, { backgroundColor: colors.primary }]} />
@@ -493,6 +558,21 @@ export default function Analytics() {
           </View>
         )}
       </ScrollView>
+      
+      {/* Loading Overlay for when switching between events */}
+      {loading && analyticsData && (
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingCard, { backgroundColor: colors.card }]}>
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginBottom: 12 }} />
+            <Text style={[styles.overlayLoadingText, { color: colors.text }]}>
+              Loading Analytics
+            </Text>
+            <Text style={[styles.overlayLoadingSubtext, { color: colors.secondary }]}>
+              {selectedEventId ? 'Fetching event data...' : 'Calculating totals...'}
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -510,15 +590,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-  },
-  staleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  staleText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   perfText: {
     fontSize: 11,
@@ -548,8 +619,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 122, 255, 0.08)',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingCard: {
+    padding: 32,
+    borderRadius: 20,
+    alignItems: 'center',
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  overlayLoadingText: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  overlayLoadingSubtext: {
+    fontSize: 14,
     fontWeight: '500',
   },
   overviewCard: {
