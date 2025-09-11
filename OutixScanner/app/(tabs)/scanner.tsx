@@ -316,7 +316,7 @@ export default function ScannerScreen() {
       let validationResult: QRValidationResponse | null;
       
       if (DEBUG_MODE) {
-        console.log('🐛 DEBUG MODE: Bypassing validation');
+        // Debug mode bypassing validation
         validationResult = {
           error: false,
           msg: {

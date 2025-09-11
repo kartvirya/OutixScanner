@@ -422,7 +422,7 @@ export const getEvents = async (): Promise<Event[]> => {
     }
     
     console.log("Sending request with token:", authToken ? `token-exists: ${authToken.substring(0, 10)}...` : "no-token");
-    console.log("Full token for debugging:", authToken);
+    // Debug log removed for production
     console.log("Request URL:", `${BASE_URL}/events`);
     
     try {
@@ -929,13 +929,7 @@ export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> =
 // Check-in is now handled through QR code scanning with scanQRCode(eventId, scanCode)
 // Check-out is handled through unscanQRCode(eventId, scanCode)
 
-// Function to generate a sample QR code payload for testing
-export const generateSampleQRData = (guestId: string): string => {
-  return JSON.stringify({
-    id: guestId,
-    timestamp: new Date().toISOString(),
-  });
-};
+// Note: generateSampleQRData function removed as we now use real ticket identifiers
 
 // Utility function to get token
 export const getToken = (): string | null => {
@@ -1215,7 +1209,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
     
     // First, check if this is a mock QR code for testing
     if (scanCode.startsWith('MOCK_QR_')) {
-      console.log('Using mock validation for test QR code');
+      // Mock validation for test QR code
       return {
         error: false,
         msg: {
@@ -1289,7 +1283,7 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
     
     // First, check if this is a mock QR code for testing
     if (scanCode.startsWith('MOCK_QR_')) {
-      console.log('Using mock scan for test QR code');
+      // Mock scan for test QR code
       return {
         error: false,
         msg: {
@@ -1377,7 +1371,7 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
     
     // First, check if this is a mock QR code for testing
     if (scanCode.startsWith('MOCK_QR_')) {
-      console.log('Using mock unscan for test QR code');
+      // Mock unscan for test QR code
       return {
         error: false,
         msg: {

@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Bell, Building2, LogOut, Mail, Moon, Sun, User } from "lucide-react-native";
+import { Building2, LogOut, Mail, Moon, Sun, User } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -211,30 +211,7 @@ export default function Profile() {
           </View>
         </View>
 
-        {/* Push Notifications */}
-        <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Push Notifications</Text>
-          
-          <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
-            <View style={styles.settingLeft}>
-              <View style={[styles.settingIcon, { backgroundColor: `${colors.primary}15` }]}>
-                <Bell size={18} color={colors.primary} />
-              </View>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: colors.text }]}>Test Push Notifications</Text>
-                <Text style={[styles.settingDescription, { color: colors.secondary }]}>
-                  Test AWS SNS push notifications
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[styles.settingButton, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/push-notification-test')}
-            >
-              <Text style={styles.settingButtonText}>Test</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Push Notifications section removed - test functionality no longer needed */}
 
         {/* Logout Button */}
         <TouchableOpacity 

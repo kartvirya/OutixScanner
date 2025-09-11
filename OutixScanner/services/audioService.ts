@@ -14,8 +14,7 @@ const DEFAULT_SOUND_CONFIG: SoundConfig = {
   shouldCorrectPitch: true,
 };
 
-// Sound cache
-const soundCache = new Map<string, Audio.Sound>();
+// Note: Sound cache removed as we create sounds on-demand for better performance
 
 // Create a high-quality sound using Web Audio API-style synthesis
 export const createHighQualitySound = async (
