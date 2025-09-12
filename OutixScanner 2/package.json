@@ -21,7 +21,7 @@
     "aws-amplify": "latest",
     "axios": "latest",
     "expo": "latest",
-    "expo-audio": "latest",
+    "expo-av": "latest",
     "expo-blur": "latest",
     "expo-camera": "latest",
     "expo-constants": "latest",
