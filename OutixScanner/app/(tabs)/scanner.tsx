@@ -53,7 +53,7 @@ const DEBUG_MODE = false;
 export default function ScannerScreen() {
   const { colors, isDark, selectedEventId, selectedEventName } = useTheme();
   const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
-  const { eventId: paramEventId } = useLocalSearchParams();
+  const { eventId: paramEventId, returnTo } = useLocalSearchParams();
   
   const [currentEventId, setCurrentEventId] = useState<string>('');
   const [currentEventName, setCurrentEventName] = useState<string>('');
@@ -215,11 +215,14 @@ export default function ScannerScreen() {
   const handleClose = () => {
     feedback.buttonPress();
     
-    // Check if we can go back in the navigation stack
-    if (router.canGoBack()) {
+    // If we have a returnTo parameter, use it
+    if (returnTo) {
+      router.push(returnTo as string);
+    } else if (router.canGoBack()) {
+      // Otherwise, use back navigation
       router.back();
     } else {
-      // Navigate to event details page as fallback
+      // Fallback: Navigate to event details if we have an event ID, otherwise to events list
       const eventId = selectedEventId || paramEventId || currentEventId;
       if (eventId) {
         router.replace(`/(tabs)/${eventId}`);
@@ -458,7 +461,8 @@ export default function ScannerScreen() {
                 scanMode: scanMode,
                 tickets: JSON.stringify(relevantTickets),
                 purchaser: JSON.stringify(groupResult.purchaser),
-                scannedTicketId: data // Pass the scanned ticket ID for pre-selection
+                scannedTicketId: data, // Pass the scanned ticket ID for pre-selection
+                returnToScanner: returnTo || '' // Pass the return path for proper back navigation
               }
             });
             return;
@@ -753,7 +757,8 @@ export default function ScannerScreen() {
           eventId: currentEventId,
           scanMode: 'scan-in',
           tickets: JSON.stringify([ticket]),
-          singleTicketId: scanCode
+          singleTicketId: scanCode,
+          returnToScanner: returnTo || '' // Pass the return path for proper back navigation
         }
       });
     } catch (err) {
@@ -791,7 +796,8 @@ export default function ScannerScreen() {
           eventId: currentEventId,
           scanMode: 'scan-out',
           tickets: JSON.stringify([ticket]),
-          singleTicketId: scanCode
+          singleTicketId: scanCode,
+          returnToScanner: returnTo || '' // Pass the return path for proper back navigation
         }
       });
       

@@ -274,28 +274,8 @@ export const login = async (username?: string, password?: string): Promise<strin
       }
     }
     
-    // If user has explicitly logged out, don't auto-restore token (only for auto-login)
-    if (isLoggedOut) {
-      console.log("User has logged out, not auto-restoring token");
-      return null;
-    }
-    
-    // Auto-login flow - check if token already exists in storage
-    const storedToken = await getStorageItem('auth_token');
-    if (storedToken) {
-      console.log("Using existing token from storage");
-      authToken = storedToken;
-      return storedToken;
-    }
-    
-    // If we already have a token in memory, use it
-    if (authToken) {
-      return authToken;
-    }
-    
-    // No auto-login - user must authenticate through proper login flow
-    console.log("No token found - user must login through proper authentication flow");
-    authToken = null;
+    // No credentials provided - require explicit login
+    console.log("No credentials provided - authentication required");
     return null;
     
   } catch (error) {
@@ -532,8 +512,8 @@ export const getGuestList = async (eventId: string): Promise<Guest[]> => {
       if (storedToken) {
         authToken = storedToken;
       } else {
-        console.log("No token in storage for guest list, using default token");
-        authToken = '8534838IGWQYmheB4432355'; // Use the default token from the curl example
+        console.log("No token in storage for guest list - authentication required");
+        throw new Error('Authentication required. Please login.');
       }
     }
     
@@ -689,8 +669,8 @@ export const getGuestListPaginated = async (eventId: string, page: number = 1, l
       if (storedToken) {
         authToken = storedToken;
       } else {
-        console.log("No token in storage for paginated guest list, using default token");
-        authToken = '8534838IGWQYmheB4432355';
+        console.log("No token in storage for paginated guest list - authentication required");
+        throw new Error('Authentication required. Please login.');
       }
     }
     
@@ -778,8 +758,8 @@ export const searchGuestList = async (eventId: string, searchQuery: string): Pro
       if (storedToken) {
         authToken = storedToken;
       } else {
-        console.log("No token in storage for guest search, using default token");
-        authToken = '8534838IGWQYmheB4432355';
+        console.log("No token in storage for guest search - authentication required");
+        throw new Error('Authentication required. Please login.');
       }
     }
     
@@ -849,8 +829,8 @@ export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> =
       if (storedToken) {
         authToken = storedToken;
       } else {
-        console.log("No token in storage for checked-in guest list, using default token");
-        authToken = '8534838IGWQYmheB4432355'; // Use the default token from the curl example
+        console.log("No token in storage for checked-in guest list - authentication required");
+        throw new Error('Authentication required. Please login.');
       }
     }
     
@@ -1203,19 +1183,13 @@ export const isAuthenticated = async (): Promise<boolean> => {
     return false;
   }
   
-  // First check in-memory token
+  // Only check in-memory token - don't auto-restore from storage
+  // This prevents auto-login behavior
   if (authToken) {
     return true;
   }
   
-  // Then check storage
-  const storedToken = await getStorageItem('auth_token');
-  if (storedToken) {
-    // Restore token to memory
-    authToken = storedToken;
-    return true;
-  }
-  
+  // Don't auto-restore from storage - require explicit login
   return false;
 };
 
@@ -1263,6 +1237,37 @@ export const startNewLoginSession = async (): Promise<string | null> => {
 export const resetLogoutState = (): void => {
   isLoggedOut = false;
   console.log('Logout state reset - user can login again');
+};
+
+// Function to explicitly restore session from storage (for remember me functionality)
+export const restoreSession = async (): Promise<boolean> => {
+  try {
+    // Check if we have a stored token
+    const storedToken = await getStorageItem('auth_token');
+    if (storedToken) {
+      console.log('Restoring session from stored token');
+      authToken = storedToken;
+      isLoggedOut = false;
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error restoring session:', error);
+    return false;
+  }
+};
+
+// Clear stored session (removes stored token but doesn't log out current session)
+export const clearStoredSession = async (): Promise<void> => {
+  try {
+    await removeStorageItem('auth_token');
+    await removeStorageItem('user_profile');
+    memoryStorage.delete('auth_token');
+    memoryStorage.delete('user_profile');
+    console.log('Stored session cleared');
+  } catch (error) {
+    console.error('Error clearing stored session:', error);
+  }
 };
 
 // Enhanced QR Code validation with better error handling

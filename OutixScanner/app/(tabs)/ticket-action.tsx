@@ -50,6 +50,7 @@ export default function TicketActionScreen() {
   const purchaser = params.purchaser ? JSON.parse(params.purchaser as string) as Purchaser : null;
   const singleTicketId = params.singleTicketId as string;
   const scannedTicketId = params.scannedTicketId as string;
+  const returnToScanner = params.returnToScanner as string; // Get the return path for navigation
 
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -182,14 +183,21 @@ export default function TicketActionScreen() {
   };
 
   const handleCancel = () => {
-    router.push('/(tabs)/scanner');
+    // Navigate back to scanner with proper return path
+    router.push({
+      pathname: '/(tabs)/scanner',
+      params: returnToScanner ? { returnTo: returnToScanner } : {}
+    } as any);
   };
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     setSuccessData(null);
-    // Return to scanner
-    router.push('/(tabs)/scanner');
+    // Navigate back to scanner with proper return path
+    router.push({
+      pathname: '/(tabs)/scanner',
+      params: returnToScanner ? { returnTo: returnToScanner } : {}
+    } as any);
   };
 
   const isSmallScreen = screenHeight < 700;

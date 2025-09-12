@@ -179,7 +179,28 @@ function CustomTabBar() {
   };
 
   const handleTabPress = (route: string) => {
-    router.push(route as any);
+    // For scanner route, include the current pathname as returnTo param
+    if (route === '/(tabs)/scanner') {
+      // Get the current event ID from the pathname
+      const currentPath = pathname;
+      let returnTo = '/(tabs)'; // Default to events list
+      
+      // If we're on an event detail page, set that as the return path
+      if (isOnEventDetailPage) {
+        // Extract the event ID from the current path
+        const eventIdMatch = currentPath.match(/\/(\d+)$/) || currentPath.match(/\/([^/]+)$/);
+        if (eventIdMatch && eventIdMatch[1]) {
+          returnTo = `/(tabs)/${eventIdMatch[1]}`;
+        }
+      }
+      
+      router.push({
+        pathname: route,
+        params: { returnTo }
+      } as any);
+    } else {
+      router.push(route as any);
+    }
   };
 
   // Hide the tab bar UI on ticket-action screen, but keep hooks above consistent
@@ -384,6 +405,14 @@ export default function TabsLayout() {
         name="[id]"
         options={{
           title: "Event Details",
+          tabBarButton: () => null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="ticket-action"
+        options={{
+          title: "Guest Information",
           tabBarButton: () => null,
           headerShown: false,
         }}

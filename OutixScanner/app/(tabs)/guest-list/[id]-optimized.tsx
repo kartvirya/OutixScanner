@@ -158,9 +158,10 @@ function GuestListContent() {
       params: {
         guestData: JSON.stringify(guest),
         eventTitle: state.eventTitle,
+        returnTo: `/guest-list/${eventId}` // Add return path to guest list
       },
     });
-  }, [state.eventTitle]);
+  }, [state.eventTitle, eventId]);
   
   // Handle QR scan result
   const handleScanResult = useCallback(async (data: string) => {

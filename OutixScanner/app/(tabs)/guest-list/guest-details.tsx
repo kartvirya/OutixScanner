@@ -32,6 +32,7 @@ export default function GuestDetailsPage() {
   // Parse the guest data from URL params
   const guestData = params.guestData ? JSON.parse(params.guestData as string) : null;
   const eventTitle = params.eventTitle as string || 'Event';
+  const returnTo = params.returnTo as string; // Get the return path for navigation
 
   if (!guestData) {
     return (
@@ -45,7 +46,12 @@ export default function GuestDetailsPage() {
             style={[styles.backButton, { backgroundColor: colors.primary }]}
             onPress={() => {
               feedback.buttonPress();
-              router.back();
+              // Navigate to the returnTo path if available, otherwise use back
+              if (returnTo) {
+                router.push(returnTo);
+              } else {
+                router.back();
+              }
             }}
           >
             <Text style={styles.backButtonText}>Go Back</Text>
@@ -108,7 +114,12 @@ export default function GuestDetailsPage() {
           style={styles.headerBackButton}
           onPress={() => {
             feedback.buttonPress();
-            router.back();
+            // Navigate to the returnTo path if available, otherwise use back
+            if (returnTo) {
+              router.push(returnTo);
+            } else {
+              router.back();
+            }
           }}
         >
           <ArrowLeft size={24} color={colors.primary} />

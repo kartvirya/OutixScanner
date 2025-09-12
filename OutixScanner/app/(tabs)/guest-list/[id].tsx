@@ -94,9 +94,12 @@ export default function GuestListPage() {
   
   // Track which guests we've already marked as checked in to prevent duplicates
   const markedAsCheckedInRef = useRef(new Set<string>());
+  
+  // Prevent concurrent API calls
+  const isFetchingRef = useRef(false);
 
   // Helper function to extract guest name from API data
-  const extractGuestName = (guest: any): string => {
+  const extractGuestName = useCallback((guest: any): string => {
     console.log('🔍 Extracting name from guest data:', {
       purchased_by: guest.purchased_by,
       admit_name: guest.admit_name,
@@ -130,7 +133,7 @@ export default function GuestListPage() {
     }
     console.log('❌ No name found, using default: Guest');
     return 'Guest';
-  };
+  }, []);
 
   // Debug function to log current state
   const logCurrentState = (action: string, guest: Attendee) => {
@@ -144,6 +147,12 @@ export default function GuestListPage() {
 
   // Define functions with useCallback to avoid dependency issues
   const fetchPaginatedGuests = useCallback(async (page: number, reset: boolean = false) => {
+    if (isFetchingRef.current && !reset) {
+      console.log('⚠️ Already fetching paginated guests, skipping...');
+      return;
+    }
+    
+    isFetchingRef.current = true;
     try {
       if (!reset && page === 1) {
         setLoading(true);
@@ -200,19 +209,16 @@ export default function GuestListPage() {
       
       console.log(`Loaded page ${page}, total guests: ${result.totalCount}, has more: ${result.hasMore}`);
       
-      // Sync check-in status with already fetched checked-in guests
-      if (checkedInGuests.length > 0) {
-        console.log('🔄 Syncing check-in status after loading paginated guests...');
-        setTimeout(() => syncCheckInStatus(checkedInGuests), 100);
-      }
+      // Don't sync here - let it happen in the separate useEffect
       
     } catch (error) {
       console.error('Failed to fetch paginated guests:', error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      isFetchingRef.current = false;
     }
-  }, [eventId]);
+  }, [eventId, extractGuestName]);
 
   const fetchCheckedInGuests = useCallback(async () => {
     try {
@@ -256,9 +262,7 @@ export default function GuestListPage() {
         });
         
         setCheckedInGuests(attendees);
-        
-        // Sync the check-in status with displayed guests
-        syncCheckInStatus(attendees);
+        // Don't sync here - let it happen in the separate useEffect
       } else {
         setCheckedInGuests([]);
       }
@@ -266,7 +270,7 @@ export default function GuestListPage() {
       console.error('Failed to fetch checked-in guests:', error);
       setCheckedInGuests([]);
     }
-  }, [eventId]);
+  }, [eventId, extractGuestName]);
 
   // Function to sync check-in status between checked-in guests and displayed guests
   const syncCheckInStatus = useCallback((checkedInList: Attendee[]) => {
@@ -338,7 +342,8 @@ export default function GuestListPage() {
     await fetchCheckedInGuests();
   }, [fetchPaginatedGuests, fetchCheckedInGuests]);
 
-  const fetchEventAndInitialData = useCallback(async () => {
+  // Remove useCallback to avoid dependency issues - this function only runs once on mount
+  const fetchEventAndInitialData = async () => {
     setLoading(true);
     console.log(`🚀 Starting fetchEventAndInitialData for event: ${eventId}`);
     
@@ -375,13 +380,13 @@ export default function GuestListPage() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, fetchPaginatedGuests, fetchCheckedInGuests]);
+  };
 
   useEffect(() => {
     initializeAudio();
     // Load once on mount; users can pull-to-refresh manually
     fetchEventAndInitialData();
-  }, [eventId, fetchEventAndInitialData]);
+  }, [eventId]); // Only depend on eventId to prevent re-fetching
 
   // Sync check-in status whenever checked-in guests are updated and we have displayed guests
   useEffect(() => {
@@ -479,7 +484,7 @@ export default function GuestListPage() {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [searchQuery, eventId]);
+  }, [searchQuery, eventId, extractGuestName]);
 
   // Get filtered guests for display
   const getFilteredGuests = (guests: Attendee[]) => {
@@ -521,19 +526,34 @@ export default function GuestListPage() {
     await fetchPaginatedGuests(currentPage + 1, false);
   }, [hasMore, loadingMore, isSearchMode, fetchPaginatedGuests, currentPage]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
+    console.log('🔄 Pull-to-refresh triggered');
+    if (refreshing) {
+      console.log('⚠️ Already refreshing, skipping...');
+      return;
+    }
+    
     setRefreshing(true);
     try {
+      // Clear search state first
+      setSearchQuery('');
+      setIsSearchMode(false);
+      setSearchResults([]);
+      
       // Reset pagination and fetch fresh data
+      console.log('📋 Fetching fresh data...');
       await Promise.all([
         fetchPaginatedGuests(1, true),
         fetchCheckedInGuests()
       ]);
+      console.log('✅ Refresh completed');
       // Manual refresh only - no automatic triggers
+    } catch (error) {
+      console.error('❌ Refresh failed:', error);
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [refreshing, fetchPaginatedGuests, fetchCheckedInGuests]);
 
   const handleOpenScanner = () => {
     feedback.buttonPress();
@@ -1249,7 +1269,8 @@ export default function GuestListPage() {
                     pathname: '/guest-list/guest-details',
                     params: {
                       guestData: JSON.stringify(item),
-                      eventTitle: eventTitle
+                      eventTitle: eventTitle,
+                      returnTo: `/guest-list/${eventId}` // Add return path to guest list
                     }
                   });
                 }}
