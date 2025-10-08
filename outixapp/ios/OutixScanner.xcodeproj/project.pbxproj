@@ -8,8 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		350943C3EB2FE430B809F002 /* libPods-OutixScanner.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D653D0AF132E90C98AA9FD40 /* libPods-OutixScanner.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		46E6732D34C0DF93249D8704 /* libPods-OutixScanner.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AED3B3AA1759443D6DEFA86 /* libPods-OutixScanner.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		BB929E1A84ADD43C06703FDD /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC34D999FBD2AEA6E67C3110 /* ExpoModulesProvider.swift */; };
 		F05B2FDE193E91E359784705 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A37475D16660F63A7170965B /* PrivacyInfo.xcprivacy */; };
@@ -20,13 +20,13 @@
 		13B07F961A680F5B00A75B9A /* OutixScanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OutixScanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OutixScanner/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OutixScanner/Info.plist; sourceTree = "<group>"; };
-		35D86A1DB0948EF81DD6A1B1 /* Pods-OutixScanner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OutixScanner.release.xcconfig"; path = "Target Support Files/Pods-OutixScanner/Pods-OutixScanner.release.xcconfig"; sourceTree = "<group>"; };
+		1D2A6717C799B96EC5FA624F /* Pods-OutixScanner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OutixScanner.release.xcconfig"; path = "Target Support Files/Pods-OutixScanner/Pods-OutixScanner.release.xcconfig"; sourceTree = "<group>"; };
+		6AED3B3AA1759443D6DEFA86 /* libPods-OutixScanner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-OutixScanner.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A37475D16660F63A7170965B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = OutixScanner/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = OutixScanner/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		BC34D999FBD2AEA6E67C3110 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-OutixScanner/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		D653D0AF132E90C98AA9FD40 /* libPods-OutixScanner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-OutixScanner.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E5EFAAA6A5B52B0A576F5856 /* Pods-OutixScanner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OutixScanner.debug.xcconfig"; path = "Target Support Files/Pods-OutixScanner/Pods-OutixScanner.debug.xcconfig"; sourceTree = "<group>"; };
+		D97F9B10BF0EB04ED8569537 /* Pods-OutixScanner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OutixScanner.debug.xcconfig"; path = "Target Support Files/Pods-OutixScanner/Pods-OutixScanner.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = OutixScanner/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* OutixScanner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "OutixScanner-Bridging-Header.h"; path = "OutixScanner/OutixScanner-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				350943C3EB2FE430B809F002 /* libPods-OutixScanner.a in Frameworks */,
+				46E6732D34C0DF93249D8704 /* libPods-OutixScanner.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +70,7 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				D653D0AF132E90C98AA9FD40 /* libPods-OutixScanner.a */,
+				6AED3B3AA1759443D6DEFA86 /* libPods-OutixScanner.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -78,8 +78,8 @@
 		340E8B69FA206E582B8902B1 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				E5EFAAA6A5B52B0A576F5856 /* Pods-OutixScanner.debug.xcconfig */,
-				35D86A1DB0948EF81DD6A1B1 /* Pods-OutixScanner.release.xcconfig */,
+				D97F9B10BF0EB04ED8569537 /* Pods-OutixScanner.debug.xcconfig */,
+				1D2A6717C799B96EC5FA624F /* Pods-OutixScanner.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -138,14 +138,14 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "OutixScanner" */;
 			buildPhases = (
-				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
+				067526E0ABA69AE2C3D04CD3 /* [CP] Check Pods Manifest.lock */,
 				394B88E5040269C3C5D6FA9B /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				EC014323FAA71BA7B2C806FD /* [CP] Embed Pods Frameworks */,
+				6A9F628C7F5995381FE5C60D /* [CP] Embed Pods Frameworks */,
+				EAE2A5FB80716CC43DFBCC36 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -217,7 +217,7 @@
 			shellPath = /bin/sh;
 			shellScript = "if [[ -f \"$PODS_ROOT/../.xcode.env\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env\"\nfi\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# The project root by default is one level up from the ios directory\nexport PROJECT_ROOT=\"$PROJECT_DIR\"/..\n\nif [[ \"$CONFIGURATION\" = *Debug* ]]; then\n  export SKIP_BUNDLING=1\nfi\nif [[ -z \"$ENTRY_FILE\" ]]; then\n  # Set the entry JS file using the bundler's entry resolution.\n  export ENTRY_FILE=\"$(\"$NODE_BINARY\" -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" ios absolute | tail -n 1)\"\nfi\n\nif [[ -z \"$CLI_PATH\" ]]; then\n  # Use Expo CLI\n  export CLI_PATH=\"$(\"$NODE_BINARY\" --print \"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\")\"\nfi\nif [[ -z \"$BUNDLE_COMMAND\" ]]; then\n  # Default Expo CLI command for bundling\n  export BUNDLE_COMMAND=\"export:embed\"\nfi\n\n# Source .xcode.env.updates if it exists to allow\n# SKIP_BUNDLING to be unset if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.updates\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.updates\"\nfi\n# Source local changes to allow overrides\n# if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`\n\n";
 		};
-		08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */ = {
+		067526E0ABA69AE2C3D04CD3 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -263,7 +263,25 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-OutixScanner/expo-configure-project.sh\"\n";
 		};
-		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
+		6A9F628C7F5995381FE5C60D /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-OutixScanner/Pods-OutixScanner-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-OutixScanner/Pods-OutixScanner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		EAE2A5FB80716CC43DFBCC36 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -309,24 +327,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-OutixScanner/Pods-OutixScanner-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		EC014323FAA71BA7B2C806FD /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-OutixScanner/Pods-OutixScanner-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-OutixScanner/Pods-OutixScanner-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -344,7 +344,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = E5EFAAA6A5B52B0A576F5856 /* Pods-OutixScanner.debug.xcconfig */;
+			baseConfigurationReference = D97F9B10BF0EB04ED8569537 /* Pods-OutixScanner.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -381,7 +381,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 35D86A1DB0948EF81DD6A1B1 /* Pods-OutixScanner.release.xcconfig */;
+			baseConfigurationReference = 1D2A6717C799B96EC5FA624F /* Pods-OutixScanner.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;

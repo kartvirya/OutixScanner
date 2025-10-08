@@ -1,5 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { LogIn } from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { LogIn, UserCheck } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -12,6 +13,7 @@ import {
     View
 } from 'react-native';
 import ErrorModal from '../../components/ErrorModal';
+import SuccessModal from '../../components/SuccessModal';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -19,7 +21,9 @@ import {
     QRValidationResponse,
     getEvents,
     getGroupTickets,
-    validateQRCode
+    validateQRCode,
+    scanQRCode,
+    unscanQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -52,6 +56,7 @@ const DEBUG_MODE = false;
 
 export default function ScannerScreen() {
   const { colors, isDark, selectedEventId, selectedEventName } = useTheme();
+  const isFocused = useIsFocused();
   const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { eventId: paramEventId, returnTo } = useLocalSearchParams();
   
@@ -60,11 +65,19 @@ export default function ScannerScreen() {
   const [scanMode, setScanMode] = useState<ScanMode>('scan-in');
   const [showEventSelection, setShowEventSelection] = useState(false);
   const [isValidatingEvent, setIsValidatingEvent] = useState(true);
-  const [isScanning, setIsScanning] = useState(true); // Add scanning control state
+  const [isScanning, setIsScanning] = useState(true); // Start with scanning on
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Add header expansion state
-  const [showCamera, setShowCamera] = useState(true); // Control camera visibility - start immediately
+  const [showCamera, setShowCamera] = useState(true); // Control camera visibility - start with camera on
   const [isNavigatingAway, setIsNavigatingAway] = useState(false); // Track when navigating away from scanner
   const [showErrorModalState, setShowErrorModalState] = useState(false);
+  const [showSuccessModalState, setShowSuccessModalState] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<{
+    type: 'check-in' | 'check-out' | 'group-check-in' | 'group-check-out';
+    guestName?: string;
+    ticketType?: string;
+    count?: number;
+    message?: string;
+  } | null>(null);
   const [errorData, setErrorData] = useState<{
     type: 'already-scanned' | 'not-checked-in' | 'invalid-ticket' | 'general';
     title?: string;
@@ -89,7 +102,7 @@ export default function ScannerScreen() {
   // Ensure camera is ready when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 Scanner screen focused - ensuring camera is ready');
+      console.log('🔄 Scanner screen focused');
       
       // Reset navigation flag when coming back to scanner
       if (isNavigatingAway) {
@@ -97,12 +110,7 @@ export default function ScannerScreen() {
         setIsNavigatingAway(false);
       }
       
-      // Force camera restart by briefly closing and reopening
-      setShowCamera(false);
-      setTimeout(() => {
-        setShowCamera(true);
-        setIsScanning(true);
-      }, 50);
+      // Camera control is now handled by the useEffect with isFocused
     }, [isNavigatingAway])
   );
 
@@ -251,6 +259,10 @@ export default function ScannerScreen() {
     ticketType?: string;
     checkedInDate?: string;
   }) => {
+    // Close camera while showing error modal
+    setIsScanning(false);
+    setShowCamera(false);
+    
     setErrorData(errorInfo);
     setShowErrorModalState(true);
   }, []);
@@ -263,8 +275,61 @@ export default function ScannerScreen() {
     setShowCamera(true);
   }, []);
 
+  const showSuccessModal = useCallback((successInfo: {
+    type: 'check-in' | 'check-out' | 'group-check-in' | 'group-check-out';
+    title?: string;
+    message?: string;
+    guestName?: string;
+    ticketType?: string;
+  }) => {
+    // Close camera while showing success modal
+    setIsScanning(false);
+    setShowCamera(false);
+    
+    setSuccessModalData({
+      type: successInfo.type,
+      guestName: successInfo.guestName,
+      ticketType: successInfo.ticketType,
+      count: 1,
+      message: successInfo.message
+    });
+    setShowSuccessModalState(true);
+  }, []);
+
+  const resumeScanning = useCallback(() => {
+    console.log('🔄 Resuming scanning');
+    setIsScanning(true);
+    setShowCamera(true);
+    setIsNavigatingAway(false);
+  }, []);
+
+
+  const handleSuccessModalClose = useCallback(() => {
+    setShowSuccessModalState(false);
+    setSuccessModalData(null);
+    // Resume scanning immediately when user clicks Continue
+    resumeScanning();
+  }, [resumeScanning]);
+
   // Prevent duplicate processing of the same code within a short window
   const lastProcessedRef = useRef<{ data: string; time: number }>({ data: '', time: 0 });
+
+
+  // Control camera based on screen focus
+  useEffect(() => {
+    if (isFocused) {
+      console.log('📱 Scanner screen is focused - camera should be on');
+      // Only start camera if we're not showing a modal
+      if (!showSuccessModalState && !showErrorModalState) {
+        setShowCamera(true);
+        setIsScanning(true);
+      }
+    } else {
+      console.log('📱 Scanner screen is not focused - stopping camera');
+      setShowCamera(false);
+      setIsScanning(false);
+    }
+  }, [isFocused, showSuccessModalState, showErrorModalState]);
 
   // When the scan mode changes (check-in ↔︎ passout), allow immediate re-scan
   // of the same QR code by clearing the duplicate suppression state.
@@ -590,9 +655,9 @@ export default function ScannerScreen() {
           console.log('Validation successful - proceeding with scan in');
         }
         
-        // Remove sound here - will play after successful completion in ticket-action
-        console.log('Performing individual scan in...');
-        await performScanIn(data, validationResult);
+        // Handle single ticket directly - no need for ticket selection screen
+        console.log('Processing single ticket scan in directly...');
+        await processSingleTicketDirectly(data, validationResult, 'scan-in');
         return;
       }
       
@@ -688,14 +753,14 @@ export default function ScannerScreen() {
           console.log('Ticket is valid and checked in - proceeding with scan out');
         }
         
-        // Remove sound here - will play after successful completion in ticket-action
-        console.log('Performing individual scan out...');
+        // Handle single ticket directly - no need for ticket selection screen
+        console.log('Processing single ticket scan out directly...');
         
-        // Ensure scanning is resumed even if performScanOut throws
+        // Ensure scanning is resumed even if processSingleTicketDirectly throws
         try {
-          await performScanOut(data, validationResult);
+          await processSingleTicketDirectly(data, validationResult, 'scan-out');
         } catch (scanOutError) {
-          console.error('Error in performScanOut:', scanOutError);
+          console.error('Error in processSingleTicketDirectly:', scanOutError);
           setIsScanning(true); // Force resume on error
           throw scanOutError;
         }
@@ -729,6 +794,84 @@ export default function ScannerScreen() {
       console.log('🔄 handleScanResult finally: Not closing camera - letting individual functions handle it');
     }
   }, [currentEventId, scanMode]);
+
+  const processSingleTicketDirectly = async (scanCode: string, validationResult: QRValidationResponse, mode: 'scan-in' | 'scan-out') => {
+    try {
+      console.log(`Processing single ticket directly for ${mode}:`, scanCode);
+      
+      // Turn off camera
+      setShowCamera(false);
+      setIsScanning(false);
+      setIsNavigatingAway(true);
+
+      // Extract guest information
+      const info = (validationResult && typeof validationResult.msg === 'object' && 'info' in validationResult.msg)
+        ? (validationResult.msg as any).info
+        : {};
+
+      const guestName = info?.fullname || 'Guest';
+      const ticketType = info?.ticket_title || 'Ticket';
+
+      // Call the appropriate API function directly
+      let result;
+      if (mode === 'scan-in') {
+        result = await scanQRCode(currentEventId, scanCode);
+      } else {
+        result = await unscanQRCode(currentEventId, scanCode);
+      }
+
+      // Handle the result
+      if (!result || result.error) {
+        feedback.error();
+        const errorMsg = result?.msg;
+        const errorText = typeof errorMsg === 'string' ? errorMsg : (errorMsg?.message || `Failed to ${mode === 'scan-in' ? 'check in' : 'check out'} ticket`);
+        Alert.alert('Error', errorText, [
+          { text: 'OK', onPress: () => {
+            console.log('🔄 Resuming scanning after error');
+            setIsScanning(true);
+            setShowCamera(true);
+            setIsNavigatingAway(false);
+          }}
+        ]);
+        return;
+      }
+
+      // Success! Play appropriate sound
+      if (mode === 'scan-in') {
+        feedback.checkIn();
+      } else {
+        feedback.checkOut();
+      }
+
+      // Trigger refreshes
+      triggerGuestListRefresh(currentEventId);
+      triggerAttendanceRefresh(currentEventId);
+      triggerAnalyticsRefresh();
+
+      // Show success modal
+      showSuccessModal({
+        type: mode === 'scan-in' ? 'check-in' : 'check-out',
+        title: mode === 'scan-in' ? 'Check In Successful' : 'Check Out Successful',
+        message: mode === 'scan-in' ? 'Guest has been checked in successfully' : 'Guest has been checked out successfully',
+        guestName,
+        ticketType
+      });
+
+      // Camera is now closed during modal display - will resume when user clicks Continue
+
+    } catch (error) {
+      console.error(`Error processing single ticket for ${mode}:`, error);
+      feedback.error();
+      Alert.alert('Error', `Failed to ${mode === 'scan-in' ? 'check in' : 'check out'} ticket. Please try again.`, [
+        { text: 'OK', onPress: () => {
+          console.log('🔄 Resuming scanning after error');
+          setIsScanning(true);
+          setShowCamera(true);
+          setIsNavigatingAway(false);
+        }}
+      ]);
+    }
+  };
 
   const performScanIn = async (scanCode: string, validationResult: QRValidationResponse) => {
     try {
@@ -916,6 +1059,7 @@ export default function ScannerScreen() {
         />
       )}
 
+
       {/* Error Modal */}
       {errorData && (
         <ErrorModal
@@ -927,6 +1071,18 @@ export default function ScannerScreen() {
           guestName={errorData.guestName}
           ticketType={errorData.ticketType}
           checkedInDate={errorData.checkedInDate}
+        />
+      )}
+
+      {successModalData && (
+        <SuccessModal
+          visible={showSuccessModalState}
+          onClose={handleSuccessModalClose}
+          type={successModalData.type}
+          guestName={successModalData.guestName}
+          ticketType={successModalData.ticketType}
+          count={successModalData.count}
+          message={successModalData.message}
         />
       )}
     </SafeAreaView>
