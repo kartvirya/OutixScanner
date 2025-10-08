@@ -1278,6 +1278,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
     // First, check if this is a mock QR code for testing
     if (scanCode.startsWith('MOCK_QR_')) {
       // Mock validation for test QR code
+      const isGroupTicket = scanCode.includes('GROUP');
       return {
         error: false,
         msg: {
@@ -1291,7 +1292,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
             checkedin: 0,
             checkedin_date: '',
             totaladmits: '1',
-            admits: '1',
+            admits: isGroupTicket ? '4' : '1',
             available: 1,
             price: '50.00',
             remarks: 'Test ticket',
@@ -1306,7 +1307,37 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
             picture_display: '',
             scannable: '1',
             ticket_id: scanCode,
-            passout: '0'
+            passout: '0',
+            // Add availabletickets for group testing
+            availabletickets: isGroupTicket ? [
+              {
+                id: 'MOCK_TICKET_1',
+                booking_id: 'MOCK_BOOKING_123',
+                ticket_identifier: 'MOCK123TICKET1',
+                ticket_title: 'Mock General Admission',
+                checkedin: '0',
+                ticket_id: 'MOCK_TICKET_1',
+                admit_name: 'John Doe'
+              },
+              {
+                id: 'MOCK_TICKET_2',
+                booking_id: 'MOCK_BOOKING_123',
+                ticket_identifier: 'MOCK123TICKET2',
+                ticket_title: 'Mock General Admission',
+                checkedin: '0',
+                ticket_id: 'MOCK_TICKET_2',
+                admit_name: 'Jane Doe'
+              },
+              {
+                id: 'MOCK_TICKET_3',
+                booking_id: 'MOCK_BOOKING_123',
+                ticket_identifier: 'MOCK123TICKET3',
+                ticket_title: 'Mock General Admission',
+                checkedin: '0',
+                ticket_id: 'MOCK_TICKET_3',
+                admit_name: 'Bob Smith'
+              }
+            ] : undefined
           }
         },
         status: 200

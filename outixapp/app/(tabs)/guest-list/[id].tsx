@@ -60,7 +60,7 @@ interface Attendee {
 
 export default function GuestListPage() {
   const { colors, isDarkMode } = useTheme();
-  const { onGuestListRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
+  // Removed automatic refresh triggers - only refresh on PTR or app open
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -746,9 +746,7 @@ export default function GuestListPage() {
     // Also update the checked-in guests list to keep counts in sync
     await fetchCheckedInGuests();
     
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const handleManualScanIn = async (guest: Attendee) => {
@@ -990,9 +988,7 @@ export default function GuestListPage() {
     
     console.log(`🎉 Manual check-in process completed for ${guest.name}`);
     
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const performManualScanOut = async (guest: Attendee) => {
@@ -1153,9 +1149,7 @@ export default function GuestListPage() {
     
     console.log(`🎉 Manual check-out process completed for ${guest.name}`);
     
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   // Use the dedicated checked-in guests list for accurate count (same as event details page)

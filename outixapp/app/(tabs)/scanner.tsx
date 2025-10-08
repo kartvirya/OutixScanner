@@ -20,7 +20,6 @@ import { useTheme } from '../../context/ThemeContext';
 import {
     QRValidationResponse,
     getEvents,
-    getGroupTickets,
     validateQRCode,
     scanQRCode,
     unscanQRCode
@@ -40,6 +39,10 @@ interface GroupTicket {
   ticketIdentifier: string;
   isCheckedIn: boolean;
   qrCode: string;
+  bookingId?: string;
+  referenceNum?: string;
+  price?: string;
+  ticketId?: string;
 }
 
 interface GroupScanData {
@@ -57,7 +60,7 @@ const DEBUG_MODE = false;
 export default function ScannerScreen() {
   const { colors, isDark, selectedEventId, selectedEventName } = useTheme();
   const isFocused = useIsFocused();
-  const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
+  // Removed automatic refresh triggers - only refresh on PTR or app open
   const { eventId: paramEventId, returnTo } = useLocalSearchParams();
   
   const [currentEventId, setCurrentEventId] = useState<string>('');
@@ -456,122 +459,134 @@ export default function ScannerScreen() {
       
       console.log('✅ Validation complete:', JSON.stringify(validationResult, null, 2));
 
-      // Check for group booking regardless of scan mode
-      console.log('Checking for group booking...');
+      // Check for group booking using availabletickets field from validation response
+      console.log('Checking for group booking using availabletickets field...');
       
-      try {
-        console.log('🔍 Fetching group tickets for QR:', data);
-        const groupResult = await getGroupTickets(currentEventId, data, validationResult);
-        console.log('📋 Group result:', groupResult);
+      // Extract availabletickets from validation response
+      const validationMsg = validationResult?.msg;
+      const ticketInfo = (validationMsg && typeof validationMsg === 'object' && 'info' in validationMsg) 
+        ? (validationMsg as any).info 
+        : null;
+      const availableTickets = ticketInfo?.availabletickets;
+      
+      console.log('📋 Available tickets from validation:', JSON.stringify(availableTickets, null, 2));
+      console.log('📋 Ticket info from validation:', JSON.stringify(ticketInfo, null, 2));
+      console.log('📋 Available tickets length:', availableTickets ? availableTickets.length : 'null/undefined');
+      console.log('📋 Is array check:', Array.isArray(availableTickets));
+      console.log('📋 Length > 1 check:', availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1);
+      
+      // If availabletickets has more than one ticket, it's a multiscan (group booking)
+      if (availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1) {
+        console.log('Group booking detected with', availableTickets.length, 'tickets');
         
-        // If we found multiple tickets for the same purchaser, it's a group booking
-        if (!groupResult.error && groupResult.tickets && groupResult.tickets.length > 1) {
-          console.log('Group booking detected with', groupResult.tickets.length, 'tickets');
+        // Convert availabletickets to the format expected by ticket-action screen
+        const groupTickets = availableTickets.map((ticket: any) => {
+          const guestName = ticket.admit_name || ticketInfo.fullname || 'Guest';
+          const ticketType = ticket.ticket_title || ticketInfo.ticket_title || 'Ticket';
+          // Use the unique ticket ID from the availabletickets array, not the booking ID
+          const uniqueTicketId = ticket.id || ticket.ticket_id || ticket.ticket_identifier;
           
-          // Show all tickets that can be processed in this scan mode (including the scanned ticket)
-          const scannedTicket = groupResult.tickets.find((ticket: GroupTicket) => 
-            ticket.qrCode === data || ticket.ticketIdentifier === data || ticket.id === data
-          );
-          
-          const relevantTickets = scanMode === 'scan-in' 
-            ? groupResult.tickets.filter((ticket: GroupTicket) => {
-                const canCheckIn = !ticket.isCheckedIn;
-                console.log(`Ticket ${ticket.id}: canCheckIn=${canCheckIn}, isCheckedIn=${ticket.isCheckedIn}, qrCode=${ticket.qrCode}, ticketId=${ticket.ticketIdentifier}`);
-                return canCheckIn;
-              })
-            : groupResult.tickets.filter((ticket: GroupTicket) => {
-                const canCheckOut = ticket.isCheckedIn;
-                console.log(`Ticket ${ticket.id}: canCheckOut=${canCheckOut}, isCheckedIn=${ticket.isCheckedIn}, qrCode=${ticket.qrCode}, ticketId=${ticket.ticketIdentifier}`);
-                return canCheckOut;
-              });
-          
-          console.log('Relevant tickets for', scanMode, ':', relevantTickets.length);
-          console.log('Scanned ticket found:', scannedTicket ? 'Yes' : 'No');
-          console.log('Scanned QR code:', data);
-          console.log('All tickets:', groupResult.tickets.map((t: GroupTicket) => ({
-            id: t.id,
-            qrCode: t.qrCode,
-            ticketIdentifier: t.ticketIdentifier,
-            isCheckedIn: t.isCheckedIn,
-            matchesScanned: t.qrCode === data || t.ticketIdentifier === data || t.id === data
+          return {
+            id: ticket.ticket_identifier,
+            name: `${guestName} (Ticket ID: ${uniqueTicketId})`,
+            email: ticketInfo.email || '',
+            ticketType: ticketType,
+            ticketIdentifier: ticket.ticket_identifier,
+            isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1,
+            qrCode: ticket.ticket_identifier,
+            // Add additional fields for better display
+            bookingId: ticket.booking_id || ticketInfo.booking_id || '',
+            referenceNum: ticketInfo.reference_num || '',
+            price: ticketInfo.price || '0.00',
+            ticketId: ticket.id || ticket.ticket_id || ''
+          };
+        });
+        
+        console.log('📋 Mapped group tickets:', JSON.stringify(groupTickets, null, 2));
+        
+        // Filter tickets based on scan mode
+        const relevantTickets = scanMode === 'scan-in' 
+          ? groupTickets.filter((ticket: any) => !ticket.isCheckedIn)
+          : groupTickets.filter((ticket: any) => ticket.isCheckedIn);
+        
+        console.log('Relevant tickets for', scanMode, ':', relevantTickets.length);
+        console.log('All available tickets:', groupTickets.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          isCheckedIn: t.isCheckedIn,
+          ticketIdentifier: t.ticketIdentifier
+        })));
+        
+        if (relevantTickets.length > 0) {
+          // Show all relevant group tickets for selection
+          console.log('Showing group tickets for selection:', relevantTickets.map((t: any) => ({ 
+            id: t.id, 
+            name: t.name,
+            email: t.email 
           })));
-          console.log('Filtered relevant tickets:', relevantTickets.map((t: GroupTicket) => ({
-            id: t.id,
-            qrCode: t.qrCode,
-            ticketIdentifier: t.ticketIdentifier,
-            isCheckedIn: t.isCheckedIn,
-            matchesScanned: t.qrCode === data || t.ticketIdentifier === data || t.id === data
-          })));
-          console.log('Filter criteria - Scanned QR:', data, 'Scan mode:', scanMode);
           
-          if (relevantTickets.length > 0) {
-            // Show all relevant group tickets (including scanned one)
-            console.log('Showing group tickets for selection:', relevantTickets.map((t: GroupTicket) => ({ 
-              id: t.id, 
-              name: t.name,
-              email: t.email 
-            })));
-            
-            console.log('Setting up group redirect with scanned ticket pre-selected');
-            
-            // Navigate to ticket action screen for group tickets
-            // Remove sound here - will play after successful completion in ticket-action
-            setShowCamera(false); // Turn off camera
-            setIsScanning(false);
-            setIsNavigatingAway(true); // Mark that we're navigating away
-            router.push({
-              pathname: '/(tabs)/ticket-action',
-              params: {
-                eventId: currentEventId,
-                scanMode: scanMode,
-                tickets: JSON.stringify(relevantTickets),
-                purchaser: JSON.stringify(groupResult.purchaser),
-                scannedTicketId: data, // Pass the scanned ticket ID for pre-selection
-                returnToScanner: returnTo || '' // Pass the return path for proper back navigation
-              }
-            });
-            return;
-          } else {
-            // No remaining tickets to process in the group
-            console.log('No additional tickets to process in group');
+          console.log('Setting up group redirect with scanned ticket pre-selected');
+          
+          // Navigate to ticket action screen for group tickets
+          setShowCamera(false); // Turn off camera
+          setIsScanning(false);
+          setIsNavigatingAway(true); // Mark that we're navigating away
+          router.push({
+            pathname: '/(tabs)/ticket-action',
+            params: {
+              eventId: currentEventId,
+              scanMode: scanMode,
+              tickets: JSON.stringify(relevantTickets),
+              purchaser: JSON.stringify({
+                name: ticketInfo.fullname,
+                email: ticketInfo.email
+              }),
+              scannedTicketId: data, // Pass the scanned ticket ID for pre-selection
+              returnToScanner: returnTo || '' // Pass the return path for proper back navigation
+            }
+          });
+          return;
+        } else {
+          // No remaining tickets to process in the group
+          console.log('No additional tickets to process in group');
 
-            // Construct a clearer message depending on scan mode
-            const purchaserName = groupResult?.purchaser?.name || scannedTicket?.name || 'Group';
-            const message = scanMode === 'scan-in'
-              ? 'All tickets in this group are already checked in.'
-              : 'No tickets in this group are currently checked in.';
+          // Construct a clearer message depending on scan mode
+          const purchaserName = ticketInfo.fullname;
+          const message = scanMode === 'scan-in'
+            ? 'All tickets in this group are already checked in.'
+            : 'No tickets in this group are currently checked in.';
 
-            // Haptic/error feedback and a visible log/modal
-            feedback.alreadyScanned();
-            showErrorModal({
-              type: 'already-scanned',
-              title: scanMode === 'scan-in' ? 'Already Checked In' : 'Nothing To Check Out',
-              message,
-              guestName: purchaserName,
-              ticketType: 'Group Booking',
-              checkedInDate: undefined
-            });
+          // Haptic/error feedback and a visible log/modal
+          feedback.alreadyScanned();
+          showErrorModal({
+            type: 'already-scanned',
+            title: scanMode === 'scan-in' ? 'Already Checked In' : 'Nothing To Check Out',
+            message,
+            guestName: purchaserName,
+            ticketType: 'Group Booking',
+            checkedInDate: undefined
+          });
 
-            // Also trigger refreshes
-            triggerGuestListRefresh(currentEventId);
-            triggerAttendanceRefresh(currentEventId);
-            triggerAnalyticsRefresh();
+          // No automatic refresh - only refresh on PTR or app open
 
-            // Fail-safe: auto-resume scanning if user doesn't interact
-            setTimeout(() => {
-              if (!isScanning) {
-                console.log('⏳ Auto-resuming scanning after group with no remaining tickets');
-                setIsScanning(true);
-                setShowCamera(true);
-              }
-            }, 3000);
-            return;
-          }
+          // Fail-safe: auto-resume scanning if user doesn't interact
+          setTimeout(() => {
+            if (!isScanning) {
+              console.log('⏳ Auto-resuming scanning after group with no remaining tickets');
+              setIsScanning(true);
+              setShowCamera(true);
+            }
+          }, 3000);
+          return;
         }
-      } catch (groupError) {
-        console.error('❌ Group scan error:', groupError);
-        console.log('🔄 Continuing with individual scan due to group scan error');
-        // Continue with individual scan
+      } else {
+        console.log('Single ticket detected - proceeding with direct scan');
+        console.log('📋 Why single ticket?', {
+          availableTickets: availableTickets,
+          isArray: Array.isArray(availableTickets),
+          length: availableTickets ? availableTickets.length : 'null/undefined',
+          condition: !(availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1)
+        });
       }
       
       // Handle as individual ticket - scan in mode
@@ -843,10 +858,7 @@ export default function ScannerScreen() {
         feedback.checkOut();
       }
 
-      // Trigger refreshes
-      triggerGuestListRefresh(currentEventId);
-      triggerAttendanceRefresh(currentEventId);
-      triggerAnalyticsRefresh();
+      // No automatic refresh - only refresh on PTR or app open
 
       // Show success modal
       showSuccessModal({
