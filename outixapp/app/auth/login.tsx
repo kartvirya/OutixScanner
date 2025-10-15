@@ -37,15 +37,8 @@ export default function LoginScreen() {
       
       if (token) {
         console.log('Login successful');
-        Alert.alert('Success', 'Login successful!', [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate to main app
-              router.replace('/(tabs)');
-            }
-          }
-        ]);
+        // Navigate directly to main app without showing success modal
+        router.replace('/(tabs)');
       } else {
         console.log('Login failed - invalid credentials');
         Alert.alert(
@@ -81,7 +74,7 @@ export default function LoginScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Outix Check-In</Text>
-            <Text style={[styles.subtitle, { color: colors.secondary }]}>
+            <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
               Guest Management System
             </Text>
           </View>
@@ -90,11 +83,11 @@ export default function LoginScreen() {
           <View style={styles.form}>
             {/* Username Field */}
             <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-              <User size={20} color={colors.secondary} style={styles.inputIcon} />
+              <User size={20} color="#8E8E93" style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
                 placeholder="Username or Email"
-                placeholderTextColor={colors.secondary}
+                placeholderTextColor={"#8E8E93"}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -106,11 +99,11 @@ export default function LoginScreen() {
 
             {/* Password Field */}
             <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
-              <Lock size={20} color={colors.secondary} style={styles.inputIcon} />
+              <Lock size={20} color={"#8E8E93"} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
                 placeholder="Password"
-                placeholderTextColor={colors.secondary}
+                placeholderTextColor={"#8E8E93"}
                 value={password}
                 onChangeText={setPassword} 
                 secureTextEntry={!showPassword}
@@ -122,9 +115,9 @@ export default function LoginScreen() {
                 disabled={isLoading}
               >
                 {showPassword ? (
-                  <EyeOff size={20} color={colors.secondary} />
+                  <EyeOff size={20} color={"#8E8E93"} />
                 ) : (
-                  <Eye size={20} color={colors.secondary} />
+                  <Eye size={20} color={"#8E8E93"} />
                 )}
               </TouchableOpacity>
             </View>
@@ -140,7 +133,10 @@ export default function LoginScreen() {
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.loadingText}>Signing In...</Text>
+                </View>
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
               )}
@@ -160,11 +156,23 @@ export default function LoginScreen() {
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: colors.secondary }]}>
+            <Text style={[styles.footerText, { color: "#8E8E93" }]}>
               Powered by Outix
             </Text>
           </View>
         </View>
+
+        {/* Loading Overlay */}
+        {isLoading && (
+          <View style={[styles.loadingOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.3)' }]}>
+            <View style={[styles.loadingModal, { backgroundColor: colors.card }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingModalText, { color: colors.text }]}>
+                Authenticating...
+              </Text>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -235,6 +243,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
   forgotButton: {
     alignItems: 'center',
     marginTop: 16,
@@ -251,5 +270,37 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingModal: {
+    paddingHorizontal: 32,
+    paddingVertical: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loadingModalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    textAlign: 'center',
   },
 });

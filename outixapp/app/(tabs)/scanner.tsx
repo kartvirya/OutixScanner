@@ -423,11 +423,11 @@ export default function ScannerScreen() {
         };
       } else {
         try {
-          const validationTimeout = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Validation timed out')), 5000)
-          );
-          const validationPromise = validateQRCode(currentEventId, data);
-          validationResult = await Promise.race([validationPromise, validationTimeout]);
+            const validationTimeout = new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Validation timed out')), 5000)
+            );
+            const validationPromise = validateQRCode(currentEventId, data, scanMode);
+            validationResult = await Promise.race([validationPromise, validationTimeout]);
         } catch (validationError) {
           console.error('❌ Validation error:', validationError);
           feedback.checkInError();
@@ -474,9 +474,15 @@ export default function ScannerScreen() {
       console.log('📋 Available tickets length:', availableTickets ? availableTickets.length : 'null/undefined');
       console.log('📋 Is array check:', Array.isArray(availableTickets));
       console.log('📋 Length > 1 check:', availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1);
+      console.log('📋 Scan mode:', scanMode);
+      console.log('📋 Full validation result:', JSON.stringify(validationResult, null, 2));
       
-      // If availabletickets has more than one ticket, it's a multiscan (group booking)
-      if (availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1) {
+      // Check if this is a group booking
+      // Group booking: availabletickets has more than 1 ticket OR main ticket admits > 1
+      const isGroupBooking = (availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1) ||
+                            (ticketInfo.admits && parseInt(ticketInfo.admits) > 1);
+      
+      if (isGroupBooking) {
         console.log('Group booking detected with', availableTickets.length, 'tickets');
         
         // Convert availabletickets to the format expected by ticket-action screen
@@ -505,9 +511,16 @@ export default function ScannerScreen() {
         console.log('📋 Mapped group tickets:', JSON.stringify(groupTickets, null, 2));
         
         // Filter tickets based on scan mode
-        const relevantTickets = scanMode === 'scan-in' 
+        let relevantTickets = scanMode === 'scan-in'
           ? groupTickets.filter((ticket: any) => !ticket.isCheckedIn)
           : groupTickets.filter((ticket: any) => ticket.isCheckedIn);
+
+        // In scan-out mode, some APIs may not flag checked-in correctly.
+        // If nothing qualifies, fall back to showing the entire group to let the user choose.
+        if (scanMode === 'scan-out' && relevantTickets.length === 0) {
+          console.log('⚠️ No tickets marked as checked-in for pass-out. Falling back to full group list.');
+          relevantTickets = groupTickets;
+        }
         
         console.log('Relevant tickets for', scanMode, ':', relevantTickets.length);
         console.log('All available tickets:', groupTickets.map((t: any) => ({
@@ -580,14 +593,73 @@ export default function ScannerScreen() {
           return;
         }
       } else {
-        console.log('Single ticket detected - proceeding with direct scan');
-        console.log('📋 Why single ticket?', {
-          availableTickets: availableTickets,
-          isArray: Array.isArray(availableTickets),
-          length: availableTickets ? availableTickets.length : 'null/undefined',
-          condition: !(availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1)
-        });
+      console.log('Single ticket detected - proceeding with direct scan');
+      console.log('📋 Why single ticket?', {
+        availableTickets: availableTickets,
+        isArray: Array.isArray(availableTickets),
+        length: availableTickets ? availableTickets.length : 'null/undefined',
+        admits: ticketInfo.admits,
+        isGroupBooking: isGroupBooking
+      });
+      
+      // Fallback for pass-out: If availabletickets is missing, try getGroupTickets
+      // This handles cases where the API doesn't return availabletickets for pass-out scenarios
+      if (scanMode === 'scan-out' && (!availableTickets || !Array.isArray(availableTickets) || availableTickets.length <= 1)) {
+        console.log('🔄 Pass-out mode: availabletickets missing, trying getGroupTickets fallback...');
+        try {
+          const { getGroupTickets } = await import('../../services/api');
+          const groupResult = await getGroupTickets(currentEventId, data, validationResult);
+          console.log('📋 getGroupTickets result for pass-out:', groupResult);
+          
+          if (!groupResult.error && groupResult.tickets && groupResult.tickets.length > 1) {
+            console.log('🎉 Group booking detected via getGroupTickets for pass-out with', groupResult.tickets.length, 'tickets');
+            
+            // Convert groupResult.tickets to the format expected by ticket-action screen
+            const groupTickets = groupResult.tickets.map((ticket: any) => ({
+              id: ticket.ticket_identifier,
+              name: `${ticket.name} (Ticket ID: ${ticket.id})`,
+              email: ticket.email,
+              ticketType: ticket.ticketType,
+              ticketIdentifier: ticket.ticket_identifier,
+              isCheckedIn: ticket.isCheckedIn,
+              qrCode: ticket.qrCode,
+              bookingId: ticket.bookingId || '',
+              referenceNum: ticket.referenceNum || '',
+              price: ticket.price || '0.00',
+              ticketId: ticket.id || ''
+            }));
+            
+            // For pass-out, show all tickets (let user choose which ones to pass out)
+            const relevantTickets = groupTickets.filter((ticket: any) => ticket.isCheckedIn);
+            
+            console.log('Relevant tickets for pass-out:', relevantTickets.length);
+            
+            if (relevantTickets.length > 0) {
+              console.log('Setting up group redirect with getGroupTickets data for pass-out');
+              
+              // Navigate to ticket action screen for group tickets
+              setShowCamera(false);
+              setIsScanning(false);
+              setIsNavigatingAway(true);
+              router.push({
+                pathname: '/(tabs)/ticket-action',
+                params: {
+                  eventId: currentEventId,
+                  scanMode: scanMode,
+                  tickets: JSON.stringify(relevantTickets),
+                  purchaser: JSON.stringify(groupResult.purchaser),
+                  scannedTicketId: data,
+                  returnToScanner: returnTo || ''
+                }
+              });
+              return;
+            }
+          }
+        } catch (groupError) {
+          console.error('❌ getGroupTickets fallback error for pass-out:', groupError);
+        }
       }
+    }
       
       // Handle as individual ticket - scan in mode
       if (scanMode === 'scan-in') {
@@ -747,12 +819,32 @@ export default function ScannerScreen() {
             ? (validationResult.msg as any).info
             : {};
           
-          const isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
+          // For pass-out mode, check the availabletickets array for checked-in status
+          // since the API may return different checked-in status in main info vs availabletickets
+          let isCheckedIn = false;
+          
+          if (info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
+            // Check the first ticket in availabletickets for checked-in status
+            const ticketInAvailableTickets = info.availabletickets[0];
+            isCheckedIn = ticketInAvailableTickets.checkedin === 1 || ticketInAvailableTickets.checkedin === '1' || ticketInAvailableTickets.checkedin === true;
+            console.log('📋 Pass-out: Checking availabletickets[0].checkedin:', ticketInAvailableTickets.checkedin, '→ isCheckedIn:', isCheckedIn);
+          } else {
+            // Fallback to main ticket info if no availabletickets
+            isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
+            console.log('📋 Pass-out: Fallback to main info.checkedin:', info?.checkedin, '→ isCheckedIn:', isCheckedIn);
+          }
           
           if (!isCheckedIn) {
             // Ticket is valid but not checked in - show error
             let guestName = info?.fullname || 'Guest';
             let ticketType = info?.ticket_title || 'Ticket';
+            
+            // Use availabletickets data if available for better guest info
+            if (info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
+              const ticketInAvailableTickets = info.availabletickets[0];
+              guestName = ticketInAvailableTickets.admit_name || info?.fullname || 'Guest';
+              ticketType = ticketInAvailableTickets.ticket_title || info?.ticket_title || 'Ticket';
+            }
             
             feedback.checkInError();
             showErrorModal({
@@ -824,8 +916,16 @@ export default function ScannerScreen() {
         ? (validationResult.msg as any).info
         : {};
 
-      const guestName = info?.fullname || 'Guest';
-      const ticketType = info?.ticket_title || 'Ticket';
+      let guestName = info?.fullname || 'Guest';
+      let ticketType = info?.ticket_title || 'Ticket';
+
+      // For pass-out mode, use availabletickets data if available for better guest info
+      if (mode === 'scan-out' && info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
+        const ticketInAvailableTickets = info.availabletickets[0];
+        guestName = ticketInAvailableTickets.admit_name || info?.fullname || 'Guest';
+        ticketType = ticketInAvailableTickets.ticket_title || info?.ticket_title || 'Ticket';
+        console.log('📋 Pass-out: Using availabletickets data - Guest:', guestName, 'Ticket:', ticketType);
+      }
 
       // Call the appropriate API function directly
       let result;

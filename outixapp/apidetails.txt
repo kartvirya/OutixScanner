@@ -1,0 +1,403 @@
+Scanner API Details
+
+
+BASEURL: https://www.outix.co/apis
+
+
+Auth (POST)
+ 
+URL:/auth
+
+Params:
+Username: Outix@thebend.co
+Password:   Scan$9841
+
+Returns 
+Auth_Token
+ 
+
+
+List Events (GET)
+
+ 
+URL: /events
+
+Input Params (header)
+Auth-Token: (from Login)
+
+
+Get Event Detail (GET)
+
+ 
+URL: /events/:eventid
+
+Input Params (header)
+Auth-Token: (from Login)
+
+Returns:
+{
+   "msg": {
+       "total": 1200,
+       "scanned": 68,
+       "tobescanned": 1132,
+       "datas": "54655"
+   },
+   "error": false,
+   "status": 200
+}
+
+
+
+
+
+
+GUESTLIST(GET)
+
+URL: /guestlist/:eventid
+
+Eventid returned from list events
+
+Auth-Token: (from Login)
+ 
+
+Returns:
+Guestlist Json (Multiple values)
+{
+           "booking_reference": "2219667572",
+           "ticket_identifier": "11276388SUBUZUDE",
+           "checkedin": "0",
+           "available": "1",
+           "purchased": "1",
+           "voucher": "",
+           "purchased_date": "2024-10-18",
+           "payment_type": "11",
+           "Event Name": "The Bend 500 - 2025 Supercars Championship",
+           "notes": "",
+           "ticket_title": "The International Club - Weekend (Sat + Sun)",
+           "dob": "1962-02-14",
+           "purchased_by": "Tracy Hill",
+           "email": "Hillfish1@gmail.com",
+           "mobile": "0427 604 047",
+           "card": "XXXX",
+           "admit_name": "",
+           "customer_reference": "1962898019",
+           "booking_fee": "$0.00",
+           "discounts": "$0.00",
+           "taxes": "$81.82",
+           "price": "$900.00"
+       }
+
+
+
+
+Scanner API Details
+
+
+BASEURL: https://www.outix.co/apis
+
+
+Auth (POST)
+ 
+URL:/auth
+
+Params:
+Username: Outix@thebend.co
+Password:   Scan$9841
+
+Returns 
+Auth_Token
+ 
+
+
+List Events (GET)
+
+ 
+URL: /events
+
+Input Params (header)
+Auth-Token: (from Login)
+
+
+Get Event Detail (GET)
+
+ 
+URL: /events/:eventid
+
+Input Params (header)
+Auth-Token: (from Login)
+
+Returns:
+{
+   "msg": {
+       "total": 1200,
+       "scanned": 68,
+       "tobescanned": 1132,
+       "datas": "54655"
+   },
+   "error": false,
+   "status": 200
+}
+
+
+
+
+
+
+GUESTLIST(GET) Scanned only
+
+URL: /guestlist/:eventid?checkedin=1
+
+Eventid returned from list events
+
+Auth-Token: (from Login)
+ 
+
+Returns:
+Guestlist Json (Multiple values)
+{
+           "booking_reference": "2219667572",
+           "ticket_identifier": "11276388SUBUZUDE",
+           "checkedin": "0",
+           "available": "1",
+           "purchased": "1",
+           "voucher": "",
+           "purchased_date": "2024-10-18",
+           "payment_type": "11",
+           "Event Name": "The Bend 500 - 2025 Supercars Championship",
+           "notes": "",
+           "ticket_title": "The International Club - Weekend (Sat + Sun)",
+           "dob": "1962-02-14",
+           "purchased_by": "Tracy Hill",
+           "email": "Hillfish1@gmail.com",
+           "mobile": "0427 604 047",
+           "card": "XXXX",
+           "admit_name": "",
+           "customer_reference": "1962898019",
+           "booking_fee": "$0.00",
+           "discounts": "$0.00",
+           "taxes": "$81.82",
+           "price": "$900.00"
+       }
+
+Validate QR code/ Barcode(GET)
+
+URL: /validate/:eventid/:scancode
+
+Validates the QR code
+
+Auth-Token: (from Login)
+
+Returns:
+Admit Details Json 
+{
+   "error": false,
+   "msg": {
+       "message": "The International Club - Weekend (Sat + Sun) 1 Admit(s) ",
+       "info": {
+           "id": "7880418",
+           "booking_id": "11276388",
+           "reference_num": "2219667572",
+           "ticket_identifier": "11276388SUBUZUDE",
+           "ticket_title": "The International Club - Weekend (Sat + Sun)",
+           "checkedin": 0,
+           "checkedin_date": "0000-00-00 00:00:00",
+           "totaladmits": "1",
+           "admits": "2",
+           "available": 1,
+           "price": "900.00",
+           "remarks": "",
+           "email": "Hillfish1@gmail.com",
+           "fullname": "Tracy Hill",
+           "address": " ",
+           "notes": "",
+           "purchased_date": "2024-10-18 03:26:17",
+           "reason": "",
+           "message": "",
+           "mobile": "",
+           "picture_display": "",
+           "scannable": "1",
+           "ticket_id": "64599",
+           "passout": "0"
+       }
+   },
+   "status": 200
+}
+Scan QR code/ Barcode(GET)
+
+URL: /scan/:eventid/:scancode
+
+Scans the QR code
+
+Auth-Token: (from Login)
+
+Returns:
+Scan Success/Failure Message
+
+Success:
+
+{
+   "error": false,
+   "msg": {
+       "message": "1 Admit(s) checked In"
+   },
+   "status": 200
+}
+
+
+Failure:
+{
+   "error": true,
+   "msg": "Already Scanned Ticket, Cannot check in.",
+   "status": 404
+}
+
+
+
+
+
+
+Unscan QR code/ Barcode(GET)
+
+URL: /scan/:eventid/:scancode?unscan=1
+
+Unscans the QR code
+
+Auth-Token: (from Login)
+
+Returns:
+Unscan Success/Failure Message
+
+
+Success:
+{
+   "error": false,
+   "msg": {
+       "message": "Admit/ticket  unchecked. Ticket can be re-scanned."
+   },
+   "status": 200
+}
+
+
+
+
+
+Failure:
+
+{
+   "error": true,
+   "msg": "This ticket has not been used yet.",
+   "status": 404
+}
+
+
+List Registrations (GET)
+
+URL: /registrations
+
+Input Params (header)
+Auth-Token: (from Login)
+
+
+LISTWAIVERS(GET) 
+
+URL: /listwaivers/:eventid 
+
+Eventid returned from list registrations
+
+Auth-Token: (from Login)
+ 
+
+COMPETE WAIVERS(POST) 
+
+URL: /waiver/personal 
+
+waiverType : (Entrant/Crew)
+waiver_ref :(from listwaivers)
+first_name 
+last_name
+date_of_birth
+email_address
+mobile_number
+signed_by_parent
+parent_name
+witness_name
+applicant_name
+witness_address
+applicantSignFile
+witnessSignFile
+ 
+
+
+
+Auth-Token: (from Login)
+{
+    "error": false,
+    "msg": {
+        "message": "General Admission - Sunday 1 Admit(s) ",
+        "info": {
+            "id": "8338717",
+            "booking_id": "12549344",
+            "reference_num": "2590812946",
+            "ticket_identifier": "12549344ADUMYWYR",
+            "ticket_title": "General Admission - Sunday",
+            "checkedin": 0,
+            "checkedin_date": "0000-00-00 00:00:00",
+            "totaladmits": "1",
+            "admits": 4,
+            "available": 1,
+            "price": "54.50",
+            "remarks": "",
+            "email": "gtscreen@hotkey.net.au",
+            "fullname": "Gill Tremelling",
+            "address": " ",
+            "notes": "",
+            "purchased_date": "2025-10-07 10:48:52",
+            "reason": "",
+            "message": "",
+            "mobile": "",
+            "picture_display": "",
+            "scannable": "1",
+            "ticket_id": "65450",
+            "passout": "0",
+            "availabletickets": [
+                {
+                    "id": "8338715",
+                    "booking_id": "12549344",
+                    "ticket_identifier": "12549344ABYPUVE3",
+                    "ticket_title": "General Admission - Sunday",
+                    "checkedin": "0",
+                    "ticket_id": "65450",
+                    "admit_name": "Nigel Tremelling "
+                },
+                {
+                    "id": "8338716",
+                    "booking_id": "12549344",
+                    "ticket_identifier": "12549344A9E5YRA3",
+                    "ticket_title": "General Admission - Sunday",
+                    "checkedin": "0",
+                    "ticket_id": "65450",
+                    "admit_name": "Gill Tremelling "
+                },
+                {
+                    "id": "8338717",
+                    "booking_id": "12549344",
+                    "ticket_identifier": "12549344ADUMYWYR",
+                    "ticket_title": "General Admission - Sunday",
+                    "checkedin": "0",
+                    "ticket_id": "65450",
+                    "admit_name": "Jan Heemskerk"
+                },
+                {
+                    "id": "8338718",
+                    "booking_id": "12549344",
+                    "ticket_identifier": "12549344ETERU5YJ",
+                    "ticket_title": "General Admission - Sunday",
+                    "checkedin": "0",
+                    "ticket_id": "65450",
+                    "admit_name": "Agaat Heemskerk "
+                }
+            ]
+        }
+    },
+    "status": 200
+}

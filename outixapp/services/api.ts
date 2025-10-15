@@ -1180,16 +1180,25 @@ const extractUserData = (data: any): UserProfile => {
 export const isAuthenticated = async (): Promise<boolean> => {
   // If user has explicitly logged out, return false
   if (isLoggedOut) {
+    console.log('🔐 User has explicitly logged out - not authenticated');
     return false;
   }
   
-  // Only check in-memory token - don't auto-restore from storage
-  // This prevents auto-login behavior
+  // Check in-memory token first
   if (authToken) {
+    console.log('🔐 User authenticated with in-memory token');
     return true;
   }
   
-  // Don't auto-restore from storage - require explicit login
+  // Try to restore session from storage (unless explicitly logged out)
+  console.log('🔐 No in-memory token, attempting to restore session from storage...');
+  const restored = await restoreSession();
+  if (restored) {
+    console.log('🔐 Session restored successfully from storage');
+    return true;
+  }
+  
+  console.log('🔐 No stored session found - user not authenticated');
   return false;
 };
 
@@ -1245,14 +1254,16 @@ export const restoreSession = async (): Promise<boolean> => {
     // Check if we have a stored token
     const storedToken = await getStorageItem('auth_token');
     if (storedToken) {
-      console.log('Restoring session from stored token');
+      console.log('✅ Restoring session from stored token');
       authToken = storedToken;
-      isLoggedOut = false;
+      isLoggedOut = false; // Reset logout flag when restoring
       return true;
+    } else {
+      console.log('❌ No stored token found');
+      return false;
     }
-    return false;
   } catch (error) {
-    console.error('Error restoring session:', error);
+    console.error('❌ Error restoring session:', error);
     return false;
   }
 };
@@ -1271,14 +1282,16 @@ export const clearStoredSession = async (): Promise<void> => {
 };
 
 // Enhanced QR Code validation with better error handling
-export const validateQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+export const validateQRCode = async (eventId: string, scanCode: string, scanMode?: 'scan-in' | 'scan-out'): Promise<QRValidationResponse | null> => {
   try {
-    console.log(`Validating QR code for event ${eventId}, scancode: ${scanCode}`);
+    console.log(`Validating QR code for event ${eventId}, scancode: ${scanCode}, scanMode: ${scanMode || 'not specified'}`);
     
     // First, check if this is a mock QR code for testing
     if (scanCode.startsWith('MOCK_QR_')) {
       // Mock validation for test QR code
       const isGroupTicket = scanCode.includes('GROUP');
+      const isPassOut = scanCode.includes('PASSOUT') || scanCode.includes('CHECKOUT');
+      
       return {
         error: false,
         msg: {
@@ -1289,8 +1302,8 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
             reference_num: scanCode,
             ticket_identifier: scanCode,
             ticket_title: 'Mock General Admission',
-            checkedin: 0,
-            checkedin_date: '',
+            checkedin: isPassOut ? 1 : 0, // For pass-out, tickets should be checked in
+            checkedin_date: isPassOut ? '2024-01-01 10:00:00' : '0000-00-00 00:00:00',
             totaladmits: '1',
             admits: isGroupTicket ? '4' : '1',
             available: 1,
@@ -1315,7 +1328,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
                 booking_id: 'MOCK_BOOKING_123',
                 ticket_identifier: 'MOCK123TICKET1',
                 ticket_title: 'Mock General Admission',
-                checkedin: '0',
+                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
                 ticket_id: 'MOCK_TICKET_1',
                 admit_name: 'John Doe'
               },
@@ -1324,7 +1337,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
                 booking_id: 'MOCK_BOOKING_123',
                 ticket_identifier: 'MOCK123TICKET2',
                 ticket_title: 'Mock General Admission',
-                checkedin: '0',
+                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
                 ticket_id: 'MOCK_TICKET_2',
                 admit_name: 'Jane Doe'
               },
@@ -1333,7 +1346,7 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
                 booking_id: 'MOCK_BOOKING_123',
                 ticket_identifier: 'MOCK123TICKET3',
                 ticket_title: 'Mock General Admission',
-                checkedin: '0',
+                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
                 ticket_id: 'MOCK_TICKET_3',
                 admit_name: 'Bob Smith'
               }
@@ -1344,8 +1357,14 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
       };
     }
     
+    // Build the URL with scanmode parameter if provided
+    let validateUrl = `/validate/${eventId}/${scanCode}`;
+    if (scanMode === 'scan-out') {
+      validateUrl += '?scanmode=ScanOut';
+    }
+    
     // Make direct API request to validate endpoint
-    const response = await api.get(`/validate/${eventId}/${scanCode}`, {
+    const response = await api.get(validateUrl, {
       timeout: 30000
     });
     
