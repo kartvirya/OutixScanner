@@ -1005,6 +1005,16 @@ export interface TicketInfo {
   scannable: string;
   ticket_id: string;
   passout: string;
+  availabletickets?: Array<{
+    id: string;
+    booking_id: string;
+    ticket_identifier: string;
+    ticket_title: string;
+    checkedin: string;
+    passout?: string;
+    ticket_id: string;
+    admit_name?: string;
+  }>;
 }
 
 export interface QRValidationResponse {
@@ -1362,6 +1372,9 @@ export const validateQRCode = async (eventId: string, scanCode: string, scanMode
     if (scanMode === 'scan-out') {
       validateUrl += '?scanmode=ScanOut';
     }
+    
+    console.log(`🌐 Making validation API call to: ${validateUrl}`);
+    console.log(`🌐 Scan mode: ${scanMode}`);
     
     // Make direct API request to validate endpoint
     const response = await api.get(validateUrl, {

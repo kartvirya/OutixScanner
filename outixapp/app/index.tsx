@@ -16,11 +16,10 @@ export default function Index() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('🔐 Checking authentication status...');
+        console.log('Checking authentication status...');
         
         // Check if user is already authenticated
         const authenticated = await isAuthenticated();
-        console.log('🔐 Authentication result:', authenticated);
         
         if (authenticated) {
           console.log('User is already authenticated');

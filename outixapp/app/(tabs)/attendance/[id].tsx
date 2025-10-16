@@ -70,7 +70,7 @@ interface Attendee {
 
 export default function AttendancePage() {
   const { colors, isDarkMode } = useTheme();
-  // Removed automatic refresh triggers - only refresh on PTR or app open
+  const { onAttendanceRefresh, triggerAttendanceRefresh, triggerGuestListRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -507,7 +507,9 @@ export default function AttendancePage() {
     console.log(`Checked in ${ticketInfo.fullname} (awaiting server time)`);
     feedback.checkIn();
     
-    // No automatic refresh - only refresh on PTR or app open
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
@@ -523,7 +525,9 @@ export default function AttendancePage() {
     console.log(`Checked out ${ticketInfo.fullname}`);
     feedback.checkOut();
     
-    // No automatic refresh - only refresh on PTR or app open
+    // Trigger refresh for other components
+    triggerGuestListRefresh(eventId);
+    triggerAnalyticsRefresh();
   };
 
   const testNetworkConnectivity = async () => {

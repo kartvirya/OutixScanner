@@ -39,7 +39,7 @@ export const options = { title: 'Ticket scan' } as const;
 
 export default function TicketActionScreen() {
   const { colors, isDark } = useTheme();
-  // Removed automatic refresh triggers - only refresh on PTR or app open
+  const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
@@ -158,7 +158,9 @@ export default function TicketActionScreen() {
       } else {
         feedback.checkOut();
       }
-      // No automatic refresh - only refresh on PTR or app open
+      triggerGuestListRefresh(eventId);
+      triggerAttendanceRefresh(eventId);
+      triggerAnalyticsRefresh();
 
       // Show success modal
       const isGroupOperation = selectedTickets.size > 1;

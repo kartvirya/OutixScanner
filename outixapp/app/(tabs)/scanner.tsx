@@ -56,11 +56,13 @@ interface GroupScanData {
 
 // DEBUG MODE - Set to true to bypass API calls
 const DEBUG_MODE = false;
+// FORCE GROUP MODE - Set to true to force group detection for testing
+const FORCE_GROUP_MODE = true;
 
 export default function ScannerScreen() {
   const { colors, isDark, selectedEventId, selectedEventName } = useTheme();
   const isFocused = useIsFocused();
-  // Removed automatic refresh triggers - only refresh on PTR or app open
+  const { triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
   const { eventId: paramEventId, returnTo } = useLocalSearchParams();
   
   const [currentEventId, setCurrentEventId] = useState<string>('');
@@ -423,11 +425,11 @@ export default function ScannerScreen() {
         };
       } else {
         try {
-            const validationTimeout = new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Validation timed out')), 5000)
-            );
-            const validationPromise = validateQRCode(currentEventId, data, scanMode);
-            validationResult = await Promise.race([validationPromise, validationTimeout]);
+          const validationTimeout = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Validation timed out')), 5000)
+          );
+          const validationPromise = validateQRCode(currentEventId, data, scanMode);
+          validationResult = await Promise.race([validationPromise, validationTimeout]);
         } catch (validationError) {
           console.error('❌ Validation error:', validationError);
           feedback.checkInError();
@@ -458,35 +460,62 @@ export default function ScannerScreen() {
       }
       
       console.log('✅ Validation complete:', JSON.stringify(validationResult, null, 2));
+      console.log('✅ Validation result type:', typeof validationResult);
+      console.log('✅ Validation result msg type:', typeof validationResult?.msg);
+      console.log('✅ Raw validation response keys:', validationResult ? Object.keys(validationResult) : 'null');
+      if (validationResult?.msg && typeof validationResult.msg === 'object') {
+        console.log('✅ Validation msg keys:', Object.keys(validationResult.msg));
+      }
 
       // Check for group booking using availabletickets field from validation response
       console.log('Checking for group booking using availabletickets field...');
       
       // Extract availabletickets from validation response
       const validationMsg = validationResult?.msg;
+      console.log('📋 Validation msg:', validationMsg);
+      console.log('📋 Validation msg type:', typeof validationMsg);
+      console.log('📋 Validation msg has info?', validationMsg && typeof validationMsg === 'object' && 'info' in validationMsg);
+      
       const ticketInfo = (validationMsg && typeof validationMsg === 'object' && 'info' in validationMsg) 
         ? (validationMsg as any).info 
         : null;
+      console.log('📋 Ticket info extracted:', ticketInfo);
+      
       const availableTickets = ticketInfo?.availabletickets;
       
       console.log('📋 Available tickets from validation:', JSON.stringify(availableTickets, null, 2));
       console.log('📋 Ticket info from validation:', JSON.stringify(ticketInfo, null, 2));
-      console.log('📋 Available tickets length:', availableTickets ? availableTickets.length : 'null/undefined');
-      console.log('📋 Is array check:', Array.isArray(availableTickets));
-      console.log('📋 Length > 1 check:', availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1);
-      console.log('📋 Scan mode:', scanMode);
-      console.log('📋 Full validation result:', JSON.stringify(validationResult, null, 2));
+      console.log('📋 Available tickets length:', availableTickets ? availableTickets.length : 'undefined');
+      console.log('📋 Is availabletickets array?', Array.isArray(availableTickets));
       
-      // Check if this is a group booking
-      // Group booking: availabletickets has more than 1 ticket OR main ticket admits > 1
-      const isGroupBooking = (availableTickets && Array.isArray(availableTickets) && availableTickets.length > 1) ||
-                            (ticketInfo.admits && parseInt(ticketInfo.admits) > 1);
+      // If availabletickets has more than one ticket, it's a multiscan (group booking)
+      // Also check if there's only 1 ticket but it's part of a group (check admits field)
+      const isGroupBooking = FORCE_GROUP_MODE || (
+        availableTickets && Array.isArray(availableTickets) && (
+          availableTickets.length > 1 || 
+          (availableTickets.length === 1 && ticketInfo && parseInt(ticketInfo.admits) > 1)
+        )
+      );
+      
+      console.log('📋 Force group mode:', FORCE_GROUP_MODE);
+      console.log('📋 Is group booking:', isGroupBooking);
       
       if (isGroupBooking) {
-        console.log('Group booking detected with', availableTickets.length, 'tickets');
+        console.log('Group booking detected with', availableTickets ? availableTickets.length : 'N/A', 'tickets');
+        
+        // If FORCE_GROUP_MODE is enabled but no availableTickets, create mock group data
+        const ticketsToProcess = availableTickets || [{
+          id: data,
+          booking_id: ticketInfo?.booking_id || 'mock_booking',
+          ticket_identifier: data,
+          ticket_title: ticketInfo?.ticket_title || 'Mock Ticket',
+          checkedin: scanMode === 'scan-in' ? '0' : '1',
+          ticket_id: ticketInfo?.ticket_id || data,
+          admit_name: ticketInfo?.fullname || 'Mock Guest'
+        }];
         
         // Convert availabletickets to the format expected by ticket-action screen
-        const groupTickets = availableTickets.map((ticket: any) => {
+        const groupTickets = ticketsToProcess.map((ticket: any) => {
           const guestName = ticket.admit_name || ticketInfo.fullname || 'Guest';
           const ticketType = ticket.ticket_title || ticketInfo.ticket_title || 'Ticket';
           // Use the unique ticket ID from the availabletickets array, not the booking ID
@@ -494,7 +523,7 @@ export default function ScannerScreen() {
           
           return {
             id: ticket.ticket_identifier,
-            name: `${guestName} (Ticket ID: ${uniqueTicketId})`,
+            name: `${guestName} - ${ticketType} (Ticket ID: ${uniqueTicketId})`,
             email: ticketInfo.email || '',
             ticketType: ticketType,
             ticketIdentifier: ticket.ticket_identifier,
@@ -509,18 +538,12 @@ export default function ScannerScreen() {
         });
         
         console.log('📋 Mapped group tickets:', JSON.stringify(groupTickets, null, 2));
+        console.log('📋 Tickets to process count:', ticketsToProcess.length);
         
         // Filter tickets based on scan mode
-        let relevantTickets = scanMode === 'scan-in'
+        const relevantTickets = scanMode === 'scan-in' 
           ? groupTickets.filter((ticket: any) => !ticket.isCheckedIn)
           : groupTickets.filter((ticket: any) => ticket.isCheckedIn);
-
-        // In scan-out mode, some APIs may not flag checked-in correctly.
-        // If nothing qualifies, fall back to showing the entire group to let the user choose.
-        if (scanMode === 'scan-out' && relevantTickets.length === 0) {
-          console.log('⚠️ No tickets marked as checked-in for pass-out. Falling back to full group list.');
-          relevantTickets = groupTickets;
-        }
         
         console.log('Relevant tickets for', scanMode, ':', relevantTickets.length);
         console.log('All available tickets:', groupTickets.map((t: any) => ({
@@ -539,11 +562,20 @@ export default function ScannerScreen() {
           })));
           
           console.log('Setting up group redirect with scanned ticket pre-selected');
+          console.log('🚀 About to navigate to ticket-action screen');
           
           // Navigate to ticket action screen for group tickets
           setShowCamera(false); // Turn off camera
           setIsScanning(false);
           setIsNavigatingAway(true); // Mark that we're navigating away
+          
+          console.log('🚀 Navigation params:', {
+            eventId: currentEventId,
+            scanMode: scanMode,
+            ticketsCount: relevantTickets.length,
+            scannedTicketId: data
+          });
+          
           router.push({
             pathname: '/(tabs)/ticket-action',
             params: {
@@ -558,6 +590,7 @@ export default function ScannerScreen() {
               returnToScanner: returnTo || '' // Pass the return path for proper back navigation
             }
           });
+          console.log('🚀 Navigation completed - should be on ticket-action screen now');
           return;
         } else {
           // No remaining tickets to process in the group
@@ -580,7 +613,10 @@ export default function ScannerScreen() {
             checkedInDate: undefined
           });
 
-          // No automatic refresh - only refresh on PTR or app open
+          // Also trigger refreshes
+          triggerGuestListRefresh(currentEventId);
+          triggerAttendanceRefresh(currentEventId);
+          triggerAnalyticsRefresh();
 
           // Fail-safe: auto-resume scanning if user doesn't interact
           setTimeout(() => {
@@ -593,73 +629,10 @@ export default function ScannerScreen() {
           return;
         }
       } else {
-      console.log('Single ticket detected - proceeding with direct scan');
-      console.log('📋 Why single ticket?', {
-        availableTickets: availableTickets,
-        isArray: Array.isArray(availableTickets),
-        length: availableTickets ? availableTickets.length : 'null/undefined',
-        admits: ticketInfo.admits,
-        isGroupBooking: isGroupBooking
-      });
-      
-      // Fallback for pass-out: If availabletickets is missing, try getGroupTickets
-      // This handles cases where the API doesn't return availabletickets for pass-out scenarios
-      if (scanMode === 'scan-out' && (!availableTickets || !Array.isArray(availableTickets) || availableTickets.length <= 1)) {
-        console.log('🔄 Pass-out mode: availabletickets missing, trying getGroupTickets fallback...');
-        try {
-          const { getGroupTickets } = await import('../../services/api');
-          const groupResult = await getGroupTickets(currentEventId, data, validationResult);
-          console.log('📋 getGroupTickets result for pass-out:', groupResult);
-          
-          if (!groupResult.error && groupResult.tickets && groupResult.tickets.length > 1) {
-            console.log('🎉 Group booking detected via getGroupTickets for pass-out with', groupResult.tickets.length, 'tickets');
-            
-            // Convert groupResult.tickets to the format expected by ticket-action screen
-            const groupTickets = groupResult.tickets.map((ticket: any) => ({
-              id: ticket.ticket_identifier,
-              name: `${ticket.name} (Ticket ID: ${ticket.id})`,
-              email: ticket.email,
-              ticketType: ticket.ticketType,
-              ticketIdentifier: ticket.ticket_identifier,
-              isCheckedIn: ticket.isCheckedIn,
-              qrCode: ticket.qrCode,
-              bookingId: ticket.bookingId || '',
-              referenceNum: ticket.referenceNum || '',
-              price: ticket.price || '0.00',
-              ticketId: ticket.id || ''
-            }));
-            
-            // For pass-out, show all tickets (let user choose which ones to pass out)
-            const relevantTickets = groupTickets.filter((ticket: any) => ticket.isCheckedIn);
-            
-            console.log('Relevant tickets for pass-out:', relevantTickets.length);
-            
-            if (relevantTickets.length > 0) {
-              console.log('Setting up group redirect with getGroupTickets data for pass-out');
-              
-              // Navigate to ticket action screen for group tickets
-              setShowCamera(false);
-              setIsScanning(false);
-              setIsNavigatingAway(true);
-              router.push({
-                pathname: '/(tabs)/ticket-action',
-                params: {
-                  eventId: currentEventId,
-                  scanMode: scanMode,
-                  tickets: JSON.stringify(relevantTickets),
-                  purchaser: JSON.stringify(groupResult.purchaser),
-                  scannedTicketId: data,
-                  returnToScanner: returnTo || ''
-                }
-              });
-              return;
-            }
-          }
-        } catch (groupError) {
-          console.error('❌ getGroupTickets fallback error for pass-out:', groupError);
-        }
+        console.log('Single ticket detected - proceeding with direct scan');
+        console.log('📋 Why not group? availableTickets:', !!availableTickets, 'isArray:', Array.isArray(availableTickets), 'length:', availableTickets?.length);
+        console.log('📋 Admits field:', ticketInfo?.admits, 'parsed:', ticketInfo ? parseInt(ticketInfo.admits) : 'N/A');
       }
-    }
       
       // Handle as individual ticket - scan in mode
       if (scanMode === 'scan-in') {
@@ -819,32 +792,12 @@ export default function ScannerScreen() {
             ? (validationResult.msg as any).info
             : {};
           
-          // For pass-out mode, check the availabletickets array for checked-in status
-          // since the API may return different checked-in status in main info vs availabletickets
-          let isCheckedIn = false;
-          
-          if (info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
-            // Check the first ticket in availabletickets for checked-in status
-            const ticketInAvailableTickets = info.availabletickets[0];
-            isCheckedIn = ticketInAvailableTickets.checkedin === 1 || ticketInAvailableTickets.checkedin === '1' || ticketInAvailableTickets.checkedin === true;
-            console.log('📋 Pass-out: Checking availabletickets[0].checkedin:', ticketInAvailableTickets.checkedin, '→ isCheckedIn:', isCheckedIn);
-          } else {
-            // Fallback to main ticket info if no availabletickets
-            isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
-            console.log('📋 Pass-out: Fallback to main info.checkedin:', info?.checkedin, '→ isCheckedIn:', isCheckedIn);
-          }
+          const isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
           
           if (!isCheckedIn) {
             // Ticket is valid but not checked in - show error
             let guestName = info?.fullname || 'Guest';
             let ticketType = info?.ticket_title || 'Ticket';
-            
-            // Use availabletickets data if available for better guest info
-            if (info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
-              const ticketInAvailableTickets = info.availabletickets[0];
-              guestName = ticketInAvailableTickets.admit_name || info?.fullname || 'Guest';
-              ticketType = ticketInAvailableTickets.ticket_title || info?.ticket_title || 'Ticket';
-            }
             
             feedback.checkInError();
             showErrorModal({
@@ -916,16 +869,8 @@ export default function ScannerScreen() {
         ? (validationResult.msg as any).info
         : {};
 
-      let guestName = info?.fullname || 'Guest';
-      let ticketType = info?.ticket_title || 'Ticket';
-
-      // For pass-out mode, use availabletickets data if available for better guest info
-      if (mode === 'scan-out' && info.availabletickets && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
-        const ticketInAvailableTickets = info.availabletickets[0];
-        guestName = ticketInAvailableTickets.admit_name || info?.fullname || 'Guest';
-        ticketType = ticketInAvailableTickets.ticket_title || info?.ticket_title || 'Ticket';
-        console.log('📋 Pass-out: Using availabletickets data - Guest:', guestName, 'Ticket:', ticketType);
-      }
+      const guestName = info?.fullname || 'Guest';
+      const ticketType = info?.ticket_title || 'Ticket';
 
       // Call the appropriate API function directly
       let result;
@@ -958,7 +903,10 @@ export default function ScannerScreen() {
         feedback.checkOut();
       }
 
-      // No automatic refresh - only refresh on PTR or app open
+      // Trigger refreshes
+      triggerGuestListRefresh(currentEventId);
+      triggerAttendanceRefresh(currentEventId);
+      triggerAnalyticsRefresh();
 
       // Show success modal
       showSuccessModal({
