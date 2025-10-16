@@ -1,52 +1,37 @@
-export function formatAppDateTime(input: string | number | Date | null | undefined): string {
-  if (!input) return 'TBD';
-  const date = new Date(input);
-  if (isNaN(date.getTime())) return 'TBD';
+// Simple date formatting utilities
 
-  const datePart = new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
+export const formatAppDate = (date: string | number | Date | null | undefined): string => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    return dateObj.toLocaleDateString();
+  } catch (error) {
+    console.warn('Date formatting error:', error);
+    return '';
+  }
+};
 
-  const timePart = new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date);
+export const formatAppDateTime = (date: string | number | Date | null | undefined): string => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    return dateObj.toLocaleString();
+  } catch (error) {
+    console.warn('Date formatting error:', error);
+    return '';
+  }
+};
 
-  return `${datePart} at ${timePart}`;
-}
-
-// Returns only the date portion like "October 1, 2024"
-export function formatAppDate(input: string | number | Date | null | undefined): string {
-  if (!input) return 'TBD';
-  const date = new Date(input);
-  if (isNaN(date.getTime())) return 'TBD';
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
-
-// Returns only the time portion like "1:00 AM"
-export function formatAppTime(input: string | number | Date | null | undefined): string {
-  if (!input) return 'TBD';
-  const date = new Date(input);
-  if (isNaN(date.getTime())) return 'TBD';
-
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date);
-}
-
-
-
-
-
-
-
+export const formatAppTime = (date: string | number | Date | null | undefined): string => {
+  if (!date) return '';
+  
+  try {
+    const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    return dateObj.toLocaleTimeString();
+  } catch (error) {
+    console.warn('Time formatting error:', error);
+    return '';
+  }
+};

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
-import { usePerformanceMonitor } from '../../utils/performanceUtils';
+// Removed unused performanceUtils import
 import EventDropdown from '../../components/EventDropdown';
 
 interface EventSummary {
@@ -92,7 +92,7 @@ export default function Analytics() {
   const insets = useSafeAreaInsets();
   const { onAnalyticsRefresh, triggerAnalyticsRefresh } = useRefresh();
   
-  // State hooks - must be before usePerformanceMonitor to maintain consistent order
+  // State hooks
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,7 +100,7 @@ export default function Analytics() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null); // null = All Events
   
   // Performance monitor after state hooks to ensure consistent hook order
-  const { metrics, measureApiCall } = usePerformanceMonitor('Analytics');
+  // Removed performance monitoring
 
   // Fetch stats for a single event without caching
   const fetchEventStats = useCallback(async (eventId: string): Promise<EventStats> => {
@@ -144,7 +144,7 @@ export default function Analytics() {
       console.log('Fetching analytics data...');
 
       // Fetch events with performance monitoring
-      const evts = await measureApiCall(
+      const evts = await (
         () => getEvents(),
         'getEvents'
       );
@@ -233,7 +233,7 @@ export default function Analytics() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [measureApiCall, fetchEventStats]);
+  }, [fetchEventStats]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -254,12 +254,12 @@ export default function Analytics() {
     }
     // Refresh events list for dropdown as well
     try {
-      const evts = await measureApiCall(() => getEvents(), 'getEvents');
+      const evts = await getEvents();
       setEvents(evts);
     } catch (err) {
       console.warn('Failed to refresh events list', err);
     }
-  }, [fetchAnalyticsData, fetchEventStats, selectedEventId, measureApiCall]);
+  }, [fetchAnalyticsData, fetchEventStats, selectedEventId]);
   
   // Callbacks and memos must be before any conditional returns
   const formatPercentage = useCallback((value: number) => {
@@ -280,13 +280,13 @@ export default function Analytics() {
   useEffect(() => {
     (async () => {
       try {
-        const evts = await measureApiCall(() => getEvents(), 'getEvents');
+        const evts = await getEvents();
         setEvents(evts);
       } catch (err) {
         console.warn('Failed to fetch events list for dropdown on mount', err);
       }
     })();
-  }, [measureApiCall]);
+  }, []);
 
   // Fetch analytics based on selection
   useEffect(() => {
@@ -446,9 +446,9 @@ export default function Analytics() {
             placeholder="All Events"
           />
         </View>
-        {__DEV__ && metrics.renderTime > 0 && (
-          <Text style={[styles.perfText, { color: colors.secondary }]}> 
-            Render: {metrics.renderTime}ms | API: {metrics.apiCallTime}ms
+        {__DEV__ && (
+          <Text style={[styles.perfText, { color: colors.text }]}> 
+            Analytics loaded
           </Text>
         )}
       </View>

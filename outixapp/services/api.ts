@@ -21,6 +21,40 @@ let isAsyncStorageWorking = true;
 // Memory storage fallback when AsyncStorage fails
 const memoryStorage = new Map<string, string>();
 
+// Performance optimization: Validation result cache
+const validationCache = new Map<string, { result: any; timestamp: number; ttl: number }>();
+const VALIDATION_CACHE_TTL = 30000; // 30 seconds cache for validation results
+
+// Performance optimization: Guest list cache
+const guestListCache = new Map<string, { result: any; timestamp: number; ttl: number }>();
+const GUEST_LIST_CACHE_TTL = 60000; // 60 seconds cache for guest lists
+
+// Cache utility functions
+const getCachedResult = <T>(cache: Map<string, { result: T; timestamp: number; ttl: number }>, key: string): T | null => {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  
+  const now = Date.now();
+  if (now - cached.timestamp > cached.ttl) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return cached.result;
+};
+
+const setCachedResult = <T>(cache: Map<string, { result: T; timestamp: number; ttl: number }>, key: string, result: T, ttl: number): void => {
+  cache.set(key, {
+    result,
+    timestamp: Date.now(),
+    ttl
+  });
+};
+
+const clearCache = (cache: Map<string, any>): void => {
+  cache.clear();
+};
+
 // Enhanced storage functions to handle AsyncStorage failures
 const getStorageItem = async (key: string): Promise<string | null> => {
   try {
@@ -628,29 +662,15 @@ export const getGuestList = async (eventId: string): Promise<Guest[]> => {
         return [];
       } catch (altError) {
         console.error("Both guest list endpoints failed");
-        // Both attempts failed, continue to mock data fallback
       }
     }
     
-    console.log("Using mock guest list data as fallback");
-    // Return mock attendees when both API endpoints fail
-    return [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
-    ];
+    console.log("Both guest list endpoints failed, returning empty list");
+    return [];
   } catch (error) {
     console.error(`Get guest list error for event ${eventId}:`, error);
-    // Return mock attendees on error
-    return [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
-    ];
+    // Return empty list on error
+    return [];
   }
 };
 
@@ -726,23 +746,11 @@ export const getGuestListPaginated = async (eventId: string, page: number = 1, l
   } catch (error) {
     console.error(`Paginated guest list error for event ${eventId}:`, error);
     
-    // Return mock data for testing
-    const mockGuests = [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001', purchased_date: '2024-01-15' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002', purchased_date: '2024-01-14' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003', purchased_date: '2024-01-13' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004', purchased_date: '2024-01-12' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005', purchased_date: '2024-01-11' },
-    ];
-    
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedMock = mockGuests.slice(startIndex, endIndex);
-    
+    // Return empty result on error
     return {
-      guests: paginatedMock,
-      totalCount: mockGuests.length,
-      hasMore: endIndex < mockGuests.length,
+      guests: [],
+      totalCount: 0,
+      hasMore: false,
       currentPage: page
     };
   }
@@ -1111,7 +1119,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
       console.warn("API call for user profile failed:", apiError.message);
     }
     
-    // Return default mock data as final fallback
+    // Return default data as final fallback
     console.log("Using default user profile data (all other methods failed)");
     const defaultProfile = {
       id: 'default_user',
@@ -1129,7 +1137,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return defaultProfile;
   } catch (error) {
     console.error("Unexpected error in getUserProfile:", error);
-    // Return mock data on any unexpected error
+    // Return default data on any unexpected error
     return {
       id: 'error_fallback',
       name: "Outix Scanner",
@@ -1281,81 +1289,27 @@ export const clearStoredSession = async (): Promise<void> => {
   }
 };
 
-// Enhanced QR Code validation with better error handling
+// Enhanced QR Code validation with better error handling and caching
 export const validateQRCode = async (eventId: string, scanCode: string, scanMode?: 'scan-in' | 'scan-out'): Promise<QRValidationResponse | null> => {
   try {
     console.log(`Validating QR code for event ${eventId}, scancode: ${scanCode}, scanMode: ${scanMode || 'not specified'}`);
     
-    // First, check if this is a mock QR code for testing
-    if (scanCode.startsWith('MOCK_QR_')) {
-      // Mock validation for test QR code
-      const isGroupTicket = scanCode.includes('GROUP');
-      const isPassOut = scanCode.includes('PASSOUT') || scanCode.includes('CHECKOUT');
-      
-      return {
-        error: false,
-        msg: {
-          message: 'Valid mock ticket',
-          info: {
-            id: scanCode,
-            booking_id: 'MOCK_BOOKING_123',
-            reference_num: scanCode,
-            ticket_identifier: scanCode,
-            ticket_title: 'Mock General Admission',
-            checkedin: isPassOut ? 1 : 0, // For pass-out, tickets should be checked in
-            checkedin_date: isPassOut ? '2024-01-01 10:00:00' : '0000-00-00 00:00:00',
-            totaladmits: '1',
-            admits: isGroupTicket ? '4' : '1',
-            available: 1,
-            price: '50.00',
-            remarks: 'Test ticket',
-            email: 'test@example.com',
-            fullname: 'Test User',
-            address: 'Test Address',
-            notes: 'Mock ticket for testing',
-            purchased_date: new Date().toISOString(),
-            reason: '',
-            message: 'Valid test ticket',
-            mobile: '0400000000',
-            picture_display: '',
-            scannable: '1',
-            ticket_id: scanCode,
-            passout: '0',
-            // Add availabletickets for group testing
-            availabletickets: isGroupTicket ? [
-              {
-                id: 'MOCK_TICKET_1',
-                booking_id: 'MOCK_BOOKING_123',
-                ticket_identifier: 'MOCK123TICKET1',
-                ticket_title: 'Mock General Admission',
-                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
-                ticket_id: 'MOCK_TICKET_1',
-                admit_name: 'John Doe'
-              },
-              {
-                id: 'MOCK_TICKET_2',
-                booking_id: 'MOCK_BOOKING_123',
-                ticket_identifier: 'MOCK123TICKET2',
-                ticket_title: 'Mock General Admission',
-                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
-                ticket_id: 'MOCK_TICKET_2',
-                admit_name: 'Jane Doe'
-              },
-              {
-                id: 'MOCK_TICKET_3',
-                booking_id: 'MOCK_BOOKING_123',
-                ticket_identifier: 'MOCK123TICKET3',
-                ticket_title: 'Mock General Admission',
-                checkedin: isPassOut ? '1' : '0', // For pass-out, tickets should be checked in
-                ticket_id: 'MOCK_TICKET_3',
-                admit_name: 'Bob Smith'
-              }
-            ] : undefined
-          }
-        },
-        status: 200
-      };
+    // Create cache key including scanMode for different validation results
+    const cacheKey = `${eventId}:${scanCode}:${scanMode || 'default'}`;
+    
+    // Check cache first
+    const cachedResult = getCachedResult(validationCache, cacheKey);
+    if (cachedResult) {
+      console.log(`🚀 Cache hit for validation: ${cacheKey}`);
+      performanceMetrics.cacheHits++;
+      return cachedResult;
     }
+    
+    console.log(`📡 Cache miss, making API call for validation: ${cacheKey}`);
+    performanceMetrics.cacheMisses++;
+    performanceMetrics.validationCalls++;
+    
+    const startTime = Date.now();
     
     // Build the URL with scanmode parameter if provided
     let validateUrl = `/validate/${eventId}/${scanCode}`;
@@ -1367,6 +1321,16 @@ export const validateQRCode = async (eventId: string, scanCode: string, scanMode
     const response = await api.get(validateUrl, {
       timeout: 30000
     });
+    
+    // Track performance metrics
+    const endTime = Date.now();
+    const responseTime = endTime - startTime;
+    performanceMetrics.apiCalls++;
+    performanceMetrics.totalResponseTime += responseTime;
+    
+    // Cache the result
+    setCachedResult(validationCache, cacheKey, response.data, VALIDATION_CACHE_TTL);
+    console.log(`💾 Cached validation result for: ${cacheKey} (${responseTime}ms)`);
     
     return response.data;
   } catch (error: any) {
@@ -1399,17 +1363,6 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
   try {
     console.log(`Scanning QR code for event ${eventId}, scancode: ${scanCode}`);
     
-    // First, check if this is a mock QR code for testing
-    if (scanCode.startsWith('MOCK_QR_')) {
-      // Mock scan for test QR code
-      return {
-        error: false,
-        msg: {
-          message: '1 Admit(s) checked In'
-        },
-        status: 200
-      };
-    }
     
     // Make direct API request to scan endpoint
     const response = await api.get(`/scan/${eventId}/${scanCode}`, {
@@ -1487,17 +1440,6 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
   try {
     console.log(`Unscanning QR code for event ${eventId}, scancode: ${scanCode}`);
     
-    // First, check if this is a mock QR code for testing
-    if (scanCode.startsWith('MOCK_QR_')) {
-      // Mock unscan for test QR code
-      return {
-        error: false,
-        msg: {
-          message: 'Admit/ticket unchecked. Ticket can be re-scanned.'
-        },
-        status: 200
-      };
-    }
     
     // Check if this is a manual check-out (starting with MANUAL_)
     if (scanCode.startsWith('MANUAL_')) {
@@ -1569,6 +1511,75 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
 // Export storage functions for testing
 export { getStorageItem, removeStorageItem, setStorageItem };
 
+// Export cache management functions for performance optimization
+export const clearValidationCache = (): void => {
+  clearCache(validationCache);
+  console.log('🧹 Validation cache cleared');
+};
+
+export const clearGuestListCache = (): void => {
+  clearCache(guestListCache);
+  console.log('🧹 Guest list cache cleared');
+};
+
+export const clearAllCaches = (): void => {
+  clearValidationCache();
+  clearGuestListCache();
+  console.log('🧹 All caches cleared');
+};
+
+// Performance monitoring and metrics
+const performanceMetrics = {
+  apiCalls: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  totalResponseTime: 0,
+  validationCalls: 0,
+  guestListCalls: 0,
+  scanCalls: 0,
+  batchOperations: 0
+};
+
+// Cache statistics for debugging
+export const getCacheStats = () => {
+  return {
+    validationCache: {
+      size: validationCache.size,
+      keys: Array.from(validationCache.keys())
+    },
+    guestListCache: {
+      size: guestListCache.size,
+      keys: Array.from(guestListCache.keys())
+    }
+  };
+};
+
+// Performance metrics for monitoring
+export const getPerformanceMetrics = () => {
+  const avgResponseTime = performanceMetrics.apiCalls > 0 
+    ? performanceMetrics.totalResponseTime / performanceMetrics.apiCalls 
+    : 0;
+  
+  const cacheHitRate = (performanceMetrics.cacheHits + performanceMetrics.cacheMisses) > 0
+    ? (performanceMetrics.cacheHits / (performanceMetrics.cacheHits + performanceMetrics.cacheMisses)) * 100
+    : 0;
+  
+  return {
+    ...performanceMetrics,
+    avgResponseTime: Math.round(avgResponseTime),
+    cacheHitRate: Math.round(cacheHitRate * 100) / 100,
+    apiCallReduction: performanceMetrics.cacheHits > 0 ? `${performanceMetrics.cacheHits} API calls saved` : 'No cache hits yet'
+  };
+};
+
+// Reset performance metrics
+export const resetPerformanceMetrics = () => {
+  Object.keys(performanceMetrics).forEach(key => {
+    (performanceMetrics as any)[key] = 0;
+  });
+  console.log('📊 Performance metrics reset');
+};
+
 export const getGroupTickets = async (eventId: string, qrData: string, preValidation?: any): Promise<any> => {
   try {
     console.log('🔍 getGroupTickets called with:', { eventId, qrData });
@@ -1619,27 +1630,58 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
     
     console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
     
-    // Get all attendees for this event using the correct endpoint
-    console.log('📞 Fetching guest list for event:', eventId);
-    const response = await api.get(`/guestlist/${eventId}`, {
-      timeout: 30000
-    });
-    console.log('📋 Guest list response status:', response.status);
+    // Try to use targeted guest list query if we have booking info
+    let guestListUrl = `/guestlist/${eventId}`;
+    let cacheKey = `guestlist:${eventId}`;
     
-    if (!response.data) {
-      throw new Error('No response data from guest list API');
+    // If we have booking information, try to fetch only relevant guests
+    if (purchaserBookingId || purchaserReferenceNum) {
+      if (purchaserBookingId) {
+        guestListUrl += `?booking_id=${purchaserBookingId}`;
+        cacheKey = `guestlist:${eventId}:booking:${purchaserBookingId}`;
+      } else if (purchaserReferenceNum) {
+        guestListUrl += `?reference=${purchaserReferenceNum}`;
+        cacheKey = `guestlist:${eventId}:ref:${purchaserReferenceNum}`;
+      }
+      console.log('🎯 Using targeted guest list query:', guestListUrl);
+    } else {
+      console.log('📞 Fetching full guest list for event:', eventId);
     }
     
-    // Extract guests from response - the correct format is response.data.msg
+    // Check cache first
+    const cachedGuestList = getCachedResult(guestListCache, cacheKey);
+    let responseData;
+    
+    if (cachedGuestList) {
+      console.log(`🚀 Cache hit for guest list: ${cacheKey}`);
+      responseData = cachedGuestList;
+    } else {
+      console.log(`📡 Cache miss, making API call for guest list: ${cacheKey}`);
+      const response = await api.get(guestListUrl, {
+        timeout: 30000
+      });
+      console.log('📋 Guest list response status:', response.status);
+      
+      if (!response.data) {
+        throw new Error('No response data from guest list API');
+      }
+      
+      responseData = response.data;
+      // Cache the result
+      setCachedResult(guestListCache, cacheKey, response.data, GUEST_LIST_CACHE_TTL);
+      console.log(`💾 Cached guest list result for: ${cacheKey}`);
+    }
+    
+    // Extract guests from response - the correct format is responseData.msg
     let allGuests = [];
-    if (response.data.msg && Array.isArray(response.data.msg)) {
-      allGuests = response.data.msg;
-    } else if (Array.isArray(response.data)) {
-      allGuests = response.data;
-    } else if (response.data.data && Array.isArray(response.data.data)) {
-      allGuests = response.data.data;
-    } else if (response.data.guests && Array.isArray(response.data.guests)) {
-      allGuests = response.data.guests;
+    if (responseData.msg && Array.isArray(responseData.msg)) {
+      allGuests = responseData.msg;
+    } else if (Array.isArray(responseData)) {
+      allGuests = responseData;
+    } else if (responseData.data && Array.isArray(responseData.data)) {
+      allGuests = responseData.data;
+    } else if (responseData.guests && Array.isArray(responseData.guests)) {
+      allGuests = responseData.guests;
     } else {
       throw new Error('Unexpected guest list response format');
     }
@@ -1777,6 +1819,7 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
         ticketType: ticket.ticket_title || 'General Admission',
         ticketIdentifier: ticket.ticket_identifier,
         isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || false,
+        isPassedOut: ticket.passout === '1' || ticket.passout === 1 || false,
         qrCode: qrCode
       };
     });
@@ -1796,22 +1839,6 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
   } catch (error) {
     console.error('Group tickets error:', error);
     
-    // Return mock data for testing if API fails
-    if (qrData.startsWith('MOCK_QR_')) {
-      return {
-        success: true,
-        tickets: [
-          { id: 'tid_001', name: 'John Smith', email: 'john@example.com', ticketType: 'VIP', ticketIdentifier: '12064355LUJYXADA', isCheckedIn: false, qrCode: 'MOCK_QR_001' },
-          { id: 'tid_002', name: 'Jane Smith', email: 'jane@example.com', ticketType: 'VIP', ticketIdentifier: '12064356LUJYXADB', isCheckedIn: false, qrCode: 'MOCK_QR_002' },
-          { id: 'tid_003', name: 'Bob Smith', email: 'bob@example.com', ticketType: 'VIP', ticketIdentifier: '12064357LUJYXADC', isCheckedIn: false, qrCode: 'MOCK_QR_003' }
-        ],
-        purchaser: {
-          email: 'john@example.com',
-          name: 'John Smith',
-          bookingId: 'MOCK_BOOKING_123'
-        }
-      };
-    }
     
     return {
       error: true,
@@ -1822,11 +1849,29 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
 
 export const scanGroupTickets = async (eventId: string, ticketIds: string[]): Promise<any> => {
   try {
-    const scanPromises = ticketIds.map(ticketId => 
-      scanQRCode(eventId, ticketId)
-    );
+    console.log(`🚀 Batch scanning ${ticketIds.length} tickets in parallel`);
+    const startTime = Date.now();
+    performanceMetrics.batchOperations++;
+    performanceMetrics.scanCalls += ticketIds.length;
     
-    const results = await Promise.allSettled(scanPromises);
+    // Performance optimization: True parallel processing with concurrency limit
+    const CONCURRENCY_LIMIT = 5; // Process max 5 tickets simultaneously
+    const results = [];
+    
+    for (let i = 0; i < ticketIds.length; i += CONCURRENCY_LIMIT) {
+      const batch = ticketIds.slice(i, i + CONCURRENCY_LIMIT);
+      console.log(`📦 Processing batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}/${Math.ceil(ticketIds.length / CONCURRENCY_LIMIT)}: ${batch.length} tickets`);
+      
+      const batchPromises = batch.map(ticketId => 
+        scanQRCode(eventId, ticketId)
+      );
+      
+      const batchResults = await Promise.allSettled(batchPromises);
+      results.push(...batchResults);
+    }
+    
+    const endTime = Date.now();
+    console.log(`⚡ Batch scan completed in ${endTime - startTime}ms (${ticketIds.length} tickets)`);
     
     const successful = results.filter(result => {
       if (result.status === 'fulfilled' && result.value) {
@@ -1874,11 +1919,29 @@ export const scanGroupTickets = async (eventId: string, ticketIds: string[]): Pr
 
 export const unscanGroupTickets = async (eventId: string, ticketIds: string[]): Promise<any> => {
   try {
-    const unscanPromises = ticketIds.map(ticketId => 
-      unscanQRCode(eventId, ticketId)
-    );
+    console.log(`🚀 Batch unscannning ${ticketIds.length} tickets in parallel`);
+    const startTime = Date.now();
+    performanceMetrics.batchOperations++;
+    performanceMetrics.scanCalls += ticketIds.length;
     
-    const results = await Promise.allSettled(unscanPromises);
+    // Performance optimization: True parallel processing with concurrency limit
+    const CONCURRENCY_LIMIT = 5; // Process max 5 tickets simultaneously
+    const results = [];
+    
+    for (let i = 0; i < ticketIds.length; i += CONCURRENCY_LIMIT) {
+      const batch = ticketIds.slice(i, i + CONCURRENCY_LIMIT);
+      console.log(`📦 Processing batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}/${Math.ceil(ticketIds.length / CONCURRENCY_LIMIT)}: ${batch.length} tickets`);
+      
+      const batchPromises = batch.map(ticketId => 
+        unscanQRCode(eventId, ticketId)
+      );
+      
+      const batchResults = await Promise.allSettled(batchPromises);
+      results.push(...batchResults);
+    }
+    
+    const endTime = Date.now();
+    console.log(`⚡ Batch unscan completed in ${endTime - startTime}ms (${ticketIds.length} tickets)`);
     
     const successful = results.filter(result => {
       if (result.status === 'fulfilled' && result.value) {

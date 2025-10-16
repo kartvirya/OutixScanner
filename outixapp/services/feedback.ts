@@ -1,9 +1,6 @@
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
-// TimeoutManager import removed - using standard setTimeout instead
-import { playSoundWithCleanup } from './audioService';
-import { getSoundData } from './soundGenerator';
 
 // Settings for feedback preferences
 interface FeedbackSettings {
@@ -84,31 +81,48 @@ const createPleasantTone = async (
   }
 };
 
-// Generate subtle, pleasant audio tones
+// Generate simple audio tones
 const generateSubtleTone = (frequency: number, duration: number, type: string): string => {
-  // Use the new sound generator for much better audio
-  switch (type) {
-    case 'click':
-      return getSoundData('click');
-    case 'success':
-      return getSoundData('success');
-    case 'checkin-success':
-      return getSoundData('checkin-success');
-    case 'checkout-success':
-      return getSoundData('checkout-success');
-    case 'error':
-      return getSoundData('error');
-    case 'checkin-error':
-      return getSoundData('checkin-error');
-    case 'already-scanned':
-      return getSoundData('already-scanned');
-    case 'scan':
-      return getSoundData('scan');
-    case 'notification':
-      return getSoundData('notification');
-    default:
-      return getSoundData('silent');
+  // Simple tone generation - create basic WAV data
+  const sampleRate = 44100;
+  const samples = Math.floor(sampleRate * duration);
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  
+  // WAV header
+  const writeString = (offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + samples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, samples * 2, true);
+  
+  // Generate sine wave
+  for (let i = 0; i < samples; i++) {
+    const sample = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.3;
+    view.setInt16(44 + i * 2, sample * 32767, true);
   }
+  
+  // Convert to base64
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };
 
 // Try to use system sounds (iOS/Android specific)
@@ -292,7 +306,11 @@ export const soundFeedback = {
   checkInSuccess: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
-      await playSoundWithCleanup('checkin-success', { volume: 1.0, rate: 1.0 });
+      const sound = await createPleasantTone(800, 0.3, 'checkin-success');
+      if (sound) {
+        await sound.playAsync();
+        sound.unloadAsync();
+      }
     } catch (error) {
       console.warn('Check-in success sound failed:', error);
     }
@@ -301,7 +319,11 @@ export const soundFeedback = {
   checkOutSuccess: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
-      await playSoundWithCleanup('checkout-success', { volume: 0.9, rate: 0.8 });
+      const sound = await createPleasantTone(600, 0.4, 'checkout-success');
+      if (sound) {
+        await sound.playAsync();
+        sound.unloadAsync();
+      }
     } catch (error) {
       console.warn('Check-out success sound failed:', error);
     }
@@ -310,7 +332,11 @@ export const soundFeedback = {
   checkInError: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
-      await playSoundWithCleanup('checkin-error', { volume: 0.8, rate: 1.2 });
+      const sound = await createPleasantTone(300, 0.5, 'checkin-error');
+      if (sound) {
+        await sound.playAsync();
+        sound.unloadAsync();
+      }
     } catch (error) {
       console.warn('Check-in error sound failed:', error);
     }
@@ -319,7 +345,11 @@ export const soundFeedback = {
   alreadyScanned: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
-      await playSoundWithCleanup('already-scanned', { volume: 0.7, rate: 1.1 });
+      const sound = await createPleasantTone(400, 0.6, 'already-scanned');
+      if (sound) {
+        await sound.playAsync();
+        sound.unloadAsync();
+      }
     } catch (error) {
       console.warn('Already scanned sound failed:', error);
     }
@@ -328,7 +358,7 @@ export const soundFeedback = {
   notification: async () => {
     if (!feedbackSettings.soundsEnabled || feedbackSettings.soundType === 'off') return;
     try {
-      const sound = await createPleasantTone(900, 70, 'notification');
+      const sound = await createPleasantTone(900, 0.3, 'notification');
       if (sound) {
         await sound.playAsync();
         setTimeout(async () => {
@@ -490,13 +520,13 @@ export const enableSubtleSounds = () => {
 export const cleanupSounds = async () => {
   try {
     // Clear all timeouts first
-    timeoutManager.clearAll();
+    // Removed timeout manager cleanup
     
     // Then clean up sounds
-    for (const [name, sound] of soundCache.entries()) {
+    soundCache.forEach(async (sound, name) => {
       await sound.unloadAsync();
       soundCache.delete(name);
-    }
+    });
   } catch (error) {
     console.warn('Error cleaning up sounds:', error);
   }

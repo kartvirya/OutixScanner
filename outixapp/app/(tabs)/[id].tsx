@@ -32,15 +32,10 @@ import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-    clearManualProxyIP,
     getCheckedInGuestList,
-    getCurrentProxyIP,
-    getCurrentProxyURL,
     getEvents,
     getGuestList,
     scanQRCode,
-    setManualProxyIP,
-    testProxyConnectivity,
     unscanQRCode,
     validateQRCode
 } from '../../services/api';

@@ -630,8 +630,6 @@ export default function GuestListPage() {
 
   const performScanIn = async (scanCode: string, validationResult: any) => {
     try {
-      await updateLocalScanIn(scanCode, validationResult);
-      
       const scanResult = await scanQRCode(eventId, scanCode);
       
       if (!scanResult || scanResult.error) {
@@ -641,7 +639,7 @@ export default function GuestListPage() {
         }
         
         feedback.error();
-        Alert.alert('Scan In Failed', errorMessage + '\n\nLocal guest list has been updated.');
+        Alert.alert('Scan In Failed', errorMessage);
         return;
       }
       
@@ -661,16 +659,16 @@ export default function GuestListPage() {
       
       Alert.alert(
         'Guest Admitted Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}\n\nGuest list updated locally.`
+        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}`
       );
-      // Refresh to pull authoritative server check-in time
+      
+      // Refresh from API to get real-time data
       await fetchCheckedInGuests();
       
     } catch (error) {
       console.error('Scan in error:', error);
-      await updateLocalScanIn(scanCode, validationResult);
       feedback.error();
-      Alert.alert('Scan In Error', 'Failed to scan in guest via API. Local guest list has been updated.');
+      Alert.alert('Scan In Error', 'Failed to scan in guest via API.');
     }
   };
 

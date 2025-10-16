@@ -980,8 +980,10 @@ const renderTermsAndConditions = () => {
         ]}>
           <View style={[
             styles.signaturePadContainer, 
-            { borderColor: colors.border },
-            isSigningActive && { pointerEvents: 'auto' }
+            { 
+              borderColor: colors.border,
+              pointerEvents: isSigningActive ? 'auto' : 'auto'
+            }
           ]}>
             <SignatureScreen
               ref={signatureRef}
@@ -1170,8 +1172,10 @@ const renderTermsAndConditions = () => {
         ]}>
           <View style={[
             styles.signaturePadContainer, 
-            { borderColor: colors.border },
-            isSigningActive && { pointerEvents: 'auto' }
+            { 
+              borderColor: colors.border,
+              pointerEvents: isSigningActive ? 'auto' : 'auto'
+            }
           ]}>
             <SignatureScreen
               ref={witnessSignatureRef}
@@ -1709,8 +1713,7 @@ const styles = StyleSheet.create({
         />
         <KeyboardAvoidingView 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={[styles.container]}
-          pointerEvents={isSigningActive ? 'box-none' : 'auto'}
+          style={[styles.container, { pointerEvents: isSigningActive ? 'box-none' : 'auto' }]}
         >
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
             {/* Header */}
@@ -1732,19 +1735,18 @@ const styles = StyleSheet.create({
                 // For Terms & Conditions and Signature steps - no outer scroll
                 <View style={[
                   styles.noScrollContent,
-                  isSigningActive && { pointerEvents: 'box-none' }
+                  { pointerEvents: isSigningActive ? 'box-none' : 'auto' }
                 ]}>
                   {renderStepContent()}
                 </View>
               ) : (
                 // For other steps - use ScrollView with conditional scrolling
                 <ScrollView
-                  style={styles.scrollView}
+                  style={[styles.scrollView, { pointerEvents: isSigningActive ? 'none' : 'auto' }]}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={true}
                   keyboardShouldPersistTaps="handled"
                   scrollEnabled={!isSigningActive}
-                  pointerEvents={isSigningActive ? 'none' : 'auto'}
                 >
                   {renderStepContent()}
                 </ScrollView>

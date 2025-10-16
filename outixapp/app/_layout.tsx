@@ -1,7 +1,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import { Amplify, Notifications } from 'aws-amplify';
+import { Amplify } from 'aws-amplify';
 import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect } from "react";
@@ -37,10 +37,9 @@ export default function RootLayout() {
         // Configure AWS Amplify
         Amplify.configure(awsconfig);
         
-        // Enable push notifications
-        Notifications.Push.enable();
+        // Push notifications removed
         
-        console.log('AWS Amplify and push notifications initialized');
+        console.log('AWS Amplify initialized');
         
         // Load fonts if needed, but Lucide doesn't require extra fonts
         setFontsLoaded(true);

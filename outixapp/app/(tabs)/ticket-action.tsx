@@ -26,6 +26,7 @@ interface GroupTicket {
   ticketType: string;
   ticketIdentifier: string;
   isCheckedIn: boolean;
+  isPassedOut: boolean;
   qrCode: string;
 }
 
@@ -78,17 +79,42 @@ export default function TicketActionScreen() {
       setSelectedTickets(new Set([singleTicketId]));
     } else if (scannedTicketId && tickets.length > 0) {
       // Group flow - pre-select ONLY the scanned ticket
-      const scannedTicket = tickets.find(ticket => 
-        ticket.qrCode === scannedTicketId || 
-        ticket.ticketIdentifier === scannedTicketId || 
-        ticket.id === scannedTicketId
-      );
+      // Prioritize ticket_identifier matching for better accuracy
+      const scannedTicket = tickets.find(ticket => {
+        // First priority: exact ticket_identifier match
+        if (ticket.ticketIdentifier === scannedTicketId) {
+          console.log('✅ Matched by ticket_identifier:', ticket.ticketIdentifier);
+          return true;
+        }
+        // Second priority: qrCode match
+        if (ticket.qrCode === scannedTicketId) {
+          console.log('✅ Matched by qrCode:', ticket.qrCode);
+          return true;
+        }
+        // Third priority: id match
+        if (ticket.id === scannedTicketId) {
+          console.log('✅ Matched by id:', ticket.id);
+          return true;
+        }
+        return false;
+      });
+      
       if (scannedTicket) {
-        console.log('🎯 Pre-selecting ONLY scanned ticket:', scannedTicket.id);
+        console.log('🎯 Pre-selecting ONLY scanned ticket:', {
+          id: scannedTicket.id,
+          ticketIdentifier: scannedTicket.ticketIdentifier,
+          name: scannedTicket.name
+        });
         setSelectedTickets(new Set([scannedTicket.id]));
       } else {
         console.log('❌ Scanned ticket not found in group, no pre-selection');
-        console.log('Available tickets:', tickets.map(t => ({id: t.id, qrCode: t.qrCode, ticketIdentifier: t.ticketIdentifier})));
+        console.log('Looking for scannedTicketId:', scannedTicketId);
+        console.log('Available tickets:', tickets.map(t => ({
+          id: t.id, 
+          qrCode: t.qrCode, 
+          ticketIdentifier: t.ticketIdentifier,
+          name: t.name
+        })));
         setSelectedTickets(new Set());
       }
     } else {
@@ -123,30 +149,49 @@ export default function TicketActionScreen() {
       
       if (isGroup) {
         // Handle group scan - response has 'success' property
+        // Convert ticket IDs to QR codes for group operations
+        const selectedTicketsData = tickets.filter(t => selectedTicketsList.includes(t.id));
+        const qrCodes = selectedTicketsData.map(t => t.qrCode);
         result = await (scanMode === 'scan-in' ? scanGroupTickets : unscanGroupTickets)(
           eventId,
-          selectedTicketsList
+          qrCodes
         );
 
-        if (!result || result.error || (result.hasOwnProperty('success') && !result.success)) {
+        console.log('Group operation result:', result);
+        
+        // Check for various error conditions
+        if (!result || 
+            result.error === true || 
+            (result.hasOwnProperty('success') && !result.success) ||
+            (result.status && result.status >= 400) ||
+            (result.successful !== undefined && result.successful === 0)) {
           feedback.error();
           const errorMsg = result?.msg;
           const errorText = typeof errorMsg === 'string' ? errorMsg : (errorMsg?.message || 'Failed to process group tickets');
+          console.error('Group operation failed:', errorText);
           Alert.alert('Error', errorText);
           return;
         }
       } else {
         // Handle single ticket - response does NOT have 'success' property
         const ticketId = selectedTicketsList[0];
+        const selectedTicket = tickets.find(t => t.id === ticketId);
+        const qrCode = selectedTicket?.qrCode || ticketId; // Use qrCode if available, fallback to ticketId
         result = await (scanMode === 'scan-in' ? scanQRCode : unscanQRCode)(
           eventId,
-          ticketId
+          qrCode
         );
 
-        if (!result || result.error) {
+        console.log('Single ticket operation result:', result);
+        
+        // Check for various error conditions
+        if (!result || 
+            result.error === true || 
+            (result.status && result.status >= 400)) {
           feedback.error();
           const errorMsg = result?.msg;
           const errorText = typeof errorMsg === 'string' ? errorMsg : (errorMsg?.message || 'Failed to process ticket');
+          console.error('Single ticket operation failed:', errorText);
           Alert.alert('Error', errorText);
           return;
         }
@@ -173,7 +218,7 @@ export default function TicketActionScreen() {
         count: selectedTickets.size,
         message: isGroupOperation 
           ? `Successfully ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} ${selectedTickets.size} tickets`
-          : undefined
+          : `${firstTicket?.name} (ID: ${firstTicket?.ticketIdentifier}) has been ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} successfully.`
       });
       setShowSuccessModal(true);
     } catch (error) {
@@ -275,7 +320,7 @@ export default function TicketActionScreen() {
                     fontSize: isSmallScreen ? 15 : 16,
                   },
                 ]}
-                numberOfLines={2}
+                numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {ticket.name}
@@ -287,13 +332,30 @@ export default function TicketActionScreen() {
                     color: selectedTickets.has(ticket.id)
                       ? colors.background
                       : colors.text,
-                    fontSize: isSmallScreen ? 12 : 13,
+                    fontSize: isSmallScreen ? 11 : 12,
+                    fontWeight: '600',
                   },
                 ]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {ticket.ticketType}
+              </Text>
+              <Text
+                style={[
+                  styles.ticketIdentifier,
+                  {
+                    color: selectedTickets.has(ticket.id)
+                      ? colors.background
+                      : colors.text,
+                    fontSize: isSmallScreen ? 10 : 11,
+                    opacity: 0.8,
+                  },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                ID: {ticket.ticketIdentifier}
               </Text>
             </View>
             <View style={styles.checkboxContainer}>
@@ -353,11 +415,11 @@ export default function TicketActionScreen() {
             ) : (
               <View style={styles.buttonContent}>
                 {scanMode === 'scan-in' ? (
-                  <LogIn size={18} color="#FFFFFF" />
+                  <LogIn key="checkin-icon" size={18} color="#FFFFFF" />
                 ) : (
-                  <UserCheck size={18} color="#FFFFFF" />
+                  <UserCheck key="checkout-icon" size={18} color="#FFFFFF" />
                 )}
-                <Text style={[styles.buttonText, styles.confirmButtonText]}>
+                <Text key="button-text" style={[styles.buttonText, styles.confirmButtonText]}>
                   {scanMode === 'scan-in' ? 'Check In' : 'Check Out'}
                   {selectedTickets.size > 0 && ` (${selectedTickets.size})`}
                 </Text>
@@ -410,10 +472,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   ticketInfo: {
@@ -428,6 +487,10 @@ const styles = StyleSheet.create({
   ticketType: {
     opacity: 0.7,
     lineHeight: 18,
+    marginBottom: 2,
+  },
+  ticketIdentifier: {
+    lineHeight: 16,
   },
   checkboxContainer: {
     padding: 4,
@@ -439,10 +502,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100%',
     borderTopWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    boxShadow: '0px -2px 6px rgba(0, 0, 0, 0.1)',
     elevation: 8,
   },
   buttonContainer: {

@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { LogIn, UserCheck } from 'lucide-react-native';
+import { LogIn, UserCheck, Upload } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -15,6 +15,7 @@ import {
 import ErrorModal from '../../components/ErrorModal';
 import SuccessModal from '../../components/SuccessModal';
 import QRScanner from '../../components/QRScanner';
+import QRCodeImporter from '../../components/QRCodeImporter';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
@@ -22,7 +23,11 @@ import {
     getEvents,
     validateQRCode,
     scanQRCode,
-    unscanQRCode
+    unscanQRCode,
+    clearAllCaches,
+    getCacheStats,
+    getPerformanceMetrics,
+    resetPerformanceMetrics
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -38,6 +43,7 @@ interface GroupTicket {
   ticketType: string;
   ticketIdentifier: string;
   isCheckedIn: boolean;
+  isPassedOut: boolean;
   qrCode: string;
   bookingId?: string;
   referenceNum?: string;
@@ -92,6 +98,48 @@ export default function ScannerScreen() {
   
   // Scanner states
   const [isProcessingGroup, setIsProcessingGroup] = useState(false);
+  
+  // Performance optimization: Debouncing state
+  const [lastScanTime, setLastScanTime] = useState(0);
+  const [isDebouncing, setIsDebouncing] = useState(false);
+  const DEBOUNCE_DELAY = 1000; // 1 second debounce to prevent rapid scans
+  
+  // QR Code Importer states
+  const [showQRImporter, setShowQRImporter] = useState(false);
+  const [importedQRCode, setImportedQRCode] = useState<string | null>(null);
+  
+  // Performance monitoring states
+  const [showPerformanceMetrics, setShowPerformanceMetrics] = useState(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState<any>(null);
+
+  // Performance metrics handler
+  const updatePerformanceMetrics = useCallback(() => {
+    const metrics = getPerformanceMetrics();
+    setPerformanceMetrics(metrics);
+    console.log('📊 Performance metrics updated:', metrics);
+  }, []);
+
+  // Handle QR code detected from importer
+  const handleImportedQRCode = useCallback(async (qrCode: string) => {
+    console.log('📥 QR Code imported:', qrCode);
+    
+    // Process the imported QR code the same way as a scanned one
+    try {
+      console.log('🔄 Processing imported QR code:', qrCode);
+      
+      // Turn off camera during processing
+      setShowCamera(false);
+      setIsScanning(false);
+      
+      // Store the QR code for processing
+      setImportedQRCode(qrCode);
+    } catch (error) {
+      console.error('❌ Error processing imported QR code:', error);
+      feedback.error();
+      Alert.alert('Error', 'Failed to process imported QR code.');
+    }
+  }, []);
+
 
   // Ensure camera is always available
   useEffect(() => {
@@ -148,6 +196,10 @@ export default function ScannerScreen() {
         // Update currentEventId immediately
         console.log(`✅ Setting currentEventId to: ${eventId}`);
         setCurrentEventId(eventId);
+        
+        // Performance optimization: Clear caches when switching events
+        clearAllCaches();
+        console.log('🧹 Caches cleared due to event change');
         
         // If we have a selectedEventName from context and it matches the event ID, use it directly
         if (selectedEventName && selectedEventName !== '' && selectedEventId === eventId) {
@@ -343,10 +395,26 @@ export default function ScannerScreen() {
 
   const handleScanResult = useCallback(async (data: string) => {
     const now = Date.now();
+    
+    // Performance optimization: Enhanced debouncing
+    if (isDebouncing) {
+      console.log('🚫 Scan debounced - processing in progress');
+      return;
+    }
+    
     if (lastProcessedRef.current.data === data && now - lastProcessedRef.current.time < 3000) {
       console.log('⚠️ Ignoring duplicate scan of the same code within 3s');
       return;
     }
+    
+    // Additional debouncing for rapid successive scans
+    if (lastScanTime && now - lastScanTime < DEBOUNCE_DELAY) {
+      console.log(`🚫 Rapid scan prevented (within ${DEBOUNCE_DELAY}ms)`);
+      return;
+    }
+    
+    setIsDebouncing(true);
+    setLastScanTime(now);
     lastProcessedRef.current = { data, time: now };
     // IMMEDIATE FAIL-SAFE: Resume scanning after 8 seconds no matter what
     const emergencyResumeTimeout = setTimeout(() => {
@@ -499,6 +567,7 @@ export default function ScannerScreen() {
             ticketType: ticketType,
             ticketIdentifier: ticket.ticket_identifier,
             isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1,
+            isPassedOut: ticket.passout === '1' || ticket.passout === 1,
             qrCode: ticket.ticket_identifier,
             // Add additional fields for better display
             bookingId: ticket.booking_id || ticketInfo.booking_id || '',
@@ -512,14 +581,16 @@ export default function ScannerScreen() {
         
         // Filter tickets based on scan mode
         let relevantTickets = scanMode === 'scan-in'
-          ? groupTickets.filter((ticket: any) => !ticket.isCheckedIn)
-          : groupTickets.filter((ticket: any) => ticket.isCheckedIn);
+          ? groupTickets.filter((ticket: any) => !ticket.isCheckedIn && !ticket.isPassedOut)
+          : groupTickets.filter((ticket: any) => ticket.isCheckedIn && !ticket.isPassedOut);
 
-        // In scan-out mode, some APIs may not flag checked-in correctly.
-        // If nothing qualifies, fall back to showing the entire group to let the user choose.
-        if (scanMode === 'scan-out' && relevantTickets.length === 0) {
-          console.log('⚠️ No tickets marked as checked-in for pass-out. Falling back to full group list.');
-          relevantTickets = groupTickets;
+        // If no relevant tickets found, show appropriate message
+        if (relevantTickets.length === 0) {
+          if (scanMode === 'scan-in') {
+            console.log('⚠️ No tickets available for check-in (all are already checked in or passed out)');
+          } else {
+            console.log('⚠️ No tickets available for pass-out (all are either not checked in or already passed out)');
+          }
         }
         
         console.log('Relevant tickets for', scanMode, ':', relevantTickets.length);
@@ -622,6 +693,7 @@ export default function ScannerScreen() {
               ticketType: ticket.ticketType,
               ticketIdentifier: ticket.ticket_identifier,
               isCheckedIn: ticket.isCheckedIn,
+              isPassedOut: ticket.isPassedOut,
               qrCode: ticket.qrCode,
               bookingId: ticket.bookingId || '',
               referenceNum: ticket.referenceNum || '',
@@ -629,8 +701,8 @@ export default function ScannerScreen() {
               ticketId: ticket.id || ''
             }));
             
-            // For pass-out, show all tickets (let user choose which ones to pass out)
-            const relevantTickets = groupTickets.filter((ticket: any) => ticket.isCheckedIn);
+            // For pass-out, show only checked-in tickets that haven't been passed out
+            const relevantTickets = groupTickets.filter((ticket: any) => ticket.isCheckedIn && !ticket.isPassedOut);
             
             console.log('Relevant tickets for pass-out:', relevantTickets.length);
             
@@ -897,10 +969,41 @@ export default function ScannerScreen() {
     } finally {
       // Clear the emergency timeout since we're done
       clearTimeout(emergencyResumeTimeout);
+      // Clear debouncing to allow next scan
+      setIsDebouncing(false);
+      console.log('✅ Debouncing cleared - ready for next scan');
+      
+      // Update performance metrics after scan operation
+      updatePerformanceMetrics();
+      
       // Don't close camera here - let the individual scan functions handle it
       console.log('🔄 handleScanResult finally: Not closing camera - letting individual functions handle it');
     }
   }, [currentEventId, scanMode]);
+
+  // Process imported QR code when it's set (after handleScanResult is defined)
+  useEffect(() => {
+    if (importedQRCode) {
+      console.log('🔄 Processing imported QR code:', importedQRCode);
+      
+      // Process the imported QR code using the existing scan logic
+      const processImportedCode = async () => {
+        try {
+          // Use the same logic as handleScanResult but without the duplicate check
+          await handleScanResult(importedQRCode);
+        } catch (error) {
+          console.error('❌ Error processing imported QR code:', error);
+          feedback.error();
+          Alert.alert('Error', 'Failed to process imported QR code.');
+        } finally {
+          // Clear the imported QR code
+          setImportedQRCode(null);
+        }
+      };
+      
+      processImportedCode();
+    }
+  }, [importedQRCode, handleScanResult]);
 
   const processSingleTicketDirectly = async (scanCode: string, validationResult: QRValidationResponse, mode: 'scan-in' | 'scan-out') => {
     try {
@@ -1099,6 +1202,27 @@ export default function ScannerScreen() {
             (currentEventId ? `Event #${currentEventId}` : 'Select Event'))}
         </Text>
       </TouchableOpacity>
+      
+      {/* Performance Metrics Button */}
+      <TouchableOpacity 
+        style={[styles.importButton, { backgroundColor: colors.primary, marginRight: 8, opacity: 0.8 }]}
+        onPress={() => {
+          updatePerformanceMetrics();
+          setShowPerformanceMetrics(true);
+        }}
+        activeOpacity={0.8}
+      >
+        <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' }}>📊</Text>
+      </TouchableOpacity>
+      
+      {/* Import QR Code Button */}
+      <TouchableOpacity 
+        style={[styles.importButton, { backgroundColor: colors.primary }]}
+        onPress={() => setShowQRImporter(true)}
+        activeOpacity={0.8}
+      >
+        <Upload size={20} color="#FFFFFF" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -1197,6 +1321,73 @@ export default function ScannerScreen() {
           message={successModalData.message}
         />
       )}
+
+      {/* Performance Metrics Modal */}
+      {showPerformanceMetrics && performanceMetrics && (
+        <View style={[styles.performanceModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.performanceContent, { backgroundColor: colors.card }]}>
+            <Text style={[styles.performanceTitle, { color: colors.text }]}>📊 Performance Metrics</Text>
+            
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>API Calls</Text>
+                <Text style={[styles.metricValue, { color: colors.primary }]}>{performanceMetrics.apiCalls}</Text>
+              </View>
+              
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>Cache Hit Rate</Text>
+                <Text style={[styles.metricValue, { color: '#22C55E' }]}>{performanceMetrics.cacheHitRate}%</Text>
+              </View>
+              
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>Avg Response</Text>
+                <Text style={[styles.metricValue, { color: colors.primary }]}>{performanceMetrics.avgResponseTime}ms</Text>
+              </View>
+              
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>API Calls Saved</Text>
+                <Text style={[styles.metricValue, { color: '#22C55E' }]}>{performanceMetrics.cacheHits}</Text>
+              </View>
+              
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>Batch Operations</Text>
+                <Text style={[styles.metricValue, { color: colors.primary }]}>{performanceMetrics.batchOperations}</Text>
+              </View>
+              
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: colors.text }]}>Scan Calls</Text>
+                <Text style={[styles.metricValue, { color: colors.primary }]}>{performanceMetrics.scanCalls}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.performanceActions}>
+              <TouchableOpacity
+                style={[styles.performanceButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  resetPerformanceMetrics();
+                  updatePerformanceMetrics();
+                }}
+              >
+                <Text style={styles.performanceButtonText}>Reset Metrics</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.performanceButton, { backgroundColor: colors.primary, opacity: 0.7 }]}
+                onPress={() => setShowPerformanceMetrics(false)}
+              >
+                <Text style={styles.performanceButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* QR Code Importer Modal */}
+      <QRCodeImporter
+        visible={showQRImporter}
+        onClose={() => setShowQRImporter(false)}
+        onQRCodeDetected={handleImportedQRCode}
+      />
     </SafeAreaView>
   );
 }
@@ -1206,6 +1397,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 8,
@@ -1335,6 +1529,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
+  importButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
   // Removed group modal styles - now handled in ticket-action page
   // Compact Event Header Styles
   simpleEventHeader: {
@@ -1396,5 +1605,74 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginLeft: 12,
+  },
+  // Performance Metrics Modal Styles
+  performanceModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  performanceContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  performanceTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  metricItem: {
+    width: '48%',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    opacity: 0.7,
+    marginBottom: 4,
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  performanceActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  performanceButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  performanceButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
