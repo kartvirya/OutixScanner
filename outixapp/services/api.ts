@@ -1005,6 +1005,20 @@ export interface TicketInfo {
   scannable: string;
   ticket_id: string;
   passout: string;
+  /**
+   * Optional list of tickets belonging to the same transaction/group.
+   * Present on validate endpoint responses when multiple admits exist.
+   */
+  availabletickets?: Array<{
+    id: string;
+    booking_id: string;
+    ticket_identifier: string;
+    ticket_title: string;
+    checkedin: string | number;
+    passout: string | number;
+    ticket_id: string;
+    admit_name?: string;
+  }>;
 }
 
 export interface QRValidationResponse {
@@ -1271,7 +1285,11 @@ export const clearStoredSession = async (): Promise<void> => {
 };
 
 // Enhanced QR Code validation with better error handling
-export const validateQRCode = async (eventId: string, scanCode: string): Promise<QRValidationResponse | null> => {
+export const validateQRCode = async (
+  eventId: string,
+  scanCode: string,
+  scanMode?: 'ScanOut' | 'ScanIn' | 'PassOut'
+): Promise<QRValidationResponse | null> => {
   try {
     console.log(`Validating QR code for event ${eventId}, scancode: ${scanCode}`);
     
@@ -1313,8 +1331,9 @@ export const validateQRCode = async (eventId: string, scanCode: string): Promise
       };
     }
     
-    // Make direct API request to validate endpoint
-    const response = await api.get(`/validate/${eventId}/${scanCode}`, {
+    // Make direct API request to validate endpoint; append scanmode when provided
+    const query = scanMode ? `?scanmode=${encodeURIComponent(scanMode)}` : '';
+    const response = await api.get(`/validate/${eventId}/${scanCode}${query}`, {
       timeout: 30000
     });
     
@@ -1535,10 +1554,10 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
     }
     
     // Extract purchaser information - even from error responses
-    let purchaserEmail = null;
-    let purchaserName = null;
-    let purchaserBookingId = null;
-    let purchaserReferenceNum = null;
+    let purchaserEmail: string | null = null;
+    let purchaserName: string | null = null;
+    let purchaserBookingId: string | null = null;
+    let purchaserReferenceNum: string | null = null;
     
     // Check if we have ticket info (can be present even in error responses)
     if (validation.msg && typeof validation.msg === 'object' && 'info' in validation.msg) {
@@ -1559,183 +1578,85 @@ export const getGroupTickets = async (eventId: string, qrData: string, preValida
       };
     }
     
-    // If we don't have purchaser info by now, we can't proceed
-    if (!purchaserEmail && !purchaserName && !purchaserBookingId && !purchaserReferenceNum) {
-      return {
-        error: true,
-        msg: 'Cannot identify purchaser for group scan'
-      };
-    }
-    
-    console.log('Purchaser info extracted:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
-    
-    // Get all attendees for this event using the correct endpoint
-    console.log('📞 Fetching guest list for event:', eventId);
-    const response = await api.get(`/guestlist/${eventId}`, {
-      timeout: 30000
-    });
-    console.log('📋 Guest list response status:', response.status);
-    
-    if (!response.data) {
-      throw new Error('No response data from guest list API');
-    }
-    
-    // Extract guests from response - the correct format is response.data.msg
-    let allGuests = [];
-    if (response.data.msg && Array.isArray(response.data.msg)) {
-      allGuests = response.data.msg;
-    } else if (Array.isArray(response.data)) {
-      allGuests = response.data;
-    } else if (response.data.data && Array.isArray(response.data.data)) {
-      allGuests = response.data.data;
-    } else if (response.data.guests && Array.isArray(response.data.guests)) {
-      allGuests = response.data.guests;
-    } else {
-      throw new Error('Unexpected guest list response format');
-    }
-    
-    console.log('Total guests found:', allGuests.length);
-    
-    // Try to locate the scanned ticket in the guest list first. This lets us
-    // derive reliable grouping keys (booking_reference/booking_id) even when the
-    // validation payload does not include purchaser info on success responses.
-    const scannedGuest: any | undefined = allGuests.find((g: any) => g.ticket_identifier === qrData);
-    if (scannedGuest) {
-      purchaserReferenceNum = purchaserReferenceNum || scannedGuest.booking_reference || null;
-      purchaserBookingId = purchaserBookingId || scannedGuest.booking_id || null;
-      purchaserEmail = purchaserEmail || scannedGuest.email || null;
-      purchaserName = purchaserName || scannedGuest.purchased_by || scannedGuest.fullname || null;
-      console.log('🔑 Derived grouping keys from scanned guest:', {
-        purchaserReferenceNum,
-        purchaserBookingId,
-        purchaserEmail,
-        purchaserName
-      });
+    // Fast-path: if validate response contains availabletickets, use it to build the group directly
+    let availableTicketsFromValidation: any[] = [];
+    if (validation.msg && typeof validation.msg === 'object' && 'info' in validation.msg) {
+      const info = validation.msg.info as TicketInfo;
+      if (info && Array.isArray(info.availabletickets) && info.availabletickets.length > 0) {
+        availableTicketsFromValidation = info.availabletickets;
+        // If missing purchaser hints, derive them from validation info
+        purchaserReferenceNum = purchaserReferenceNum || info.reference_num || null;
+        purchaserBookingId = purchaserBookingId || info.booking_id || null;
+        purchaserEmail = purchaserEmail || info.email || null;
+        purchaserName = purchaserName || info.fullname || null;
+      }
     }
 
-    // Filter attendees by same purchaser email, name, or booking ID
-    // Note: guest list structure uses different field names
-    console.log('🔍 Filtering guests by purchaser info:', { purchaserEmail, purchaserName, purchaserBookingId, purchaserReferenceNum });
-    console.log('🔍 Sample guest booking references:', allGuests.slice(0, 3).map((g: any) => ({
-      ticket_identifier: g.ticket_identifier,
-      booking_reference: g.booking_reference,
-      booking_id: g.booking_id
-    })));
-    
-    const groupTickets = allGuests.filter((attendee: any) => {
-      // Match by reference number (reference_num from validation vs booking_reference in guest list)
-      if (purchaserReferenceNum && attendee.booking_reference === purchaserReferenceNum) {
-        console.log('✅ Matched by reference number:', attendee.booking_reference, 'vs', purchaserReferenceNum);
-        return true;
-      }
-      // Match by booking reference (booking_reference in guest list vs booking_id in validation)
-      if (purchaserBookingId && (attendee.booking_reference === purchaserBookingId || attendee.booking_id === purchaserBookingId)) {
-        console.log('✅ Matched by booking ID:', attendee.booking_reference, 'vs', purchaserBookingId);
-        return true;
-      }
-      if (purchaserEmail && attendee.email === purchaserEmail) {
-        console.log('✅ Matched by email:', attendee.email);
-        return true;
-      }
-      // Match by name (purchased_by in guest list vs fullname in validation)
-      if (purchaserName && (attendee.purchased_by === purchaserName || attendee.fullname === purchaserName)) {
-        console.log('✅ Matched by name:', attendee.purchased_by || attendee.fullname);
-        return true;
-      }
-      
-      // NEW: If no purchaser info is available, check if this is the same ticket by ticket_identifier
-      if (!purchaserEmail && !purchaserName && !purchaserBookingId && !purchaserReferenceNum) {
-        console.log('⚠️ No purchaser info available, checking if this is the scanned ticket');
-        if (attendee.ticket_identifier === qrData) {
-          console.log('✅ This is the scanned ticket itself:', attendee.ticket_identifier);
-          return true;
+    if (availableTicketsFromValidation.length > 0) {
+      console.log('✅ Using availabletickets from validation to derive group:', availableTicketsFromValidation.length);
+      // Map to consistent format
+      const formattedTickets = availableTicketsFromValidation.map((ticket: any) => {
+        const qrCode = ticket.ticket_identifier;
+        const isCheckedIn = ticket.checkedin === '1' || ticket.checkedin === 1;
+        return {
+          id: qrCode,
+          name: ticket.admit_name && String(ticket.admit_name).trim() ? ticket.admit_name : (purchaserName || 'Guest'),
+          email: purchaserEmail || 'No email',
+          ticketType: ticket.ticket_title || 'General Admission',
+          ticketIdentifier: ticket.ticket_identifier,
+          isCheckedIn,
+          qrCode
+        };
+      });
+
+      return {
+        success: true,
+        tickets: formattedTickets,
+        purchaser: {
+          email: purchaserEmail,
+          name: purchaserName,
+          bookingId: purchaserBookingId
         }
-      }
-      
-      return false;
-    });
-    
-    console.log('Group tickets found:', groupTickets.length);
-    
-    // If no group tickets found but we have the scanned ticket, create a single-ticket group
-    if (groupTickets.length === 0) {
-      console.log('⚠️ No group tickets found, checking if scanned ticket exists in guest list');
-      console.log('🔍 Looking for QR data:', qrData);
-      console.log('🔍 Available ticket identifiers:', allGuests.slice(0, 5).map((g: any) => g.ticket_identifier));
-      
-      const scannedTicket = scannedGuest || allGuests.find((attendee: any) => attendee.ticket_identifier === qrData);
-      if (scannedTicket) {
-        console.log('✅ Found scanned ticket in guest list, creating single-ticket group');
-        // Before falling back to single, try one last time to expand by booking reference
-        const bookingRef = scannedTicket.booking_reference || scannedTicket.booking_id;
-        if (bookingRef) {
-          const candidates = allGuests.filter((g: any) => (g.booking_reference === bookingRef || g.booking_id === bookingRef));
-          if (candidates.length > 0) {
-            console.log(`🔗 Expanded group via booking reference (${bookingRef}):`, candidates.length);
-            groupTickets.push(...candidates);
-          } else {
-            groupTickets.push(scannedTicket);
-          }
-        } else {
-          groupTickets.push(scannedTicket);
+      };
+    }
+
+    // No availabletickets: build a single-ticket group from validation info
+    if (validation.msg && typeof validation.msg === 'object' && 'info' in validation.msg) {
+      const info = validation.msg.info as TicketInfo;
+      const singleQr = info.ticket_identifier || qrData;
+      const singleIsCheckedIn = info.checkedin === 1 || info.checkedin === '1' as any;
+      const singleTicket = {
+        id: singleQr,
+        name: (info.fullname && info.fullname.trim()) ? info.fullname : 'Guest',
+        email: info.email || 'No email',
+        ticketType: info.ticket_title || 'General Admission',
+        ticketIdentifier: singleQr,
+        isCheckedIn: !!singleIsCheckedIn,
+        qrCode: singleQr
+      };
+      return {
+        success: true,
+        tickets: [singleTicket],
+        purchaser: {
+          email: purchaserEmail,
+          name: purchaserName,
+          bookingId: purchaserBookingId
         }
-      } else {
-        console.log('❌ Scanned ticket not found in guest list');
-        console.log('🔍 First few guest ticket identifiers:', allGuests.slice(0, 3).map((g: any) => ({
-          ticket_identifier: g.ticket_identifier,
-          booking_reference: g.booking_reference
-        })));
-      }
+      };
     }
     
-    // Map to consistent format using guest list field names
-    const formattedTickets = groupTickets.map((ticket: any, index: number) => {
-      console.log(`Ticket ${index + 1} raw data:`, {
-        ticket_identifier: ticket.ticket_identifier,
-        booking_reference: ticket.booking_reference,
-        purchased_by: ticket.purchased_by,
-        email: ticket.email,
-        checkedin: ticket.checkedin,
-        ticket_title: ticket.ticket_title
-      });
-      
-      // Use ticket_identifier as the primary QR code (this is what we scan)
-      const qrCode = ticket.ticket_identifier;
-      
-      // Helper function to extract guest name from ticket data
-      const extractGuestName = (ticket: any): string => {
-        if (ticket.purchased_by && ticket.purchased_by.trim()) {
-          return ticket.purchased_by.trim();
-        } else if (ticket.admit_name && ticket.admit_name.trim()) {
-          return ticket.admit_name.trim();
-        } else if (ticket.name && ticket.name.trim()) {
-          return ticket.name.trim();
-        } else if (ticket.email && ticket.email.trim()) {
-          return ticket.email.trim();
-        } else if (ticket.firstName || ticket.lastName) {
-          return `${ticket.firstName || ''} ${ticket.lastName || ''}`.trim();
-        } else if (ticket.ticket_identifier) {
-          return `Ticket ${ticket.ticket_identifier.slice(-6)}`;
-        }
-        return 'Guest';
-      };
-      
-      return {
-        id: qrCode, // Use the ticket identifier as the unique ID
-        name: extractGuestName(ticket),
-        email: ticket.email || 'No email',
-        ticketType: ticket.ticket_title || 'General Admission',
-        ticketIdentifier: ticket.ticket_identifier,
-        isCheckedIn: ticket.checkedin === '1' || ticket.checkedin === 1 || false,
-        qrCode: qrCode
-      };
-    });
-    
-    console.log('Formatted tickets with unique IDs:', formattedTickets.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
-    
+    // As a final fallback, return the scanned code as a single ticket
     return {
       success: true,
-      tickets: formattedTickets,
+      tickets: [{
+        id: qrData,
+        name: purchaserName || 'Guest',
+        email: purchaserEmail || 'No email',
+        ticketType: 'General Admission',
+        ticketIdentifier: qrData,
+        isCheckedIn: false,
+        qrCode: qrData
+      }],
       purchaser: {
         email: purchaserEmail,
         name: purchaserName,

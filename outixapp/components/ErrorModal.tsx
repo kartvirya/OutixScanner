@@ -31,7 +31,7 @@ export default function ErrorModal({
   const getIcon = () => {
     switch (type) {
       case 'already-scanned':
-        return <UserCheck size={48} color="#FF9500" />;
+        return <UserCheck size={48} color="#FF3B30" />;
       case 'not-checked-in':
         return <UserX size={48} color="#FF9500" />;
       case 'invalid-ticket':
@@ -74,6 +74,7 @@ export default function ErrorModal({
   const getButtonColor = () => {
     switch (type) {
       case 'already-scanned':
+        return '#FF3B30';
       case 'not-checked-in':
         return '#FF9500';
       case 'invalid-ticket':

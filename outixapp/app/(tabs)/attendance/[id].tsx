@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
     ArrowLeft,
     Clock,
@@ -6,10 +6,11 @@ import {
     UserCheck,
     Users
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     FlatList,
     Modal,
     RefreshControl,
@@ -70,7 +71,7 @@ interface Attendee {
 
 export default function AttendancePage() {
   const { colors, isDarkMode } = useTheme();
-  const { onAttendanceRefresh, triggerAttendanceRefresh, triggerGuestListRefresh, triggerAnalyticsRefresh } = useRefresh();
+  // Removed automatic refresh triggers - only refresh on PTR or app open
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -93,6 +94,24 @@ export default function AttendancePage() {
   useEffect(() => {
     filterAttendees();
   }, [checkedInGuests, searchQuery]);
+
+  // Handle Android back button and swipe gesture
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Navigate back to event details page instead of default back behavior
+        feedback.buttonPress();
+        router.push(`/(tabs)/${eventId}`);
+        return true; // Prevent default back behavior
+      };
+
+      // Add event listener for hardware back button
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Return cleanup function
+      return () => backHandler.remove();
+    }, [eventId])
+  );
 
   const fetchEventAndAttendanceData = async () => {
     setLoading(true);
@@ -507,9 +526,7 @@ export default function AttendancePage() {
     console.log(`Checked in ${ticketInfo.fullname} (awaiting server time)`);
     feedback.checkIn();
     
-    // Trigger refresh for other components
-    triggerGuestListRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const updateLocalScanOut = async (scanCode: string, validationResult: any) => {
@@ -525,9 +542,7 @@ export default function AttendancePage() {
     console.log(`Checked out ${ticketInfo.fullname}`);
     feedback.checkOut();
     
-    // Trigger refresh for other components
-    triggerGuestListRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const testNetworkConnectivity = async () => {
@@ -606,30 +621,10 @@ export default function AttendancePage() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
         options={{ 
-          title: "Attendance",
+          title: `Live Attendance - ${eventTitle}`,
           headerShown: true,
         }}
       />
-      
-      {/* Minimal Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => {
-              feedback.buttonPress();
-              // Navigate to event details page explicitly
-              router.push(`/(tabs)/${eventId}`);
-            }}
-          >
-            <ArrowLeft size={20} color="#FF6B00" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Live Attendance</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.secondary || '#6B7280' }]}>{eventTitle}</Text>
-          </View>
-        </View>
-      </View>
 
       {/* Clean Stats Row */}
       <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
@@ -887,6 +882,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  
   
   // Attendee List
   attendeeList: {

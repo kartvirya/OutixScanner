@@ -1,7 +1,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import { Amplify, Notifications } from 'aws-amplify';
+import { Amplify } from 'aws-amplify';
 import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect } from "react";
@@ -11,6 +11,8 @@ import awsconfig from '../aws-exports';
 import { RefreshProvider } from "../context/RefreshContext";
 import { StorageProvider } from "../context/StorageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { useDoublePowerButton } from "../hooks/useDoublePowerButton";
+import Toast from 'react-native-toast-message';
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -27,6 +29,19 @@ function ThemedStatusBar() {
   );
 }
 
+// Component that handles double power button press
+function PowerButtonHandler() {
+  useDoublePowerButton({
+    enabled: true,
+    onDoublePress: () => {
+      console.log('🎯 Double power button press - opening scanner');
+      // The hook will handle the navigation automatically
+    }
+  });
+  
+  return null; // This component doesn't render anything
+}
+
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
 
@@ -37,10 +52,9 @@ export default function RootLayout() {
         // Configure AWS Amplify
         Amplify.configure(awsconfig);
         
-        // Enable push notifications
-        Notifications.Push.enable();
+        // Push notifications removed
         
-        console.log('AWS Amplify and push notifications initialized');
+        console.log('AWS Amplify initialized');
         
         // Load fonts if needed, but Lucide doesn't require extra fonts
         setFontsLoaded(true);
@@ -72,6 +86,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <RefreshProvider>
             <ThemedStatusBar />
+            <PowerButtonHandler />
             <Stack
               screenOptions={{
                 headerStyle: {
@@ -87,6 +102,7 @@ export default function RootLayout() {
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>
+            <Toast />
           </RefreshProvider>
         </ThemeProvider>
       </StorageProvider>

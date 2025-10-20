@@ -277,10 +277,10 @@ export default function TicketActionScreen() {
                     fontSize: isSmallScreen ? 15 : 16,
                   },
                 ]}
-                numberOfLines={2}
-                ellipsizeMode="tail"
+                numberOfLines={1}
+                ellipsizeMode="middle"
               >
-                {ticket.name}
+                {ticket.ticketIdentifier}
               </Text>
               <Text
                 style={[
@@ -295,7 +295,7 @@ export default function TicketActionScreen() {
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
-                {ticket.ticketType}
+                {ticket.name || 'Guest'}
               </Text>
             </View>
             <View style={styles.checkboxContainer}>

@@ -382,12 +382,12 @@ export default function OptimizedEventDetail() {
   const handleNavigateToGuestList = useCallback(() => {
     feedback.buttonPress();
     // Use push to maintain navigation stack properly
-    router.push(`/guest-list/${eventId}`);
+    router.push(`/(tabs)/guest-list/${eventId}`);
   }, [eventId]);
 
   const handleNavigateToAttendance = useCallback(() => {
     feedback.buttonPress();
-    router.push(`/attendance/${eventId}`);
+    router.push(`/(tabs)/attendance/${eventId}`);
   }, [eventId]);
 
   // Scanner handlers

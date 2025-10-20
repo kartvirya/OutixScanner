@@ -3,7 +3,7 @@ import { BarChart, Calendar, QrCode, User, Users } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import { Animated, Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Path } from 'react-native-svg';
 import { useTheme } from "../../context/ThemeContext";
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -12,7 +12,6 @@ interface TabIconProps {
   icon: React.ReactNode;
 }
 
-// Custom TabIcon component to handle icon display more reliably
 const TabIcon: React.FC<TabIconProps> = ({ icon }) => {
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', width: 24, height: 24 }}>
@@ -21,53 +20,57 @@ const TabIcon: React.FC<TabIconProps> = ({ icon }) => {
   );
 };
 
-// Custom Tab Bar Shape Component
-const TabBarShape = ({ color, showCutout }: { color: string; showCutout: boolean }) => {
+// Enhanced Tab Bar Shape with gradient support
+const TabBarShape = ({ color, showCutout, isDark }: { color: string; showCutout: boolean; isDark: boolean }) => {
   const width = screenWidth;
-  const height = 85;
+  const height = 75;
   const centerX = width / 2;
-  const cutoutRadius = 55; // Radius for the circular cutout
-  const curveRadius = 30;
+  const cutoutRadius = 50;
+  const curveRadius = 28;
   
   let pathData;
   
   if (showCutout) {
-    // Create a smooth curved cutout path
     pathData = `
-      M 0,20
+      M 0,16
       L 0,${height}
       L ${width},${height}
-      L ${width},20
-      Q ${width},0 ${width - 20},0
+      L ${width},16
+      Q ${width},0 ${width - 16},0
       L ${centerX + cutoutRadius + curveRadius},0
       Q ${centerX + cutoutRadius},0 ${centerX + cutoutRadius - curveRadius},${curveRadius}
       A ${cutoutRadius},${cutoutRadius} 0 0,0 ${centerX - cutoutRadius + curveRadius},${curveRadius}
       Q ${centerX - cutoutRadius},0 ${centerX - cutoutRadius - curveRadius},0
-      L 20,0
-      Q 0,0 0,20
+      L 16,0
+      Q 0,0 0,16
       Z
     `;
   } else {
-    // Create a simple rounded rectangle without cutout
     pathData = `
-      M 0,20
+      M 0,16
       L 0,${height}
       L ${width},${height}
-      L ${width},20
-      Q ${width},0 ${width - 20},0
-      L 20,0
-      Q 0,0 0,20
+      L ${width},16
+      Q ${width},0 ${width - 16},0
+      L 16,0
+      Q 0,0 0,16
       Z
     `;
   }
 
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFillObject}>
+      <Defs>
+        <LinearGradient id="tabGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <Stop offset="0%" stopColor={color} stopOpacity="0.98" />
+          <Stop offset="100%" stopColor={color} stopOpacity="1" />
+        </LinearGradient>
+      </Defs>
       <Path 
         d={pathData} 
-        fill={color} 
-        stroke="rgba(255, 107, 0, 0.2)" 
-        strokeWidth={1}
+        fill="url(#tabGradient)"
+        stroke={isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)"} 
+        strokeWidth={0.5}
       />
     </Svg>
   );
@@ -81,15 +84,18 @@ function CustomTabBar() {
   
   // Animation values
   const scannerOpacity = useRef(new Animated.Value(0)).current;
-  const scannerScale = useRef(new Animated.Value(0.8)).current;
-  const tabBarAnimation = useRef(new Animated.Value(0)).current;
-
-  // Check if we're on an event detail page using pathname only
-  // Debug logging
-  console.log('Current pathname:', pathname);
-  console.log('Selected event ID:', selectedEventId);
+  const scannerScale = useRef(new Animated.Value(0.3)).current;
+  const scannerRotate = useRef(new Animated.Value(0)).current;
+  const tabBarSlide = useRef(new Animated.Value(0)).current;
   
-  // Only use pathname detection - more reliable for actual page detection
+  // Individual tab animations
+  const tabAnimations = useRef([
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+  ]).current;
+
   const isOnEventDetailPage = Boolean(
     pathname !== '/(tabs)' && 
     pathname !== '/(tabs)/' && 
@@ -100,50 +106,59 @@ function CustomTabBar() {
     !pathname.includes('/profile') &&
     (pathname.match(/\/\(tabs\)\/[^\/]+$/) || pathname.match(/\/[0-9]+$/) || pathname.match(/\/[a-zA-Z0-9]+$/) && pathname.length > 8)
   );
-  
-  console.log('Is on event detail page:', isOnEventDetailPage);
 
   const hideForTicketAction = pathname.includes('/ticket-action');
 
-  // Animate scanner tab appearance/disappearance
+  // Animate scanner tab with spring and rotation
   useEffect(() => {
     if (isOnEventDetailPage) {
-      // Animate in
       Animated.parallel([
         Animated.timing(scannerOpacity, {
           toValue: 1,
-          duration: 300,
+          duration: 400,
           useNativeDriver: true,
         }),
         Animated.spring(scannerScale, {
           toValue: 1,
-          tension: 100,
+          tension: 80,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scannerRotate, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+        Animated.spring(tabBarSlide, {
+          toValue: 1,
+          tension: 70,
           friction: 8,
           useNativeDriver: true,
         }),
-        Animated.timing(tabBarAnimation, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: false,
-        }),
       ]).start();
     } else {
-      // Animate out
       Animated.parallel([
         Animated.timing(scannerOpacity, {
           toValue: 0,
-          duration: 200,
+          duration: 250,
           useNativeDriver: true,
         }),
         Animated.timing(scannerScale, {
-          toValue: 0.8,
-          duration: 200,
+          toValue: 0.3,
+          duration: 250,
           useNativeDriver: true,
         }),
-        Animated.timing(tabBarAnimation, {
+        Animated.timing(scannerRotate, {
           toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(tabBarSlide, {
+          toValue: 0,
+          tension: 70,
+          friction: 8,
+          useNativeDriver: true,
         }),
       ]).start();
     }
@@ -158,8 +173,6 @@ function CustomTabBar() {
   ];
 
   const isActive = (route: string) => {
-    console.log('Checking active state:', { route, pathname });
-    
     if (route === '/(tabs)') {
       return pathname === '/(tabs)' || pathname === '/(tabs)/' || pathname === '/';
     }
@@ -178,16 +191,27 @@ function CustomTabBar() {
     return pathname === route;
   };
 
-  const handleTabPress = (route: string) => {
-    // For scanner route, include the current pathname as returnTo param
+  const handleTabPress = (route: string, index: number) => {
+    // Animate the pressed tab
+    Animated.sequence([
+      Animated.timing(tabAnimations[index], {
+        toValue: 0.85,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.spring(tabAnimations[index], {
+        toValue: 1,
+        tension: 100,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     if (route === '/(tabs)/scanner') {
-      // Get the current event ID from the pathname
       const currentPath = pathname;
-      let returnTo = '/(tabs)'; // Default to events list
+      let returnTo = '/(tabs)';
       
-      // If we're on an event detail page, set that as the return path
       if (isOnEventDetailPage) {
-        // Extract the event ID from the current path
         const eventIdMatch = currentPath.match(/\/(\d+)$/) || currentPath.match(/\/([^/]+)$/);
         if (eventIdMatch && eventIdMatch[1]) {
           returnTo = `/(tabs)/${eventIdMatch[1]}`;
@@ -203,107 +227,133 @@ function CustomTabBar() {
     }
   };
 
-  // Hide the tab bar UI on ticket-action screen, but keep hooks above consistent
   if (hideForTicketAction) {
     return null;
   }
 
+  const rotation = scannerRotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '0deg'],
+  });
+
   return (
-    <View style={styles.tabBarContainer}>
-      {/* Custom Shaped Tab Bar Background */}
+    <View style={styles.tabBarContainer} pointerEvents="box-none">
+      {/* Animated Tab Bar Background */}
       <Animated.View style={[
         styles.customTabBar, 
         { 
           backgroundColor: 'transparent',
-          shadowOpacity: tabBarAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.1, 0.25],
-          }),
-          elevation: tabBarAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [8, 12],
-          }),
+          shadowColor: '#FF6B00',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: isOnEventDetailPage ? 0.15 : 0.08,
+          shadowRadius: 12,
+          elevation: isOnEventDetailPage ? 16 : 10,
+          transform: [{
+            translateY: tabBarSlide.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -2],
+            })
+          }]
         }
       ]}>
-        <TabBarShape color={colors.background} showCutout={isOnEventDetailPage} />
+        <TabBarShape color={colors.background} showCutout={isOnEventDetailPage} isDark={isDarkMode} />
         
         {/* Tab Content */}
         <View style={styles.tabContent}>
           {/* Left Side Tabs */}
           <View style={styles.leftTabsContainer}>
-            {tabs.filter(tab => !tab.isCenter).slice(0, isOnEventDetailPage ? 2 : 2).map((tab, index) => {
+            {tabs.filter(tab => !tab.isCenter).slice(0, 2).map((tab, index) => {
               const IconComponent = tab.icon;
               const active = isActive(tab.route);
               
               return (
-                <TouchableOpacity
+                <Animated.View
                   key={tab.key}
-                  style={styles.regularTab}
-                  onPress={() => handleTabPress(tab.route)}
-                  activeOpacity={0.7}
+                  style={{
+                    flex: 1,
+                    transform: [{ scale: tabAnimations[index] }]
+                  }}
                 >
-                  <View style={[
-                    styles.tabIconContainer, 
-                    { 
-                      opacity: active ? 1 : 0.6,
-                      backgroundColor: active ? `${colors.primary}15` : 'transparent',
-                      borderRadius: 12,
-                      padding: 8,
-                    }
-                  ]}>
-                    <IconComponent 
-                      size={22} 
-                      color={active ? '#FF6B00' : colors.text} 
-                      strokeWidth={active ? 2.5 : 2} 
-                    />
-                  </View>
-                  {/* Removed text labels - keeping only icons */}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.regularTab}
+                    onPress={() => handleTabPress(tab.route, index)}
+                    activeOpacity={0.7}
+                  >
+                    <Animated.View style={[
+                      styles.tabIconContainer, 
+                      { 
+                        backgroundColor: active ? `${colors.primary}12` : 'transparent',
+                        transform: [{ scale: active ? 1 : 0.95 }],
+                      }
+                    ]}>
+                      <IconComponent 
+                        size={23} 
+                        color={active ? '#FF6B00' : colors.text} 
+                        strokeWidth={active ? 2.5 : 2} 
+                      />
+                    </Animated.View>
+                    {active && (
+                      <View style={styles.activeIndicator}>
+                        <View style={[styles.activeDot, { backgroundColor: '#FF6B00' }]} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
               );
             })}
           </View>
 
-          {/* Center Cutout Space - only show when scanner is visible */}
+          {/* Center Cutout Space */}
           {isOnEventDetailPage && <View style={styles.centerCutout} />}
 
           {/* Right Side Tabs */}
           <View style={styles.rightTabsContainer}>
-            {tabs.filter(tab => !tab.isCenter).slice(isOnEventDetailPage ? 2 : 2).map((tab, index) => {
+            {tabs.filter(tab => !tab.isCenter).slice(2).map((tab, index) => {
               const IconComponent = tab.icon;
               const active = isActive(tab.route);
+              const actualIndex = index + 2;
               
               return (
-                <TouchableOpacity
+                <Animated.View
                   key={tab.key}
-                  style={styles.regularTab}
-                  onPress={() => handleTabPress(tab.route)}
-                  activeOpacity={0.7}
+                  style={{
+                    flex: 1,
+                    transform: [{ scale: tabAnimations[actualIndex] }]
+                  }}
                 >
-                  <View style={[
-                    styles.tabIconContainer, 
-                    { 
-                      opacity: active ? 1 : 0.6,
-                      backgroundColor: active ? `${colors.primary}15` : 'transparent',
-                      borderRadius: 12,
-                      padding: 8,
-                    }
-                  ]}>
-                    <IconComponent 
-                      size={22} 
-                      color={active ? '#FF6B00' : colors.text} 
-                      strokeWidth={active ? 2.5 : 2} 
-                    />
-                  </View>
-                  {/* Removed text labels - keeping only icons */}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.regularTab}
+                    onPress={() => handleTabPress(tab.route, actualIndex)}
+                    activeOpacity={0.7}
+                  >
+                    <Animated.View style={[
+                      styles.tabIconContainer, 
+                      { 
+                        backgroundColor: active ? `${colors.primary}12` : 'transparent',
+                        transform: [{ scale: active ? 1 : 0.95 }],
+                      }
+                    ]}>
+                      <IconComponent 
+                        size={23} 
+                        color={active ? '#FF6B00' : colors.text} 
+                        strokeWidth={active ? 2.5 : 2} 
+                      />
+                    </Animated.View>
+                    {active && (
+                      <View style={styles.activeIndicator}>
+                        <View style={[styles.activeDot, { backgroundColor: '#FF6B00' }]} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
               );
             })}
           </View>
         </View>
       </Animated.View>
 
-      {/* Elevated Center Tab */}
-      {tabs.map((tab, index) => {
+      {/* Elevated Center Scanner Button */}
+      {tabs.map((tab) => {
         if (tab.isCenter) {
           const IconComponent = tab.icon;
           const active = isActive(tab.route);
@@ -315,24 +365,37 @@ function CustomTabBar() {
                 styles.floatingTabContainer,
                 {
                   opacity: scannerOpacity,
-                  transform: [{ scale: scannerScale }],
+                  transform: [
+                    { scale: scannerScale },
+                    { rotate: rotation }
+                  ],
                 }
               ]}
+              pointerEvents={isOnEventDetailPage ? 'auto' : 'none'}
             >
               <TouchableOpacity
                 style={styles.floatingTabTouchable}
-                onPress={() => handleTabPress(tab.route)}
-                activeOpacity={0.8}
+                onPress={() => handleTabPress(tab.route, 2)}
+                activeOpacity={0.85}
               >
-                <View style={[
+                <Animated.View style={[
                   styles.floatingTab,
                   {
                     backgroundColor: '#FF6B00',
-                    transform: active ? [{ scale: 1.05 }] : [{ scale: 1 }],
+                    transform: active ? [{ scale: 1.08 }] : [{ scale: 1 }],
+                    shadowColor: '#FF6B00',
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 16,
+                    elevation: 20,
                   }
                 ]}>
-                  <IconComponent size={28} color="#FFFFFF" strokeWidth={2.5} />
-                </View>
+                  {/* Pulse effect ring */}
+                  <View style={styles.pulseRing}>
+                    <View style={[styles.pulseRingInner, { borderColor: '#FF6B00' }]} />
+                  </View>
+                  <IconComponent size={30} color="#FFFFFF" strokeWidth={2.5} />
+                </Animated.View>
               </TouchableOpacity>
             </Animated.View>
           );
@@ -347,7 +410,6 @@ export default function TabsLayout() {
   const { colors, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Log when TabsLayout initializes to confirm it's being rendered
   useEffect(() => {
     console.log("TabsLayout initialized");
   }, []);
@@ -366,58 +428,74 @@ export default function TabsLayout() {
           },
         }}
       >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Events",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: "Analytics",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="scanner"
-        options={{
-          title: "Scan QR",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="registrants"
-        options={{
-          title: "Registrations",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="[id]"
-        options={{
-          title: "Event Details",
-          tabBarButton: () => null,
-          headerShown: false,
-        }}
-      />
-      <Tabs.Screen
-        name="ticket-action"
-        options={{
-          title: "Guest Information",
-          tabBarButton: () => null,
-          headerShown: false,
-        }}
-      />
-    </Tabs>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Events",
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="analytics"
+          options={{
+            title: "Analytics",
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="scanner"
+          options={{
+            title: "Scan QR",
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="registrants"
+          options={{
+            title: "Registrations",
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="[id]"
+          options={{
+            title: "Event Details",
+            tabBarButton: () => null,
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="attendance"
+          options={{
+            title: "Attendance",
+            tabBarButton: () => null,
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="guest-list"
+          options={{
+            title: "Guest List",
+            tabBarButton: () => null,
+            headerShown: false,
+          }}
+        />
+        <Tabs.Screen
+          name="ticket-action"
+          options={{
+            title: "Guest Information",
+            tabBarButton: () => null,
+            headerShown: false,
+          }}
+        />
+      </Tabs>
     </View>
   );
 } 
@@ -428,13 +506,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 85,
+    height: 75,
   },
   customTabBar: {
     position: 'relative',
-    height: 85,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 107, 0, 0.1)',
+    height: 75,
   },
   tabContent: {
     position: 'absolute',
@@ -443,56 +519,83 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: 'row',
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 6,
     zIndex: 1,
   },
   leftTabsContainer: {
     flex: 1,
     flexDirection: 'row',
-    paddingLeft: 10,
+    paddingLeft: 8,
   },
   rightTabsContainer: {
     flex: 1,
     flexDirection: 'row',
-    paddingRight: 10,
+    paddingRight: 8,
   },
   centerCutout: {
-    width: 120,
-    height: 85,
+    width: 110,
+    height: 75,
     backgroundColor: 'transparent',
   },
   regularTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8, // Added vertical padding for better touch targets
-  },
-  floatingTabContainer: {
-    position: 'absolute',
-    bottom: 30,
-    left: '50%',
-    marginLeft: -32, // Half of the tab width (64/2)
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  floatingTab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  floatingTabTouchable: {
-    borderRadius: 32,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
   },
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
+    width: 48,
+    height: 48,
   },
-  // tabLabel style removed since we're only using icons
+  activeIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    alignItems: 'center',
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  floatingTabContainer: {
+    position: 'absolute',
+    bottom: 26,
+    left: '50%',
+    marginLeft: -34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  floatingTab: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+  },
+  floatingTabTouchable: {
+    borderRadius: 34,
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseRingInner: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    opacity: 0.3,
+  },
 });

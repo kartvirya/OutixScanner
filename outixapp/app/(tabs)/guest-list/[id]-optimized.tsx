@@ -6,8 +6,9 @@ import {
   Modal,
   Alert,
   StyleSheet,
+  BackHandler,
 } from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { Stack, useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../../context/ThemeContext';
 import { useRefresh } from '../../../context/RefreshContext';
 import { GuestListProvider, useGuestList } from '../../../context/GuestListContext';
@@ -81,6 +82,24 @@ function GuestListContent() {
       actions.fetchCheckedInGuests();
     }
   }, [state.eventId]);
+
+  // Handle Android back button and swipe gesture
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Navigate back to event details page instead of default back behavior
+        feedback.buttonPress();
+        router.push(`/(tabs)/${eventId}`);
+        return true; // Prevent default back behavior
+      };
+
+      // Add event listener for hardware back button
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Return cleanup function
+      return () => backHandler.remove();
+    }, [eventId])
+  );
   
   // Handle manual check-in
   const handleCheckIn = useCallback(async (guest) => {
@@ -329,7 +348,8 @@ function GuestListContent() {
         attendancePercentage={computed.attendancePercentage}
         onBack={() => {
           feedback.buttonPress();
-          router.back();
+          // Navigate back to the event details page instead of just going back
+          router.push(`/(tabs)/${eventId}`);
         }}
       />
       

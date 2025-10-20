@@ -12,8 +12,9 @@ import {
     Ticket,
     User
 } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -23,6 +24,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { feedback } from '../../../services/feedback';
+import { validateQRCode } from '../../../services/api';
 import { formatAppDateTime } from '../../../utils/date';
 
 export default function GuestDetailsPage() {
@@ -33,6 +35,112 @@ export default function GuestDetailsPage() {
   const guestData = params.guestData ? JSON.parse(params.guestData as string) : null;
   const eventTitle = params.eventTitle as string || 'Event';
   const returnTo = params.returnTo as string; // Get the return path for navigation
+  
+  // State for checked-in date and status
+  const [checkedInDate, setCheckedInDate] = useState<string | null>(null);
+  const [isCheckedIn, setIsCheckedIn] = useState<boolean>(false);
+  const [isLoadingCheckedInDate, setIsLoadingCheckedInDate] = useState(false);
+
+  // Fetch checked-in date when component mounts
+  useEffect(() => {
+    const fetchCheckedInDate = async () => {
+      if (!guestData?.ticket_identifier) return;
+      
+      setIsLoadingCheckedInDate(true);
+      try {
+        console.log(`🔍 Fetching checked-in date for ticket: ${guestData.ticket_identifier}`);
+        const eventId = params.eventId as string;
+        const validationResult = await validateQRCode(eventId, guestData.ticket_identifier);
+        
+        if (validationResult && !validationResult.error && validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+          const info = validationResult.msg.info;
+          if (info) {
+            // Set checked-in status based on checkedin field (0 or 1)
+            const checkedInStatus = String(info.checkedin) === '1';
+            setIsCheckedIn(checkedInStatus);
+            console.log(`🔍 Checked-in status: ${checkedInStatus} (checkedin: ${info.checkedin})`);
+            
+            // Set checked-in date if available
+            if (info.checkedin_date) {
+              console.log(`✅ Found checked-in date: ${info.checkedin_date}`);
+              setCheckedInDate(info.checkedin_date);
+            } else {
+              console.log('ℹ️ No checked-in date found in validation response');
+              setCheckedInDate(null);
+            }
+          }
+        } else {
+          console.log('⚠️ Validation failed or no info available');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching checked-in date:', error);
+      } finally {
+        setIsLoadingCheckedInDate(false);
+      }
+    };
+
+    fetchCheckedInDate();
+  }, [guestData?.ticket_identifier, params.eventId]);
+
+  // Handle check-in
+  const handleCheckIn = async () => {
+    if (!guestData?.ticket_identifier) return;
+    
+    feedback.buttonPress();
+    try {
+      console.log(`🔍 Checking in guest: ${guestData.ticket_identifier}`);
+      const eventId = params.eventId as string;
+      
+      // Call the scan API for check-in
+      const { scanQRCode } = await import('../../../services/api');
+      const result = await scanQRCode(eventId, guestData.ticket_identifier);
+      
+      if (result && !result.error) {
+        console.log('✅ Check-in successful');
+        // Update checked-in status
+        setIsCheckedIn(true);
+        // Refresh the checked-in date
+        const validationResult = await validateQRCode(eventId, guestData.ticket_identifier);
+        if (validationResult && !validationResult.error && validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+          const info = validationResult.msg.info;
+          if (info && info.checkedin_date) {
+            setCheckedInDate(info.checkedin_date);
+          }
+        }
+      } else {
+        console.log('❌ Check-in failed:', result?.msg);
+      }
+    } catch (error) {
+      console.error('❌ Check-in error:', error);
+    }
+  };
+
+  // Handle pass-out
+  const handleCheckOut = async () => {
+    if (!guestData?.ticket_identifier) return;
+    
+    feedback.buttonPress();
+    try {
+      console.log(`🔍 Passing out guest: ${guestData.ticket_identifier}`);
+      const eventId = params.eventId as string;
+      
+      // Call the unscan API for pass-out
+      const { unscanQRCode } = await import('../../../services/api');
+      const result = await unscanQRCode(eventId, guestData.ticket_identifier);
+      
+      if (result && !result.error) {
+        console.log('✅ Pass-out successful');
+        // Update checked-in status
+        setIsCheckedIn(false);
+        // Clear the checked-in date
+        setCheckedInDate(null);
+      } else {
+        console.log('❌ Pass-out failed:', result?.msg);
+      }
+    } catch (error) {
+      console.error('❌ Pass-out error:', error);
+    }
+  };
 
   if (!guestData) {
     return (
@@ -93,7 +201,7 @@ export default function GuestDetailsPage() {
         }
       </View>
       <View style={styles.infoContent}>
-        <Text style={[styles.infoLabel, { color: colors.secondary }]}>{label}</Text>
+        <Text style={[styles.infoLabel, { color: colors.text }]}>{label}</Text>
         <Text style={[styles.infoValue, { color: colors.text }]}>{value}</Text>
       </View>
     </View>
@@ -105,30 +213,28 @@ export default function GuestDetailsPage() {
         options={{ 
           title: "Guest Details",
           headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => {
+                feedback.buttonPress();
+                // Navigate to the returnTo path if available, otherwise use back
+                if (returnTo) {
+                  router.push(returnTo);
+                } else {
+                  router.back();
+                }
+              }}
+              style={{
+                marginLeft: 8,
+                padding: 8,
+                borderRadius: 8,
+              }}
+            >
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
         }}
       />
-      
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <TouchableOpacity 
-          style={styles.headerBackButton}
-          onPress={() => {
-            feedback.buttonPress();
-            // Navigate to the returnTo path if available, otherwise use back
-            if (returnTo) {
-              router.push(returnTo);
-            } else {
-              router.back();
-            }
-          }}
-        >
-          <ArrowLeft size={24} color={colors.primary} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Guest Details</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{eventTitle}</Text>
-        </View>
-      </View>
 
       <ScrollView 
         style={styles.content} 
@@ -163,16 +269,48 @@ export default function GuestDetailsPage() {
             </View>
           </View>
           
-          {guestData.scannedIn && guestData.scanInTime && (
+          {/* Checked-in Date/Time */}
+          {checkedInDate && (
             <View style={styles.checkInInfo}>
-              <Text style={[styles.checkInLabel, { color: colors.secondary }]}>
+              <Text style={[styles.checkInLabel, { color: colors.text }]}>
                 Checked in at:
               </Text>
               <Text style={[styles.checkInTime, { color: colors.text }]}>
-                {guestData.scanInTime}
+                {formatAppDateTime(checkedInDate)}
               </Text>
             </View>
           )}
+          
+          {/* Loading state for checked-in date */}
+          {isLoadingCheckedInDate && (
+            <View style={styles.checkInInfo}>
+              <Text style={[styles.checkInLabel, { color: colors.text }]}>
+                Loading check-in status...
+              </Text>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+          
+          {/* Dynamic Check-in/Pass-out Button */}
+          <View style={styles.actionButtonContainer}>
+            {isCheckedIn ? (
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                onPress={handleCheckOut}
+              >
+                <Clock size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Pass Out</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                onPress={handleCheckIn}
+              >
+                <CheckCircle size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Check In</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Guest Information */}
@@ -280,29 +418,6 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  headerBackButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  headerContent: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    opacity: 0.8,
   },
   content: {
     flex: 1,
@@ -436,5 +551,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 4,
     fontFamily: 'monospace',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  actionButtonContainer: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    marginTop: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 140,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 }); 

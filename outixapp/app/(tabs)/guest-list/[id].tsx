@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   ArrowLeft,
   ChevronDown,
@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   Modal,
   RefreshControl,
@@ -60,7 +61,7 @@ interface Attendee {
 
 export default function GuestListPage() {
   const { colors, isDarkMode } = useTheme();
-  const { onGuestListRefresh, triggerGuestListRefresh, triggerAttendanceRefresh, triggerAnalyticsRefresh } = useRefresh();
+  // Removed automatic refresh triggers - only refresh on PTR or app open
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
   
@@ -335,15 +336,14 @@ export default function GuestListPage() {
   }, []);
 
   const refreshGuestList = useCallback(async () => {
-    // Reset pagination and reload
+    // Reset pagination and reload - but don't call API, just reset state
     setCurrentPage(1);
     setDisplayedGuests([]);
     setSearchQuery('');
     setIsSearchMode(false);
     setSearchResults([]);
-    await fetchPaginatedGuests(1, true);
-    await fetchCheckedInGuests();
-  }, [fetchPaginatedGuests, fetchCheckedInGuests]);
+    // No API calls - only PTR should trigger API calls
+  }, []);
 
   // Remove useCallback to avoid dependency issues - this function only runs once on mount
   const fetchEventAndInitialData = async () => {
@@ -489,6 +489,24 @@ export default function GuestListPage() {
     };
   }, [searchQuery, eventId, extractGuestName]);
 
+  // Handle Android back button and swipe gesture
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Navigate back to event details page instead of default back behavior
+        feedback.buttonPress();
+        router.push(`/(tabs)/${eventId}`);
+        return true; // Prevent default back behavior
+      };
+
+      // Add event listener for hardware back button
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Return cleanup function
+      return () => backHandler.remove();
+    }, [eventId])
+  );
+
   // Get filtered guests for display
   const getFilteredGuests = (guests: Attendee[]) => {
     switch (filterStatus) {
@@ -630,8 +648,6 @@ export default function GuestListPage() {
 
   const performScanIn = async (scanCode: string, validationResult: any) => {
     try {
-      await updateLocalScanIn(scanCode, validationResult);
-      
       const scanResult = await scanQRCode(eventId, scanCode);
       
       if (!scanResult || scanResult.error) {
@@ -641,7 +657,7 @@ export default function GuestListPage() {
         }
         
         feedback.error();
-        Alert.alert('Scan In Failed', errorMessage + '\n\nLocal guest list has been updated.');
+        Alert.alert('Scan In Failed', errorMessage);
         return;
       }
       
@@ -661,16 +677,15 @@ export default function GuestListPage() {
       
       Alert.alert(
         'Guest Admitted Successfully',
-        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}\n\nGuest list updated locally.`
+        `${ticketInfo?.fullname || 'Guest'} has been admitted.\n\n${successMessage}`
       );
-      // Refresh to pull authoritative server check-in time
-      await fetchCheckedInGuests();
+      
+      // No need to refresh guest list - API call is sufficient
       
     } catch (error) {
       console.error('Scan in error:', error);
-      await updateLocalScanIn(scanCode, validationResult);
       feedback.error();
-      Alert.alert('Scan In Error', 'Failed to scan in guest via API. Local guest list has been updated.');
+      Alert.alert('Scan In Error', 'Failed to scan in guest via API.');
     }
   };
 
@@ -743,12 +758,7 @@ export default function GuestListPage() {
     console.log(`Updated scan-in status for ${ticketInfo.fullname} (awaiting server time)`);
     // Remove sound here - will be played after operation completes
     
-    // Also update the checked-in guests list to keep counts in sync
-    await fetchCheckedInGuests();
-    
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const handleManualScanIn = async (guest: Attendee) => {
@@ -864,17 +874,11 @@ export default function GuestListPage() {
       if (!scanCode) {
         console.log(`⚠️ No valid ticket identifier found for guest: ${guest.name}`);
         feedback.checkInError();
-        // Still allow manual check-in even without scan code
-        console.log(`📦 Proceeding with local-only check-in for: ${guest.name}`);
+        // Cannot proceed without scan code - API requires it
+        console.log(`❌ Cannot check-in guest without ticket identifier: ${guest.name}`);
         
-        // Update local state for immediate UI feedback
-        await updateLocalManualScanIn(guest);
-        
-        // Show success modal with warning about no API sync
-        setSuccessModalType('check-in');
-        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-        setSuccessModalMessage('Guest has been checked in locally. No ticket identifier available for API sync.');
-        setShowSuccessModal(true);
+        // Show error modal
+        Alert.alert('Check-in Failed', 'No ticket identifier available for this guest. Cannot proceed with check-in.');
         return;
       }
       
@@ -894,22 +898,13 @@ export default function GuestListPage() {
         
         console.log(`⚠️ API sync failed for manual check-in: ${errorMessage}`);
         
-        // Update local state even if API failed
-        await updateLocalManualScanIn(guest);
-        
-        feedback.checkIn(); // Still show success since local update worked
-        // Use SuccessModal with warning message
-        setSuccessModalType('check-in');
-        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-        setSuccessModalMessage(`Guest has been checked in locally. API sync: ${errorMessage}`);
-        setShowSuccessModal(true);
+        feedback.checkInError();
+        // Show error modal - no local updates
+        Alert.alert('Check-in Failed', `Failed to check in guest via API: ${errorMessage}`);
         return;
       }
       
       console.log(`✅ API sync successful for manual check-in`);
-      
-      // Update local state ONLY after successful API call
-      await updateLocalManualScanIn(guest);
       
       feedback.checkIn();
       
@@ -927,20 +922,12 @@ export default function GuestListPage() {
       setSuccessModalMessage(successMessage || 'Guest has been checked in successfully.');
       setShowSuccessModal(true);
       
-      // Refresh checked-in guests list after successful API call
-      await fetchCheckedInGuests();
+      // No need to refresh guest list - API call is sufficient
       
     } catch (error) {
       console.error('❌ Manual check-in error:', error);
-      // Still update locally even if API fails
-      await updateLocalManualScanIn(guest);
-      feedback.checkIn();
-      console.log(`⚠️ Manual check-in completed locally due to API error: ${guest.name}`);
-      // Use SuccessModal with error message
-      setSuccessModalType('check-in');
-      setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-      setSuccessModalMessage('Guest has been checked in locally. API sync failed but local update successful.');
-      setShowSuccessModal(true);
+      feedback.checkInError();
+      Alert.alert('Check-in Error', 'An unexpected error occurred while checking in the guest. Please try again.');
     }
   };
 
@@ -990,9 +977,7 @@ export default function GuestListPage() {
     
     console.log(`🎉 Manual check-in process completed for ${guest.name}`);
     
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   const performManualScanOut = async (guest: Attendee) => {
@@ -1026,9 +1011,6 @@ export default function GuestListPage() {
         if (unscanResult && !unscanResult.error) {
           console.log(`✅ API sync successful for manual check-out`);
           
-          // Update local state ONLY after successful API call
-          await updateLocalManualScanOut(guest);
-          
           feedback.checkOut();
           
           let successMessage = 'Manual check-out successful';
@@ -1045,10 +1027,9 @@ export default function GuestListPage() {
           setSuccessModalMessage(successMessage || 'Guest has been checked out successfully.');
           setShowSuccessModal(true);
           
-          // Refresh checked-in guests list after successful API call
-          await fetchCheckedInGuests();
+          // No need to refresh guest list - API call is sufficient
         } else {
-          // API failed - still update locally
+          // API failed - no local updates
           let errorMessage = 'API sync failed';
           if (unscanResult?.msg) {
             errorMessage = typeof unscanResult.msg === 'string' ? unscanResult.msg : unscanResult.msg.message;
@@ -1056,48 +1037,21 @@ export default function GuestListPage() {
           
           console.log(`⚠️ API sync failed for manual check-out: ${errorMessage}`);
           
-          // Update local state even if API failed
-          await updateLocalManualScanOut(guest);
-          
-          feedback.checkOut();
-          
-          // Use SuccessModal with warning message
-          setSuccessModalType('check-out');
-          setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-          setSuccessModalMessage(`Guest has been checked out locally. API sync: ${errorMessage}`);
-          setShowSuccessModal(true);
+          feedback.checkOutError();
+          Alert.alert('Check-out Failed', `Failed to check out guest via API: ${errorMessage}`);
         }
       } else {
-        // No scan code available, just local update
-        console.log(`⚠️ No scan code available for API sync, local check-out only: ${guest.name}`);
+        // No scan code available, cannot proceed
+        console.log(`❌ No scan code available for API sync, cannot check-out: ${guest.name}`);
         
-        // Update local state
-        await updateLocalManualScanOut(guest);
-        
-        feedback.checkOut();
-        
-        // Use SuccessModal for local-only check-out
-        setSuccessModalType('check-out');
-        setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-        setSuccessModalMessage('Guest has been checked out locally.');
-        setShowSuccessModal(true);
+        feedback.checkOutError();
+        Alert.alert('Check-out Failed', 'No ticket identifier available for this guest. Cannot proceed with check-out.');
       }
       
     } catch (error) {
       console.error('❌ Manual check-out error:', error);
-      
-      // Update local state even on error
-      await updateLocalManualScanOut(guest);
-      
-      // Still show success since local update worked
-      feedback.checkOut();
-      console.log(`⚠️ Manual check-out completed locally due to API error: ${guest.name}`);
-      
-      // Use SuccessModal instead of Alert
-      setSuccessModalType('check-out');
-      setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
-      setSuccessModalMessage('Guest has been checked out locally. API sync failed but local update successful.');
-      setShowSuccessModal(true);
+      feedback.checkOutError();
+      Alert.alert('Check-out Error', 'An unexpected error occurred while checking out the guest. Please try again.');
     }
   };
 
@@ -1153,9 +1107,7 @@ export default function GuestListPage() {
     
     console.log(`🎉 Manual check-out process completed for ${guest.name}`);
     
-    // Trigger refresh for other components
-    triggerAttendanceRefresh(eventId);
-    triggerAnalyticsRefresh();
+    // No automatic refresh - only refresh on PTR or app open
   };
 
   // Use the dedicated checked-in guests list for accurate count (same as event details page)
@@ -1178,30 +1130,25 @@ export default function GuestListPage() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
         options={{ 
-          title: "Guest List",
+          title: `Guest List - ${eventTitle}`,
           headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => {
+                feedback.buttonPress();
+                router.push(`/(tabs)/${eventId}`);
+              }}
+              style={{
+                marginLeft: 8,
+                padding: 8,
+                borderRadius: 8,
+              }}
+            >
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
         }}
       />
-      
-      {/* Simplified Header with just back button and title */}
-      <View style={[styles.simpleHeader, { backgroundColor: colors.card }]}>
-        <View style={styles.simpleHeaderRow}>
-          <TouchableOpacity 
-            style={styles.simpleBackButton}
-            onPress={() => {
-              feedback.buttonPress();
-              // Navigate to event details page explicitly
-              router.push(`/(tabs)/${eventId}`);
-            }}
-          >
-            <ArrowLeft size={20} color="#FF6B00" />
-          </TouchableOpacity>
-          <View style={styles.simpleHeaderContent}>
-            <Text style={[styles.simpleTitle, { color: colors.text }]}>Guest List</Text>
-            <Text style={[styles.simpleSubtitle, { color: colors.text + '99' }]}>{eventTitle}</Text>
-          </View>
-        </View>
-      </View>
 
       {/* Simple Search and Filter */}
       <View style={[styles.simpleSearchContainer, { backgroundColor: colors.background }]}>
@@ -1296,11 +1243,11 @@ export default function GuestListPage() {
                 onPress={() => {
                   feedback.buttonPress();
                   router.push({
-                    pathname: '/guest-list/guest-details',
+                    pathname: '/(tabs)/guest-list/guest-details',
                     params: {
                       guestData: JSON.stringify(item),
                       eventTitle: eventTitle,
-                      returnTo: `/guest-list/${eventId}` // Add return path to guest list
+                      returnTo: `/(tabs)/guest-list/${eventId}` // Add return path to guest list
                     }
                   });
                 }}

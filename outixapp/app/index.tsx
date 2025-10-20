@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import AppLayout from "../components/AppLayout";
 import { useStorage } from "../context/StorageContext";
 import { useTheme } from "../context/ThemeContext";
-import { isAuthenticated } from "../services/api";
+import { isAuthenticated, restoreSession } from "../services/api";
 
 export default function Index() {
   const { colors } = useTheme();
@@ -28,8 +28,17 @@ export default function Index() {
           return;
         }
         
-        console.log('User not authenticated, redirecting to login page');
-        // No auto-login - user must authenticate through proper login flow
+        // Try restoring session from stored token
+        console.log('Attempting to restore session from storage...');
+        const restored = await restoreSession();
+        if (restored) {
+          console.log('Session restored from storage. Proceeding to app.');
+          setIsAuthed(true);
+          setIsLoading(false);
+          return;
+        }
+
+        console.log('User not authenticated and no stored session, redirecting to login');
         setIsAuthed(false);
       } catch (err) {
         console.error("Authentication error:", err);

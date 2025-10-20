@@ -11,6 +11,7 @@ interface SuccessModalProps {
   ticketType?: string;
   count?: number;
   message?: string;
+  hideContinueButton?: boolean;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -22,7 +23,8 @@ export default function SuccessModal({
   guestName, 
   ticketType, 
   count = 1,
-  message 
+  message,
+  hideContinueButton = false
 }: SuccessModalProps) {
   const { colors, isDark } = useTheme();
 
@@ -142,14 +144,16 @@ export default function SuccessModal({
             </View>
           )}
 
-          {/* Action Button */}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: getButtonColor() }]}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Continue</Text>
-          </TouchableOpacity>
+          {/* Action Button - Only show if not hidden */}
+          {!hideContinueButton && (
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: getButtonColor() }]}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>Continue</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
