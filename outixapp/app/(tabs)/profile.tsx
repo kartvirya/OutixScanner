@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { ChevronRight, LogOut, Mail, Moon, Shield, Star, Sun, User } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -82,13 +82,8 @@ export default function Profile() {
               await logout();
               console.log('Logout completed, redirecting...');
               
-              // Force redirect to index which will check auth and redirect to login
-              router.replace("/");
-              
-              // Also try to force a complete navigation reset
-              setTimeout(() => {
-                router.replace("/auth/login");
-              }, 100);
+              // Force redirect to login screen
+              router.replace("/auth/login");
               
             } catch (err) {
               console.error("Logout error:", err);

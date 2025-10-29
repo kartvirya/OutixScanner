@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { LogIn, Scan } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { LogIn } from 'lucide-react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Animated,
@@ -14,17 +14,16 @@ import {
     View
 } from 'react-native';
 import ErrorModal from '../../components/ErrorModal';
-import SuccessModal from '../../components/SuccessModal';
-import QRScanner from '../../components/QRScanner';
 import ModernQRScanner from '../../components/ModernQRScanner';
+import SuccessModal from '../../components/SuccessModal';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
     QRValidationResponse,
     getEvents,
-    validateQRCode,
     scanQRCode,
-    unscanQRCode
+    unscanQRCode,
+    validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
 
@@ -58,6 +57,7 @@ export default function ScannerScreen() {
     guestName?: string;
     ticketType?: string;
     checkedInDate?: string;
+    guestData?: any;
   } | null>(null);
   const [showSuccessModalState, setShowSuccessModalState] = useState(false);
   const [successData, setSuccessData] = useState<{
@@ -374,6 +374,7 @@ export default function ScannerScreen() {
     guestName?: string;
     ticketType?: string;
     checkedInDate?: string;
+    guestData?: any;
   }) => {
     setErrorData(errorInfo);
     setShowErrorModalState(true);
@@ -438,6 +439,30 @@ export default function ScannerScreen() {
     setIsScanning(true);
     setShowCamera(true);
   }, [fadeAnim]);
+
+  const handleViewDetails = useCallback(() => {
+    if (!errorData?.guestData) return;
+    
+    feedback.buttonPress();
+    setShowErrorModalState(false);
+    setErrorData(null);
+    
+    // Stop camera before navigation
+    setShowCamera(false);
+    setIsScanning(false);
+    setIsNavigatingAway(true);
+    
+    // Navigate to guest details page
+    router.push({
+      pathname: '/(tabs)/guest-list/guest-details',
+      params: {
+        guestData: JSON.stringify(errorData.guestData),
+        eventTitle: currentEventName,
+        eventId: currentEventId,
+        returnTo: returnTo || `/(tabs)/scanner`
+      }
+    });
+  }, [errorData, currentEventName, currentEventId, returnTo]);
 
   useEffect(() => {
     console.log('🔁 Scan mode changed to', scanMode, '- clearing last processed guard');
@@ -566,6 +591,18 @@ export default function ScannerScreen() {
       }
       
       console.log('✅ Validation complete:', JSON.stringify(validationResult, null, 2));
+      
+      // Debug logging for already scanned detection
+      if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+        const info = (validationResult.msg as any).info;
+        console.log('🔍 Guest info debug:', {
+          checkedin: info?.checkedin,
+          checkedinType: typeof info?.checkedin,
+          fullname: info?.fullname,
+          ticket_title: info?.ticket_title,
+          checkedin_date: info?.checkedin_date
+        });
+      }
 
       // Handle scan-in mode
       if (scanMode === 'scan-in') {
@@ -577,22 +614,70 @@ export default function ScannerScreen() {
             errorMessage = validationResult.msg.message;
           }
           
-          const isAlreadyScannedError = errorMessage.toLowerCase().includes('already') || 
-                                       errorMessage.toLowerCase().includes('scanned') ||
-                                       errorMessage.toLowerCase().includes('checked in') ||
-                                       validationResult.status === 409 ||
-                                       validationResult.status === 400;
+          // Check if the ticket is already scanned by looking at the checkedin field in the response
+          let isAlreadyScannedError = false;
+          let guestInfo = null;
+          
+          if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+            guestInfo = (validationResult.msg as any).info;
+            // Check if the ticket is already checked in (checkedin = 1)
+            const isCheckedIn = guestInfo?.checkedin === 1 || guestInfo?.checkedin === '1' || guestInfo?.checkedin === true;
+            isAlreadyScannedError = isCheckedIn;
+            console.log('🔍 Already scanned check:', {
+              checkedin: guestInfo?.checkedin,
+              isCheckedIn,
+              isAlreadyScannedError
+            });
+          }
+          
+          // Also check error message patterns as fallback
+          if (!isAlreadyScannedError) {
+            isAlreadyScannedError = errorMessage.toLowerCase().includes('already') || 
+                                   errorMessage.toLowerCase().includes('scanned') ||
+                                   errorMessage.toLowerCase().includes('checked in') ||
+                                   validationResult.status === 409 ||
+                                   validationResult.status === 400;
+            console.log('🔍 Fallback already scanned check:', {
+              errorMessage,
+              status: validationResult.status,
+              isAlreadyScannedError
+            });
+          }
           
           if (isAlreadyScannedError) {
             let guestName = 'Guest';
             let ticketType = 'Ticket';
             let checkedInDate = 'Unknown time';
+            let guestData = null;
             
-            if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-              const info = (validationResult.msg as any).info;
-              guestName = info?.fullname || 'Guest';
-              ticketType = info?.ticket_title || 'Ticket';
-              checkedInDate = info?.checkedin_date ? new Date(info.checkedin_date).toLocaleString() : 'Unknown time';
+            if (guestInfo) {
+              guestName = guestInfo?.fullname || 'Guest';
+              ticketType = guestInfo?.ticket_title || 'Ticket';
+              checkedInDate = guestInfo?.checkedin_date ? new Date(guestInfo.checkedin_date).toLocaleString() : 'Unknown time';
+              
+              // Prepare guest data for navigation
+              guestData = {
+                id: guestInfo?.ticket_identifier || data,
+                name: guestName,
+                email: guestInfo?.email || 'No email',
+                ticketType: ticketType,
+                ticket_identifier: guestInfo?.ticket_identifier || data,
+                scannedIn: true,
+                price: guestInfo?.price || '0',
+                mobile: guestInfo?.mobile || '',
+                address: guestInfo?.address || '',
+                notes: guestInfo?.notes || guestInfo?.remarks || '',
+                checkedInDate: guestInfo?.checkedin_date || null, // Include raw checked-in date
+                rawData: guestInfo
+              };
+              
+              console.log('🔍 Prepared guest data for navigation:', {
+                checkedInDate: guestData.checkedInDate,
+                rawCheckedInDate: guestInfo?.checkedin_date,
+                hasRawData: !!guestData.rawData,
+                checkedInDateType: typeof guestData.checkedInDate,
+                rawCheckedInDateType: typeof guestInfo?.checkedin_date
+              });
             }
             
             feedback.alreadyScanned();
@@ -602,7 +687,8 @@ export default function ScannerScreen() {
               message: 'Ticket is already checked in.',
               guestName,
               ticketType,
-              checkedInDate
+              checkedInDate,
+              guestData
             });
             setTimeout(() => {
               if (!isScanning) {
@@ -619,6 +705,13 @@ export default function ScannerScreen() {
                                  errorMessage.toLowerCase().includes('ticket not valid') ||
                                  validationResult.status === 404 ||
                                  validationResult.status === 403;
+          
+          console.log('🔍 Error type detection:', {
+            isAlreadyScannedError,
+            isBlockingError,
+            errorMessage,
+            status: validationResult.status
+          });
           
           if (isBlockingError) {
             let guestName = 'Guest';
@@ -1080,6 +1173,7 @@ export default function ScannerScreen() {
           guestName={errorData.guestName}
           ticketType={errorData.ticketType}
           checkedInDate={errorData.checkedInDate}
+          onViewDetails={errorData.type === 'already-scanned' ? handleViewDetails : undefined}
         />
       )}
 

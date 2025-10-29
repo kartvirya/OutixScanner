@@ -1,20 +1,19 @@
 import { router } from 'expo-router';
 import { Eye, EyeOff, Lock, User } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
 import { login } from '../../services/api';
 
@@ -57,8 +56,7 @@ export default function LoginScreen() {
       const token = await login(username.trim(), password.trim());
 
       if (token) {
-        console.log('Login successful. Saving token...');
-        await AsyncStorage.setItem('authToken', token);
+        console.log('Login successful. Token saved automatically.');
 
         // Navigate directly after successful login
         router.replace('/(tabs)');

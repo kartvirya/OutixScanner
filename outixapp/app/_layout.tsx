@@ -1,18 +1,16 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import { Amplify } from 'aws-amplify';
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { StatusBar, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import awsconfig from '../aws-exports';
+import Toast from 'react-native-toast-message';
 import { RefreshProvider } from "../context/RefreshContext";
 import { StorageProvider } from "../context/StorageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
-import { useDoublePowerButton } from "../hooks/useDoublePowerButton";
-import Toast from 'react-native-toast-message';
+import { isAuthenticatedSync, restoreSession } from "../services/api";
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -29,17 +27,78 @@ function ThemedStatusBar() {
   );
 }
 
-// Component that handles double power button press
-function PowerButtonHandler() {
-  useDoublePowerButton({
-    enabled: true,
-    onDoublePress: () => {
-      console.log('🎯 Double power button press - opening scanner');
-      // The hook will handle the navigation automatically
+// Component that handles authentication state
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const router = useRouter();
+  const segments = useSegments();
+
+  const checkAuthState = async () => {
+    try {
+      console.log('Checking authentication state...');
+      
+      // First check if we have a token in memory
+      if (isAuthenticatedSync()) {
+        console.log('Token found in memory, user is authenticated');
+        setIsAuthenticated(true);
+        return;
+      }
+
+      // Try to restore session from storage with validation
+      const sessionRestored = await restoreSession();
+      if (sessionRestored) {
+        console.log('Session restored from storage with valid token');
+        setIsAuthenticated(true);
+      } else {
+        console.log('No valid session found, user needs to login');
+        setIsAuthenticated(false);
+      }
+    } catch (error) {
+      console.error('Error checking auth state:', error);
+      setIsAuthenticated(false);
     }
-  });
-  
-  return null; // This component doesn't render anything
+  };
+
+  useEffect(() => {
+    checkAuthState();
+  }, []);
+
+  // Listen for navigation changes to recheck auth state
+  useEffect(() => {
+    const handleNavigationChange = () => {
+      console.log('Navigation changed, rechecking authentication...');
+      checkAuthState();
+    };
+
+    // Check auth state when segments change
+    handleNavigationChange();
+  }, [segments]);
+
+  useEffect(() => {
+    if (isAuthenticated === null) {
+      // Still checking authentication
+      return;
+    }
+
+    const inAuthGroup = segments[0] === 'auth';
+    
+    if (isAuthenticated && inAuthGroup) {
+      // User is authenticated but in auth screens, redirect to main app
+      console.log('User authenticated, redirecting to main app');
+      router.replace('/(tabs)');
+    } else if (!isAuthenticated && !inAuthGroup) {
+      // User is not authenticated but not in auth screens, redirect to login
+      console.log('User not authenticated, redirecting to login');
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, segments]);
+
+  // Don't render anything while checking authentication
+  if (isAuthenticated === null) {
+    return null;
+  }
+
+  return <>{children}</>;
 }
 
 export default function RootLayout() {
@@ -49,13 +108,6 @@ export default function RootLayout() {
   useEffect(() => {
     async function loadResourcesAndDataAsync() {
       try {
-        // Configure AWS Amplify
-        Amplify.configure(awsconfig);
-        
-        // Push notifications removed
-        
-        console.log('AWS Amplify initialized');
-        
         // Load fonts if needed, but Lucide doesn't require extra fonts
         setFontsLoaded(true);
       } catch (e) {
@@ -85,24 +137,25 @@ export default function RootLayout() {
       <StorageProvider>
         <ThemeProvider>
           <RefreshProvider>
-            <ThemedStatusBar />
-            <PowerButtonHandler />
-            <Stack
-              screenOptions={{
-                headerStyle: {
-                  backgroundColor: '#FFFFFF', 
-                },
-                headerTintColor: '#000000',
-                headerTitleStyle: {
-                  fontWeight: 'bold',
-                },
-              }}
-            >
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-            <Toast />
+            <AuthProvider>
+              <ThemedStatusBar />
+              <Stack
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: '#FFFFFF', 
+                  },
+                  headerTintColor: '#000000',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                }}
+              >
+                <Stack.Screen name="auth" options={{ headerShown: false }} />
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+              <Toast />
+            </AuthProvider>
           </RefreshProvider>
         </ThemeProvider>
       </StorageProvider>

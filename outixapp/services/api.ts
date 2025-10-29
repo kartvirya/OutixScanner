@@ -1190,6 +1190,56 @@ const extractUserData = (data: any): UserProfile => {
   };
 };
 
+// Token validation response interface
+export interface TokenValidationResponse {
+  error: boolean;
+  msg: string;
+  status: number;
+}
+
+// Validate token using the new endpoint
+export const validateToken = async (token?: string): Promise<TokenValidationResponse> => {
+  try {
+    const tokenToValidate = token || authToken;
+    
+    if (!tokenToValidate) {
+      return {
+        error: true,
+        msg: "No token provided for validation",
+        status: 400
+      };
+    }
+
+    console.log("Validating token:", tokenToValidate.substring(0, 10) + "...");
+    
+    const response = await axios.get(`${BASE_URL}/validatetoken/${tokenToValidate}`, {
+      timeout: 10000
+    });
+    
+    console.log("Token validation response:", response.data);
+    return response.data;
+    
+  } catch (error: any) {
+    console.error("Token validation error:", error);
+    
+    if (error.response) {
+      // Return the actual API response
+      return {
+        error: error.response.data?.error !== undefined ? error.response.data.error : true,
+        msg: error.response.data?.msg || "Token validation failed",
+        status: error.response.data?.status || error.response.status
+      };
+    }
+    
+    // Network or other errors
+    return {
+      error: true,
+      msg: "Network error during token validation",
+      status: 500
+    };
+  }
+};
+
 // Utility to check if user is authenticated
 export const isAuthenticated = async (): Promise<boolean> => {
   // If user has explicitly logged out, return false
@@ -1253,13 +1303,46 @@ export const resetLogoutState = (): void => {
   console.log('Logout state reset - user can login again');
 };
 
-// Function to explicitly restore session from storage (for remember me functionality)
+// Function to check if stored token is valid and restore session
 export const restoreSession = async (): Promise<boolean> => {
   try {
     // Check if we have a stored token
     const storedToken = await getStorageItem('auth_token');
+    if (!storedToken) {
+      console.log('No stored token found');
+      return false;
+    }
+
+    console.log('Found stored token, validating...');
+    
+    // Validate the stored token
+    const validation = await validateToken(storedToken);
+    
+    if (!validation.error && validation.status === 200) {
+      console.log('Stored token is valid, restoring session');
+      authToken = storedToken;
+      isLoggedOut = false;
+      return true;
+    } else {
+      console.log('Stored token is invalid or expired:', validation.msg);
+      // Clear the invalid token
+      await removeStorageItem('auth_token');
+      memoryStorage.delete('auth_token');
+      return false;
+    }
+  } catch (error) {
+    console.error('Error restoring session:', error);
+    return false;
+  }
+};
+
+// Function to explicitly restore session from storage (for remember me functionality)
+export const restoreSessionWithoutValidation = async (): Promise<boolean> => {
+  try {
+    // Check if we have a stored token
+    const storedToken = await getStorageItem('auth_token');
     if (storedToken) {
-      console.log('Restoring session from stored token');
+      console.log('Restoring session from stored token (without validation)');
       authToken = storedToken;
       isLoggedOut = false;
       return true;

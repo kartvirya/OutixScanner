@@ -23,8 +23,8 @@ import {
     View,
 } from 'react-native';
 import { useTheme } from '../../../context/ThemeContext';
-import { feedback } from '../../../services/feedback';
 import { validateQRCode } from '../../../services/api';
+import { feedback } from '../../../services/feedback';
 import { formatAppDateTime } from '../../../utils/date';
 
 export default function GuestDetailsPage() {
@@ -36,10 +36,29 @@ export default function GuestDetailsPage() {
   const eventTitle = params.eventTitle as string || 'Event';
   const returnTo = params.returnTo as string; // Get the return path for navigation
   
+  // Debug logging for guest data
+  console.log('🔍 Guest details - received guest data:', {
+    checkedInDate: guestData?.checkedInDate,
+    rawCheckedInDate: guestData?.rawData?.checkedin_date,
+    scannedIn: guestData?.scannedIn,
+    hasRawData: !!guestData?.rawData
+  });
+  
   // State for checked-in date and status
-  const [checkedInDate, setCheckedInDate] = useState<string | null>(null);
-  const [isCheckedIn, setIsCheckedIn] = useState<boolean>(false);
+  const [checkedInDate, setCheckedInDate] = useState<string | null>(guestData?.checkedInDate || guestData?.rawData?.checkedin_date || null);
+  const [isCheckedIn, setIsCheckedIn] = useState<boolean>(guestData?.scannedIn || false);
   const [isLoadingCheckedInDate, setIsLoadingCheckedInDate] = useState(false);
+  
+  // Initialize checked-in date from guest data if available
+  useEffect(() => {
+    if (guestData?.checkedInDate && !checkedInDate) {
+      console.log('🔍 Initializing checked-in date from guest data:', guestData.checkedInDate);
+      setCheckedInDate(guestData.checkedInDate);
+    } else if (guestData?.rawData?.checkedin_date && !checkedInDate) {
+      console.log('🔍 Initializing checked-in date from raw data:', guestData.rawData.checkedin_date);
+      setCheckedInDate(guestData.rawData.checkedin_date);
+    }
+  }, [guestData?.checkedInDate, guestData?.rawData?.checkedin_date, checkedInDate]);
 
   // Fetch checked-in date when component mounts
   useEffect(() => {
@@ -57,23 +76,43 @@ export default function GuestDetailsPage() {
           if (info) {
             // Set checked-in status based on checkedin field (0 or 1)
             const checkedInStatus = String(info.checkedin) === '1';
-            setIsCheckedIn(checkedInStatus);
-            console.log(`🔍 Checked-in status: ${checkedInStatus} (checkedin: ${info.checkedin})`);
+            
+            // Only update the checked-in status if it's different from what we already know
+            // This prevents overriding the correct status when coming from scanner
+            if (checkedInStatus !== isCheckedIn) {
+              setIsCheckedIn(checkedInStatus);
+              console.log(`🔍 Updated checked-in status: ${checkedInStatus} (checkedin: ${info.checkedin})`);
+            } else {
+              console.log(`🔍 Checked-in status unchanged: ${checkedInStatus} (checkedin: ${info.checkedin})`);
+            }
             
             // Set checked-in date if available
             if (info.checkedin_date) {
-              console.log(`✅ Found checked-in date: ${info.checkedin_date}`);
+              console.log(`✅ Found checked-in date from API: ${info.checkedin_date}`);
               setCheckedInDate(info.checkedin_date);
             } else {
               console.log('ℹ️ No checked-in date found in validation response');
-              setCheckedInDate(null);
+              // If we know the guest is checked in but no date is available, 
+              // we can set a fallback or leave it as null
+              if (isCheckedIn && !checkedInDate) {
+                console.log('🔍 Setting fallback checked-in date');
+                setCheckedInDate('Unknown time');
+              }
             }
           }
         } else {
           console.log('⚠️ Validation failed or no info available');
+          // If validation fails but we know the guest is checked in, keep that status
+          if (isCheckedIn && !checkedInDate) {
+            setCheckedInDate('Unknown time');
+          }
         }
       } catch (error) {
         console.error('❌ Error fetching checked-in date:', error);
+        // If API call fails but we know the guest is checked in, keep that status
+        if (isCheckedIn && !checkedInDate) {
+          setCheckedInDate('Unknown time');
+        }
       } finally {
         setIsLoadingCheckedInDate(false);
       }
@@ -254,29 +293,66 @@ export default function GuestDetailsPage() {
               <View style={[
                 styles.statusBadge, 
                 { 
-                  backgroundColor: guestData.scannedIn ? '#34C759' : '#FF6B35',
+                  backgroundColor: isCheckedIn ? '#34C759' : '#FF6B35',
                 }
               ]}>
-                {guestData.scannedIn ? (
+                {isCheckedIn ? (
                   <CheckCircle size={16} color="#FFFFFF" />
                 ) : (
                   <Clock size={16} color="#FFFFFF" />
                 )}
                 <Text style={styles.statusText}>
-                  {guestData.scannedIn ? 'Checked In' : 'Not Arrived'}
+                  {isCheckedIn ? 'Checked In' : 'Not Arrived'}
                 </Text>
               </View>
             </View>
           </View>
           
           {/* Checked-in Date/Time */}
-          {checkedInDate && (
+          {(checkedInDate || guestData?.checkedInDate || guestData?.rawData?.checkedin_date) && (
             <View style={styles.checkInInfo}>
               <Text style={[styles.checkInLabel, { color: colors.text }]}>
                 Checked in at:
               </Text>
               <Text style={[styles.checkInTime, { color: colors.text }]}>
-                {formatAppDateTime(checkedInDate)}
+                {(() => {
+                  console.log('🔍 Formatting checked-in date:', checkedInDate, 'Type:', typeof checkedInDate);
+                  console.log('🔍 Guest data checkedInDate:', guestData?.checkedInDate);
+                  console.log('🔍 Guest data raw checkedin_date:', guestData?.rawData?.checkedin_date);
+                  
+                  // Try to use the date directly if it's valid, otherwise try to format it
+                  let dateToFormat = checkedInDate;
+                  
+                  // If checkedInDate is null but we have data in guestData, use that
+                  if (!dateToFormat && guestData?.checkedInDate) {
+                    dateToFormat = guestData.checkedInDate;
+                    console.log('🔍 Using guestData.checkedInDate:', dateToFormat);
+                  } else if (!dateToFormat && guestData?.rawData?.checkedin_date) {
+                    dateToFormat = guestData.rawData.checkedin_date;
+                    console.log('🔍 Using guestData.rawData.checkedin_date:', dateToFormat);
+                  }
+                  
+                  // Test if the date is valid
+                  if (dateToFormat) {
+                    const testDate = new Date(dateToFormat);
+                    console.log('🔍 Date validation test:', {
+                      original: dateToFormat,
+                      parsed: testDate,
+                      isValid: !isNaN(testDate.getTime()),
+                      timestamp: testDate.getTime()
+                    });
+                  }
+                  
+                  const formatted = formatAppDateTime(dateToFormat);
+                  console.log('🔍 Final formatted result:', formatted);
+                  
+                  // If still TBD but we know the guest is checked in, show a fallback
+                  if (formatted === 'TBD' && isCheckedIn) {
+                    return 'Unknown time';
+                  }
+                  
+                  return formatted;
+                })()}
               </Text>
             </View>
           )}

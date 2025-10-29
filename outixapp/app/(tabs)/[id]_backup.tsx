@@ -10,7 +10,7 @@ import {
     UserCheck,
     Users
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -268,7 +268,7 @@ export default function EventDetail() {
               name: guest.purchased_by || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest',
               email: guest.email || 'N/A',
               ticketType: guest.ticketType || guest.ticket_type || 'General',
-              scannedIn: guest.checkedIn || guest.checked_in || false,
+              scannedIn: !!guest.checkedIn || !!guest.checked_in || false,
               scanInTime: guest.checkInTime || guest.check_in_time || undefined,
               scanCode: guest.scanCode || undefined
             }));
@@ -341,7 +341,7 @@ export default function EventDetail() {
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
             ticketType: guest.ticketType || guest.ticket_type || 'General',
-            scannedIn: guest.checkedIn || guest.checked_in || false,
+            scannedIn: !!guest.checkedIn || !!guest.checked_in || false,
             scanInTime: guest.checkInTime || guest.check_in_time || undefined,
             scanCode: guest.scanCode || undefined
           };

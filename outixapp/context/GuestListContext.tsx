@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo, useRef } from 'react';
-import { 
-  getGuestListPaginated, 
-  getCheckedInGuestList, 
-  searchGuestList,
-  manualCheckIn,
-  manualCheckOut 
+import React, { createContext, useCallback, useContext, useMemo, useReducer, useRef } from 'react';
+import {
+    getCheckedInGuestList,
+    getGuestListPaginated,
+    manualCheckIn,
+    manualCheckOut,
+    searchGuestList
 } from '../services/api';
 import { guestListCache } from '../services/guestListCache';
 
@@ -267,7 +267,7 @@ export const GuestListProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     name: extractGuestName(guest),
     email: guest.email || 'N/A',
     ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-    scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
+    scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
     scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
     scanCode: guest.scanCode || undefined,
     purchased_date: guest.purchased_date || undefined,

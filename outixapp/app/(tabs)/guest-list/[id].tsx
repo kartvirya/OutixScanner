@@ -1,39 +1,38 @@
-import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
-  ChevronDown,
-  Search,
-  User,
-  UserCheck,
-  Users
+    ArrowLeft,
+    ChevronDown,
+    Search,
+    User,
+    UserCheck,
+    Users
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  BackHandler,
-  FlatList,
-  Modal,
-  RefreshControl,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    FlatList,
+    Modal,
+    RefreshControl,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
 import SuccessModal from '../../../components/SuccessModal';
-import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
-  getCheckedInGuestList,
-  getEvents,
-  getGuestListPaginated,
-  scanQRCode,
-  searchGuestList,
-  unscanQRCode,
-  validateQRCode
+    getCheckedInGuestList,
+    getEvents,
+    getGuestListPaginated,
+    scanQRCode,
+    searchGuestList,
+    unscanQRCode,
+    validateQRCode
 } from '../../../services/api';
 import { feedback, initializeAudio } from '../../../services/feedback';
 import { formatAppTime } from '../../../utils/date';
@@ -186,7 +185,7 @@ export default function GuestListPage() {
           name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
+          scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
           scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
@@ -423,7 +422,7 @@ export default function GuestListPage() {
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: guest.checkedIn || guest.checked_in || guest.scannedIn || guest.admitted || guest.is_admitted || false,
+          scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
           scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
@@ -916,13 +915,42 @@ export default function GuestListPage() {
       }
       
       console.log(`🎉 Manual check-in completed successfully: ${guest.name}`);
+      
+      // Update local state to reflect the check-in
+      setDisplayedGuests(prevGuests => {
+        return prevGuests.map(g => {
+          if (g.id === guest.id) {
+            console.log(`✅ Updating guest in displayed list: ${g.name} to checked-in state`);
+            return {
+              ...g,
+              scannedIn: true,
+              scanInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+          }
+          return g;
+        });
+      });
+      
+      // Also update search results if it exists there
+      setSearchResults(prevResults => {
+        return prevResults.map(g => {
+          if (g.id === guest.id) {
+            console.log(`✅ Updating guest in search results: ${g.name} to checked-in state`);
+            return {
+              ...g,
+              scannedIn: true,
+              scanInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+          }
+          return g;
+        });
+      });
+      
       // Use SuccessModal instead of Alert
       setSuccessModalType('check-in');
       setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
       setSuccessModalMessage(successMessage || 'Guest has been checked in successfully.');
       setShowSuccessModal(true);
-      
-      // No need to refresh guest list - API call is sufficient
       
     } catch (error) {
       console.error('❌ Manual check-in error:', error);
@@ -1021,13 +1049,42 @@ export default function GuestListPage() {
           }
           
           console.log(`🎉 Manual check-out completed successfully: ${guest.name}`);
+          
+          // Update local state to reflect the check-out
+          setDisplayedGuests(prevGuests => {
+            return prevGuests.map(g => {
+              if (g.id === guest.id) {
+                console.log(`✅ Updating guest in displayed list: ${g.name} to checked-out state`);
+                return {
+                  ...g,
+                  scannedIn: false,
+                  scanInTime: undefined
+                };
+              }
+              return g;
+            });
+          });
+          
+          // Also update search results if it exists there
+          setSearchResults(prevResults => {
+            return prevResults.map(g => {
+              if (g.id === guest.id) {
+                console.log(`✅ Updating guest in search results: ${g.name} to checked-out state`);
+                return {
+                  ...g,
+                  scannedIn: false,
+                  scanInTime: undefined
+                };
+              }
+              return g;
+            });
+          });
+          
           // Use SuccessModal instead of Alert
           setSuccessModalType('check-out');
           setSuccessModalGuest({ name: guest.name, ticketType: guest.ticketType });
           setSuccessModalMessage(successMessage || 'Guest has been checked out successfully.');
           setShowSuccessModal(true);
-          
-          // No need to refresh guest list - API call is sufficient
         } else {
           // API failed - no local updates
           let errorMessage = 'API sync failed';

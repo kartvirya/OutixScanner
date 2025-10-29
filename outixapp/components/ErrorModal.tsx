@@ -1,5 +1,4 @@
 import { AlertTriangle, UserCheck, UserX, XCircle } from 'lucide-react-native';
-import React from 'react';
 import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -12,6 +11,7 @@ interface ErrorModalProps {
   guestName?: string;
   ticketType?: string;
   checkedInDate?: string;
+  onViewDetails?: () => void;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -24,7 +24,8 @@ export default function ErrorModal({
   message,
   guestName,
   ticketType,
-  checkedInDate
+  checkedInDate,
+  onViewDetails
 }: ErrorModalProps) {
   const { colors, isDark } = useTheme();
 
@@ -136,14 +137,35 @@ export default function ErrorModal({
             {getMessage()}
           </Text>
 
-          {/* Action Button */}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: getButtonColor() }]}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>OK</Text>
-          </TouchableOpacity>
+          {/* Action Buttons */}
+          {type === 'already-scanned' && onViewDetails ? (
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, { borderColor: getButtonColor() }]}
+                onPress={onViewDetails}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.secondaryButtonText, { color: getButtonColor() }]}>
+                  View Details
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: getButtonColor() }]}
+                onPress={onClose}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: getButtonColor() }]}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -227,14 +249,29 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 24,
   },
+  buttonContainer: {
+    width: '100%',
+    gap: 12,
+  },
   button: {
     width: '100%',
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
   },
+  secondaryButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
   buttonText: {
     color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  secondaryButtonText: {
     fontSize: 18,
     fontWeight: '700',
   },

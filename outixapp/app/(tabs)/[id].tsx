@@ -3,7 +3,6 @@ import {
     BarChart,
     Calendar,
     ChevronDown,
-    ChevronUp,
     Clock,
     MapPin,
     RefreshCw,
@@ -17,7 +16,6 @@ import {
     Animated,
     Dimensions,
     Modal,
-    Platform,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -32,14 +30,12 @@ import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-    clearManualProxyIP,
     getCheckedInGuestList,
     getCurrentProxyIP,
     getCurrentProxyURL,
     getEvents,
     getGuestList,
     scanQRCode,
-    setManualProxyIP,
     testProxyConnectivity,
     unscanQRCode,
     validateQRCode
@@ -257,7 +253,7 @@ export default function OptimizedEventDetail() {
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
             ticketType: guest.ticketType || guest.ticket_type || 'General',
-            scannedIn: guest.checkedIn || guest.checked_in || false,
+            scannedIn: !!guest.checkedIn || !!guest.checked_in || false,
             scanInTime: guest.checkInTime || guest.check_in_time || undefined,
             scanCode: guest.scanCode || undefined
           }));
