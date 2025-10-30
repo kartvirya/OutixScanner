@@ -1,12 +1,11 @@
-import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
-    ArrowLeft,
     Clock,
     Search,
     UserCheck,
     Users
 } from 'lucide-react-native';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -18,11 +17,9 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
     View
 } from 'react-native';
 import QRScanner from '../../../components/QRScanner';
-import { useRefresh } from '../../../context/RefreshContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
     getCheckedInGuestList,
@@ -380,7 +377,7 @@ export default function AttendancePage() {
         }
         
         Alert.alert(
-          'Check Out Guest',
+          'Pass Out Guest',
           `${existingAttendee.name}\nAre you sure you want to check out this guest?`,
           [
             {
@@ -392,7 +389,7 @@ export default function AttendancePage() {
               }
             },
             {
-              text: 'Check Out',
+              text: 'Pass Out',
               style: 'destructive',
               onPress: async () => {
                 feedback.buttonPressHeavy();

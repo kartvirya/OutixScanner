@@ -32,9 +32,17 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const router = useRouter();
   const segments = useSegments();
+  const isCheckingRef = React.useRef(false);
+  const lastCheckRef = React.useRef<number>(0);
 
   const checkAuthState = async () => {
     try {
+      // Prevent duplicate checks within a short window or while in-flight
+      const now = Date.now();
+      if (isCheckingRef.current || (now - lastCheckRef.current) < 2500) {
+        return;
+      }
+      isCheckingRef.current = true;
       console.log('Checking authentication state...');
       
       // First check if we have a token in memory
@@ -56,6 +64,9 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error checking auth state:', error);
       setIsAuthenticated(false);
+    } finally {
+      lastCheckRef.current = Date.now();
+      isCheckingRef.current = false;
     }
   };
 
@@ -63,16 +74,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuthState();
   }, []);
 
-  // Listen for navigation changes to recheck auth state
+  // Recheck only when we are unauthenticated and navigation changes (avoid duplicate token validation)
   useEffect(() => {
-    const handleNavigationChange = () => {
+    if (isAuthenticated === false) {
       console.log('Navigation changed, rechecking authentication...');
       checkAuthState();
-    };
-
-    // Check auth state when segments change
-    handleNavigationChange();
-  }, [segments]);
+    }
+  }, [segments, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated === null) {

@@ -1,22 +1,22 @@
+import {
+    ArrowLeft,
+    ChevronDown,
+    Search,
+    User,
+    UserCheck,
+    Users,
+} from 'lucide-react-native';
 import React, { memo } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  StyleSheet,
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import {
-  Search,
-  User,
-  UserCheck,
-  Users,
-  ArrowLeft,
-  ChevronDown,
-} from 'lucide-react-native';
-import { useTheme } from '../context/ThemeContext';
 import { Attendee } from '../context/GuestListContext';
+import { useTheme } from '../context/ThemeContext';
 
 // Guest List Header Component
 export const GuestListHeader = memo(({
@@ -184,7 +184,7 @@ export const GuestListItem = memo(({
               activeOpacity={0.7}
             >
               <User size={12} color="#FFFFFF" />
-              <Text style={styles.checkOutText}>Check Out</Text>
+              <Text style={styles.checkOutText}>Pass Out</Text>
             </TouchableOpacity>
             <View style={styles.statusPresent} />
           </View>

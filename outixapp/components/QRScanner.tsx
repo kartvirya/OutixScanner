@@ -202,7 +202,7 @@ export default function QRScanner({ onScan, onClose, customHeader, showCloseButt
               <X size={24} color="#FFFFFF" />
             </TouchableOpacity>
               )}
-              <Text style={styles.headerText}>{headerTitle || (localMode === 'scan-in' ? 'Smart Check In' : 'Smart Check Out')}</Text>
+              <Text style={styles.headerText}>{headerTitle || (localMode === 'scan-in' ? 'Smart Check In' : 'Smart Pass Out')}</Text>
             <View style={styles.placeholderRight} />
           </View>
           )}

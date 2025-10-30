@@ -370,6 +370,30 @@ interface Event {
 }
 
 export const getEvents = async (): Promise<Event[]> => {
+  // Dedupe and short-term cache to avoid double calls (StrictMode/navigation)
+  // Using module-scoped memoization
+  const now = Date.now();
+  // @ts-ignore attach to function for simple module singleton
+  if (!getEvents.__cache) {
+    // @ts-ignore
+    getEvents.__cache = { ts: 0, data: [] as Event[] };
+  }
+  // @ts-ignore
+  if (!getEvents.__inflight) {
+    // @ts-ignore
+    getEvents.__inflight = null as Promise<Event[]> | null;
+  }
+  // @ts-ignore
+  const cache = getEvents.__cache as { ts: number; data: Event[] };
+  // @ts-ignore
+  const inflight: Promise<Event[]> | null = getEvents.__inflight;
+  const TTL = 5000; // 5s
+  if (cache.data.length > 0 && (now - cache.ts) < TTL) {
+    return cache.data;
+  }
+  if (inflight) {
+    return await inflight;
+  }
   try {
     // Make sure we have the token
     if (typeof authToken !== 'string' ) {
@@ -410,7 +434,10 @@ export const getEvents = async (): Promise<Event[]> => {
       console.log("Making request with dedicated axios instance...");
       
       // Make the request with explicit headers
-      const response = await api.get('/events');
+      // @ts-ignore
+      getEvents.__inflight = api.get('/events');
+      // @ts-ignore
+      const response = await getEvents.__inflight;
       
       console.log("Events API response status:", response.status);
       console.log("Response data type:", typeof response.data);
@@ -450,9 +477,17 @@ export const getEvents = async (): Promise<Event[]> => {
         });
         
         console.log(`Successfully fetched ${formattedEvents.length} events`);
+        // @ts-ignore
+        getEvents.__cache = { ts: Date.now(), data: formattedEvents };
+        // @ts-ignore
+        getEvents.__inflight = null;
         return formattedEvents;
       } else {
         console.log("No events found in response, returning empty array");
+        // @ts-ignore
+        getEvents.__cache = { ts: Date.now(), data: [] };
+        // @ts-ignore
+        getEvents.__inflight = null;
         return [];
       }
       
@@ -474,11 +509,15 @@ export const getEvents = async (): Promise<Event[]> => {
 
       
       console.log("All attempts failed, returning empty array");
+      // @ts-ignore
+      getEvents.__inflight = null;
       return [];
     }
     
   } catch (error: any) {
     console.error("Events API error:", error.message);
+    // @ts-ignore
+    getEvents.__inflight = null;
     return [];
   }
 };
@@ -503,155 +542,137 @@ interface Guest {
   [key: string]: unknown;
 }
 
+// Dedupe + short-lived cache to avoid double calls in StrictMode/navigation
+const __guestListInFlight: Map<string, Promise<Guest[]>> = new Map();
+const __guestListCache: Map<string, { data: Guest[]; ts: number }> = new Map();
+const __GUESTLIST_CACHE_TTL = 5000;
+
 export const getGuestList = async (eventId: string): Promise<Guest[]> => {
-  try {
-    // Make sure we have the token
-    if (!authToken) {
-      console.log("No auth token available for guest list, trying to get from storage");
-      const storedToken = await getStorageItem('auth_token');
-      if (storedToken) {
-        authToken = storedToken;
-      } else {
-        console.log("No token in storage for guest list - authentication required");
-        throw new Error('Authentication required. Please login.');
-      }
-    }
-    
-    console.log("Sending guest list request with token:", authToken);
-    
-    // First try with the working guestlist endpoint
+  const cached = __guestListCache.get(eventId);
+  if (cached && (Date.now() - cached.ts) < __GUESTLIST_CACHE_TTL) {
+    return cached.data;
+  }
+  const inflight = __guestListInFlight.get(eventId);
+  if (inflight) return await inflight;
+
+  const req = (async (): Promise<Guest[]> => {
     try {
-      console.log(`Trying primary endpoint: /guestlist/${eventId}`);
-      const response = await api.get(`/guestlist/${eventId}`, {
-        timeout: 30000
-      });
-      
-      console.log("Guest list API response status:", response.status);
-      
-      // Log full response data for debugging
-      console.log("Sample response data:", JSON.stringify(response.data).substring(0, 500));
-      
-      if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
-        // Log sample guest data
-        if (response.data.msg.length > 0) {
-          console.log("Sample guest fields:", Object.keys(response.data.msg[0]));
+      // Make sure we have the token
+      if (!authToken) {
+        console.log("No auth token available for guest list, trying to get from storage");
+        const storedToken = await getStorageItem('auth_token');
+        if (storedToken) {
+          authToken = storedToken;
+        } else {
+          console.log("No token in storage for guest list - authentication required");
+          throw new Error('Authentication required. Please login.');
         }
-        // Map and add QR codes to guests
-        return response.data.msg.map((guest: any) => ({
-          ...guest,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }));
-      } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
-        // Log available fields
-        console.log("Guest data fields:", Object.keys(response.data.msg));
-        // Convert object to array if needed
-        const guest = response.data.msg;
-        return [{
-          ...guest,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }];
-      } else if (Array.isArray(response.data)) {
-        // Log sample guest data
-        if (response.data.length > 0) {
-          console.log("Sample guest fields:", Object.keys(response.data[0]));
-        }
-        return response.data.map((guest: any) => ({
-          ...guest,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }));
-      } else if (response.data && typeof response.data === 'object') {
-        // Log available fields
-        console.log("Response data fields:", Object.keys(response.data));
-        // Handle case where response might be a single object
-        const guest = response.data;
-        return [{
-          ...guest,
-          qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
-        }];
       }
       
-      return [];
-    } catch (error) {
-      console.log("Primary guest list endpoint failed, trying alternative endpoint");
+      console.log("Sending guest list request with token:", authToken);
       
-      // If first endpoint fails, try the alternative endpoint
+      // First try with the working guestlist endpoint
       try {
-        console.log(`Trying alternative endpoint: /events/${eventId}/guests`);
-        const response = await api.get(`/events/${eventId}/guests`, {
-          timeout: 30000
-        });
-        
-        console.log("Alternative guest list API response status:", response.status);
-        
-        // Log full response data for debugging
-        console.log("Sample alternative response data:", JSON.stringify(response.data).substring(0, 500));
-        
-        // Check for different response formats
+        console.log(`Trying primary endpoint: /guestlist/${eventId}`);
+        const response = await api.get(`/guestlist/${eventId}`, { timeout: 30000 });
+        console.log("Guest list API response status:", response.status);
+        console.log("Sample response data:", JSON.stringify(response.data).substring(0, 500));
         if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
-          // Log sample guest data
           if (response.data.msg.length > 0) {
-            console.log("Sample alternative guest fields:", Object.keys(response.data.msg[0]));
+            console.log("Sample guest fields:", Object.keys(response.data.msg[0]));
           }
           return response.data.msg.map((guest: any) => ({
             ...guest,
             qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
           }));
         } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
-          // Log available fields
-          console.log("Alternative guest data fields:", Object.keys(response.data.msg));
-          // Convert object to array if needed
           const guest = response.data.msg;
           return [{
             ...guest,
             qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
           }];
         } else if (Array.isArray(response.data)) {
-          // Log sample guest data
           if (response.data.length > 0) {
-            console.log("Sample alternative guest fields:", Object.keys(response.data[0]));
+            console.log("Sample guest fields:", Object.keys(response.data[0]));
           }
           return response.data.map((guest: any) => ({
             ...guest,
             qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
           }));
         } else if (response.data && typeof response.data === 'object') {
-          // Log available fields
-          console.log("Alternative response data fields:", Object.keys(response.data));
-          // Handle case where response might be a single object
           const guest = response.data;
           return [{
             ...guest,
             qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
           }];
         }
-        
         return [];
-      } catch (altError) {
-        console.error("Both guest list endpoints failed");
-        // Both attempts failed, continue to mock data fallback
+      } catch (error) {
+        console.log("Primary guest list endpoint failed, trying alternative endpoint");
+        try {
+          console.log(`Trying alternative endpoint: /events/${eventId}/guests`);
+          const response = await api.get(`/events/${eventId}/guests`, { timeout: 30000 });
+          console.log("Alternative guest list API response status:", response.status);
+          console.log("Sample alternative response data:", JSON.stringify(response.data).substring(0, 500));
+          if (response.data && response.data.msg && Array.isArray(response.data.msg)) {
+            if (response.data.msg.length > 0) {
+              console.log("Sample alternative guest fields:", Object.keys(response.data.msg[0]));
+            }
+            return response.data.msg.map((guest: any) => ({
+              ...guest,
+              qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+            }));
+          } else if (response.data && response.data.msg && typeof response.data.msg === 'object') {
+            const guest = response.data.msg;
+            return [{
+              ...guest,
+              qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+            }];
+          } else if (Array.isArray(response.data)) {
+            if (response.data.length > 0) {
+              console.log("Sample alternative guest fields:", Object.keys(response.data[0]));
+            }
+            return response.data.map((guest: any) => ({
+              ...guest,
+              qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+            }));
+          } else if (response.data && typeof response.data === 'object') {
+            const guest = response.data;
+            return [{
+              ...guest,
+              qrCode: guest.qrCode || guest.qr_code || guest.ticket_identifier || guest.reference_num || `qr_${guest.id || Math.random()}`
+            }];
+          }
+          return [];
+        } catch (altError) {
+          console.error("Both guest list endpoints failed");
+        }
       }
+      console.log("Using mock guest list data as fallback");
+      return [
+        { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
+        { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
+        { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
+        { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
+        { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
+      ];
+    } catch (error) {
+      console.error(`Get guest list error for event ${eventId}:`, error);
+      return [
+        { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
+        { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
+        { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
+        { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
+        { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
+      ];
     }
-    
-    console.log("Using mock guest list data as fallback");
-    // Return mock attendees when both API endpoints fail
-    return [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
-    ];
-  } catch (error) {
-    console.error(`Get guest list error for event ${eventId}:`, error);
-    // Return mock attendees on error
-    return [
-      { id: 'a1', name: 'John Smith', email: 'john@example.com', ticketType: 'General', scannedIn: true, scanInTime: '08:45 AM', qrCode: 'MOCK_QR_001' },
-      { id: 'a2', name: 'Sarah Johnson', email: 'sarah@example.com', ticketType: 'VIP', scannedIn: true, scanInTime: '08:30 AM', qrCode: 'MOCK_QR_002' },
-      { id: 'a3', name: 'Michael Brown', email: 'michael@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_003' },
-      { id: 'a4', name: 'Emily Davis', email: 'emily@example.com', ticketType: 'General', scannedIn: false, qrCode: 'MOCK_QR_004' },
-      { id: 'a5', name: 'David Wilson', email: 'david@example.com', ticketType: 'Early Bird', scannedIn: false, qrCode: 'MOCK_QR_005' },
-    ];
-  }
+  })();
+
+  __guestListInFlight.set(eventId, req);
+  const data = await req;
+  __guestListInFlight.delete(eventId);
+  __guestListCache.set(eventId, { data, ts: Date.now() });
+  return data;
 };
 
 // New function to fetch paginated guest list (most recent transactions first)
@@ -836,25 +857,9 @@ export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> =
     
     console.log("Fetching checked-in guests for event:", eventId);
     
-    // Note: The API doesn't actually filter by checkedin=1 parameter, so we fetch all guests
-    // and filter them client-side
-    const response = await api.get(`/guestlist/${eventId}`, {
-    });
-
-    if (!response.data) {
-      throw new Error('No response data from guest list API');
-    }
-
-    // The API returns all guests, so we need to filter for checked-in guests client-side
-    let allGuests = [];
-    if (response.data.msg && Array.isArray(response.data.msg)) {
-      allGuests = response.data.msg;
-    } else if (Array.isArray(response.data)) {
-      allGuests = response.data;
-    } else {
-      console.error("Unexpected API response format for checked-in guests:", response.data);
-      return [];
-    }
+    // Use the deduped guest list fetch to avoid duplicate network calls
+    const allGuests: any[] = await getGuestList(eventId);
+    if (!Array.isArray(allGuests)) return [];
 
     // Debug: Log all guests to see their checkedin status
     console.log('All guests checkedin status:', allGuests.map((guest: any) => ({
@@ -1414,9 +1419,9 @@ export const validateQRCode = async (
       };
     }
     
-    // Make direct API request to validate endpoint; append scanmode when provided
-    const query = scanMode ? `?scanmode=${encodeURIComponent(scanMode)}` : '';
-    const response = await api.get(`/validate/${eventId}/${scanCode}${query}`, {
+    // Make direct API request to validate endpoint; default scanmode to ScanIn
+    const effectiveMode = scanMode ?? 'ScanIn';
+    const response = await api.get(`/validate/${eventId}/${scanCode}?scanmode=${encodeURIComponent(effectiveMode)}`, {
       timeout: 30000
     });
     
@@ -1463,8 +1468,8 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
       };
     }
     
-    // Make direct API request to scan endpoint
-    const response = await api.get(`/scan/${eventId}/${scanCode}`, {
+    // Make direct API request to scan endpoint with explicit scan mode
+    const response = await api.get(`/scan/${eventId}/${scanCode}?scanmode=ScanIn`, {
       timeout: 30000
     });
     
@@ -1495,7 +1500,7 @@ export const scanQRCode = async (eventId: string, scanCode: string): Promise<QRS
           authToken = newToken;
           // Retry the scan with the new token (interceptor will add it)
           try {
-            const retryResponse = await api.get(`/scan/${eventId}/${scanCode}`, {
+            const retryResponse = await api.get(`/scan/${eventId}/${scanCode}?scanmode=ScanIn`, {
               timeout: 30000
             });
             
@@ -1563,9 +1568,8 @@ export const unscanQRCode = async (eventId: string, scanCode: string): Promise<Q
       };
     }
     
-    // Make direct API request to unscan endpoint
-    // Use the scan endpoint with unscan=1 parameter (standard approach)
-    const response = await api.get(`/scan/${eventId}/${scanCode}?unscan=1`, {
+    // Make direct API request to unscan endpoint using scanmode=ScanOut
+    const response = await api.get(`/scan/${eventId}/${scanCode}?scanmode=ScanOut`, {
       timeout: 30000
     });
     

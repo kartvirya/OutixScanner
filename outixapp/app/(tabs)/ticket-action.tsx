@@ -209,6 +209,15 @@ export default function TicketActionScreen() {
   const isVerySmallScreen = screenHeight < 600;
   const FOOTER_HEIGHT = isVerySmallScreen ? 64 : 72;
   const TAB_BAR_HEIGHT = 0; // tab bar is hidden on this screen
+  const allSelected = selectedTickets.size === tickets.length && tickets.length > 0;
+  const remainingToSelect = Math.max(tickets.length - selectedTickets.size, 0);
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedTickets(new Set());
+    } else {
+      setSelectedTickets(new Set(tickets.map(t => t.id)));
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -227,7 +236,7 @@ export default function TicketActionScreen() {
             fontSize: isSmallScreen ? 20 : 24
           }
         ]}>
-{scanMode === 'scan-in' ? 'Check In' : 'Check Out'} Tickets
+{scanMode === 'scan-in' ? 'Check In' : 'Pass Out'} Tickets
         </Text>
         <Text style={[
           styles.subTitle, 
@@ -238,6 +247,18 @@ export default function TicketActionScreen() {
         ]}>
 {purchaser?.name ? `${purchaser.name}'s Group - Select tickets to process` : 'Select tickets to process'}
         </Text>
+      </View>
+      {/* Select All / Deselect All */}
+      <View style={{ position: 'absolute', right: 16, top: Math.max(insets.top, 8) + 8 }}>
+        <TouchableOpacity
+          onPress={handleToggleSelectAll}
+          activeOpacity={0.7}
+          style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: isDark ? '#2C2C2E' : '#EFEFEF' }}
+        >
+          <Text style={{ color: colors.text, fontWeight: '700' }}>
+            {allSelected ? 'Deselect All' : `Select All (${remainingToSelect})`}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -281,6 +302,21 @@ export default function TicketActionScreen() {
                 ellipsizeMode="middle"
               >
                 {ticket.ticketIdentifier}
+              </Text>
+              <Text
+                style={[
+                  styles.ticketType,
+                  {
+                    color: selectedTickets.has(ticket.id)
+                      ? colors.background
+                      : colors.text,
+                    fontSize: isSmallScreen ? 12 : 13,
+                  },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {ticket.ticketType || 'Ticket'}
               </Text>
               <Text
                 style={[
@@ -360,7 +396,7 @@ export default function TicketActionScreen() {
                   <UserCheck size={18} color="#FFFFFF" />
                 )}
                 <Text style={[styles.buttonText, styles.confirmButtonText]}>
-                  {scanMode === 'scan-in' ? 'Check In' : 'Check Out'}
+                  {scanMode === 'scan-in' ? 'Check In' : 'Pass Out'}
                   {selectedTickets.size > 0 && ` (${selectedTickets.size})`}
                 </Text>
               </View>

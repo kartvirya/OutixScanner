@@ -27,7 +27,6 @@ import SuccessModal from '../../../components/SuccessModal';
 import { useTheme } from '../../../context/ThemeContext';
 import {
     getCheckedInGuestList,
-    getEvents,
     getGuestListPaginated,
     scanQRCode,
     searchGuestList,
@@ -94,6 +93,8 @@ export default function GuestListPage() {
   
   // Debounce search
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScanRef = useRef<{ data: string; time: number }>({ data: '', time: 0 });
+  const isValidatingRef = useRef(false);
   
   // Track which guests we've already marked as checked in to prevent duplicates
   const markedAsCheckedInRef = useRef(new Set<string>());
@@ -185,8 +186,10 @@ export default function GuestListPage() {
           name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
+          scannedIn: (guest.checkedin === '1') || (guest.checkedin === 1) ||
+                     !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn ||
+                     !!guest.admitted || !!guest.is_admitted || false,
+          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || guest.checkedin_date || undefined,
           scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
           reference_num: guest.booking_reference || guest.reference_num || undefined,
@@ -200,12 +203,22 @@ export default function GuestListPage() {
         };
       });
         
+      // Compute the new displayed list (to also refresh checked-in subset without extra API calls)
+      let newDisplayed: Attendee[];
       if (reset || page === 1) {
+        newDisplayed = processedGuests;
         setDisplayedGuests(processedGuests);
       } else {
+        newDisplayed = [...displayedGuests, ...processedGuests];
         setDisplayedGuests(prev => [...prev, ...processedGuests]);
       }
-      
+
+      // Update checked-in subset from the same data to avoid duplicate API requests
+      try {
+        const checked = newDisplayed.filter(g => g.scannedIn);
+        setCheckedInGuests(checked);
+      } catch {}
+
       setCurrentPage(page);
       setHasMore(result.hasMore);
       setTotalGuestsFromAPI(result.totalCount);
@@ -221,7 +234,7 @@ export default function GuestListPage() {
       setLoadingMore(false);
       isFetchingRef.current = false;
     }
-  }, [eventId, extractGuestName]);
+  }, [eventId, extractGuestName, displayedGuests]);
 
   const fetchCheckedInGuests = useCallback(async () => {
     try {
@@ -350,23 +363,11 @@ export default function GuestListPage() {
     console.log(`🚀 Starting fetchEventAndInitialData for event: ${eventId}`);
     
     try {
-      // Fetch event details for title
-      console.log('📋 Fetching event details...');
-      const eventsData = await getEvents();
-      if (Array.isArray(eventsData) && eventsData.length > 0) {
-        const apiEvent = eventsData.find(e => 
-          e.id === eventId || 
-          e.eventId === eventId || 
-          e.EventId === eventId || 
-          String(e._id) === eventId
-        );
-        
-        if (apiEvent) {
-          setEventTitle(apiEvent.title || apiEvent.name || apiEvent.EventName || 'Event');
-          console.log(`✅ Event title set: ${apiEvent.title || apiEvent.name || apiEvent.EventName}`);
-        }
+      // Avoid fetching events – set a reasonable fallback title
+      if (!eventTitle || eventTitle.trim() === '') {
+        setEventTitle(`Event #${eventId}`);
       }
-      
+
       // Fetch initial paginated guest list
       console.log('📋 Fetching paginated guests...');
       await fetchPaginatedGuests(1, true);
@@ -562,10 +563,7 @@ export default function GuestListPage() {
       
       // Reset pagination and fetch fresh data
       console.log('📋 Fetching fresh data...');
-      await Promise.all([
-        fetchPaginatedGuests(1, true),
-        fetchCheckedInGuests()
-      ]);
+      await fetchPaginatedGuests(1, true);
       console.log('✅ Refresh completed');
       // Manual refresh only - no automatic triggers
     } catch (error) {
@@ -573,7 +571,7 @@ export default function GuestListPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [refreshing, fetchPaginatedGuests, fetchCheckedInGuests]);
+  }, [refreshing, fetchPaginatedGuests]);
 
   const handleOpenScanner = () => {
     feedback.buttonPress();
@@ -586,10 +584,21 @@ export default function GuestListPage() {
   };
 
   const handleScanResult = async (data: string) => {
+    if (isValidatingRef.current) {
+      console.log('⚠️ Validation already in progress (guest list), ignoring scan');
+      return;
+    }
+    const now = Date.now();
+    if (lastScanRef.current.data === data && now - lastScanRef.current.time < 3000) {
+      console.log('⚠️ Ignoring duplicate scan within 3s (guest list)');
+      return;
+    }
+    lastScanRef.current = { data, time: now };
     setShowScanner(false);
     
     try {
       console.log('QR Code scanned:', data);
+      isValidatingRef.current = true;
       
       const validationResult = await validateQRCode(eventId, data);
       
@@ -642,6 +651,8 @@ export default function GuestListPage() {
       console.error('QR scan error:', error);
       feedback.error();
       Alert.alert('Error', 'An unexpected error occurred while processing the QR code.');
+    } finally {
+      isValidatingRef.current = false;
     }
   };
 
@@ -1304,6 +1315,7 @@ export default function GuestListPage() {
                     params: {
                       guestData: JSON.stringify(item),
                       eventTitle: eventTitle,
+                      eventId: eventId,
                       returnTo: `/(tabs)/guest-list/${eventId}` // Add return path to guest list
                     }
                   });
@@ -1320,7 +1332,7 @@ export default function GuestListPage() {
                         style={[styles.modernCheckOutButton, processingGuestIds.has(item.id) && { opacity: 0.6 }]}
                         onPress={() => {
                           if (!processingGuestIds.has(item.id)) {
-                            console.log(`🔘 Check Out button pressed for: ${item.name} (scannedIn: ${item.scannedIn})`);
+                            console.log(`🔘 Pass Out button pressed for: ${item.name} (scannedIn: ${item.scannedIn})`);
                             handleManualScanOut(item);
                           }
                         }}
@@ -1332,7 +1344,7 @@ export default function GuestListPage() {
                         ) : (
                           <>
                             <User size={12} color="#FFFFFF" />
-                            <Text style={styles.modernCheckOutText}>Check Out</Text>
+                            <Text style={styles.modernCheckOutText}>Pass Out</Text>
                           </>
                         )}
                       </TouchableOpacity>

@@ -223,6 +223,21 @@ export default function GuestDetailsPage() {
     return cardInfo;
   };
 
+  const formatPriceValue = (priceInput?: string | number) => {
+    if (priceInput === undefined || priceInput === null) return 'N/A';
+    let str = String(priceInput).trim();
+    if (str === '') return 'N/A';
+    // Remove any currency symbols and spaces
+    str = str.replace(/[^0-9.,-]/g, '');
+    // Normalize comma as thousands separator
+    const normalized = parseFloat(str.replace(/,/g, ''));
+    if (Number.isNaN(normalized)) {
+      // Fallback: just ensure single leading $
+      return `$${str.replace(/^\$/,'')}`;
+    }
+    return `$${normalized.toFixed(2)}`;
+  };
+
   const InfoRow = ({ icon, label, value, iconColor = colors.primary }: {
     icon: React.ReactNode;
     label: string;
@@ -426,7 +441,11 @@ export default function GuestDetailsPage() {
           <InfoRow
             icon={<DollarSign />}
             label="Price"
-            value={guestData.price ? `$${guestData.price}` : guestData.rawData?.price ? `$${guestData.rawData.price}` : 'N/A'}
+            value={formatPriceValue(
+              guestData.price !== undefined && guestData.price !== null
+                ? guestData.price
+                : guestData.rawData?.price
+            )}
             iconColor="#27AE60"
           />
           

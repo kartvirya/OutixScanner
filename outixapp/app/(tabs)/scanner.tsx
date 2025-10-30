@@ -79,6 +79,7 @@ export default function ScannerScreen() {
   
   // Refs
   const lastProcessedRef = useRef<{ data: string; time: number }>({ data: '', time: 0 });
+  const isValidatingRef = useRef(false);
   
   // Entry animation
   useEffect(() => {
@@ -482,6 +483,10 @@ export default function ScannerScreen() {
   );
 
   const handleScanResult = useCallback(async (data: string) => {
+    if (isValidatingRef.current) {
+      console.log('⚠️ Validation already in progress, ignoring scan');
+      return;
+    }
     const now = Date.now();
     if (lastProcessedRef.current.data === data && now - lastProcessedRef.current.time < 3000) {
       console.log('⚠️ Ignoring duplicate scan of the same code within 3s');
@@ -499,6 +504,7 @@ export default function ScannerScreen() {
     }, 8000);
     
     try {
+      isValidatingRef.current = true;
       console.log('QR Code scanned:', data);
       setIsScanning(false);
       
@@ -825,6 +831,7 @@ export default function ScannerScreen() {
         }}
       ]);
     } finally {
+      isValidatingRef.current = false;
       clearTimeout(emergencyResumeTimeout);
     }
   }, [currentEventId, scanMode, isValidatingEvent]);
@@ -942,7 +949,7 @@ export default function ScannerScreen() {
           feedback.checkInError();
           setShowCamera(false); // Close camera when showing check out failed alert
           setIsScanning(false); // Stop scanning when showing check out failed alert
-          Alert.alert('Check Out Failed', typeof result?.msg === 'string' ? result?.msg : (result?.msg?.message || 'Failed to check out'), [
+          Alert.alert('Pass Out Failed', typeof result?.msg === 'string' ? result?.msg : (result?.msg?.message || 'Failed to pass out'), [
             { text: 'OK', onPress: () => {
               setIsScanning(true);
               setShowCamera(true);
