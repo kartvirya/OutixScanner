@@ -10,7 +10,7 @@ import Toast from 'react-native-toast-message';
 import { RefreshProvider } from "../context/RefreshContext";
 import { StorageProvider } from "../context/StorageContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
-import { isAuthenticatedSync, restoreSession } from "../services/api";
+import { isAuthenticatedSync, onAuthChange, restoreSession } from "../services/api";
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -72,6 +72,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuthState();
+    // Subscribe to auth state events (logout/login)
+    const unsubscribe = onAuthChange((authed) => {
+      setIsAuthenticated(authed);
+    });
+    return () => {
+      try { unsubscribe && unsubscribe(); } catch {}
+    };
   }, []);
 
   // Recheck only when we are unauthenticated and navigation changes (avoid duplicate token validation)

@@ -348,13 +348,19 @@ export default function GuestListPage() {
   }, []);
 
   const refreshGuestList = useCallback(async () => {
-    // Reset pagination and reload - but don't call API, just reset state
+    // Force-clear cached guest list so PTR fetches fresh
+    try { require('../../../services/api'); } catch {}
+    try {
+      const { clearGuestListCache } = await import('../../../services/api');
+      clearGuestListCache(eventId);
+    } catch {}
+    // Reset pagination and reload - but don't call API here
     setCurrentPage(1);
     setDisplayedGuests([]);
     setSearchQuery('');
     setIsSearchMode(false);
     setSearchResults([]);
-    // No API calls - only PTR should trigger API calls
+    // Actual API call happens when user triggers PTR handler that calls fetchPaginatedGuests
   }, []);
 
   // Remove useCallback to avoid dependency issues - this function only runs once on mount

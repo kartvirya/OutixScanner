@@ -1,13 +1,13 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar, Clock, TrendingUp, UserCheck, Users } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View, Animated } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import EventDropdown from '../../components/EventDropdown';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCheckedInGuestList, getEvents, getGuestList } from '../../services/api';
 import { usePerformanceMonitor } from '../../utils/performanceUtils';
-import EventDropdown from '../../components/EventDropdown';
 
 interface EventSummary {
   id: string;
@@ -148,8 +148,13 @@ export default function Analytics() {
         () => getEvents(),
         'getEvents'
       );
-      console.log('Events fetched:', evts.length);
-      setEvents(evts);
+      if (!Array.isArray(evts)) {
+        console.warn('Events fetched are not an array:', evts);
+        setEvents([]);
+      } else {
+        console.log('Events fetched:', evts.length);
+        setEvents(evts);
+      }
       
       // OPTIMIZATION: Only process first 3 events for overview stats
       // This reduces API calls from 20 to 6

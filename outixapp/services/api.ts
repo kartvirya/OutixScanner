@@ -15,6 +15,17 @@ let authToken: string | null = null;
 // Flag to prevent auto-login after logout
 let isLoggedOut: boolean = false;
 
+// --- Auth change subscription (for UI to react to logout/login) ---
+type AuthListener = (authed: boolean) => void;
+const __authListeners = new Set<AuthListener>();
+export const onAuthChange = (listener: AuthListener) => {
+  __authListeners.add(listener);
+  return () => __authListeners.delete(listener);
+};
+const __notifyAuth = (authed: boolean) => {
+  __authListeners.forEach(l => { try { l(authed); } catch {} });
+};
+
 // Flag to indicate if AsyncStorage is working
 let isAsyncStorageWorking = true;
 
@@ -545,7 +556,7 @@ interface Guest {
 // Dedupe + short-lived cache to avoid double calls in StrictMode/navigation
 const __guestListInFlight: Map<string, Promise<Guest[]>> = new Map();
 const __guestListCache: Map<string, { data: Guest[]; ts: number }> = new Map();
-const __GUESTLIST_CACHE_TTL = 5000;
+const __GUESTLIST_CACHE_TTL = 120000; // 2 minutes to cover pagination scrolling
 
 export const getGuestList = async (eventId: string): Promise<Guest[]> => {
   const cached = __guestListCache.get(eventId);
@@ -673,6 +684,17 @@ export const getGuestList = async (eventId: string): Promise<Guest[]> => {
   __guestListInFlight.delete(eventId);
   __guestListCache.set(eventId, { data, ts: Date.now() });
   return data;
+};
+
+// Allow callers (e.g., PTR) to force refresh
+export const clearGuestListCache = (eventId?: string) => {
+  if (eventId) {
+    __guestListCache.delete(eventId);
+    __guestListInFlight.delete(eventId);
+  } else {
+    __guestListCache.clear();
+    __guestListInFlight.clear();
+  }
 };
 
 // New function to fetch paginated guest list (most recent transactions first)
@@ -1287,6 +1309,7 @@ export const logout = async (): Promise<boolean> => {
     memoryStorage.delete('user_profile');
     
     console.log('Logout completed - all tokens cleared');
+    __notifyAuth(false);
     return true;
   } catch (error) {
     console.error('Error during logout:', error);
@@ -2144,6 +2167,21 @@ export const submitWaiver = async (data: WaiverSubmissionData): Promise<WaiverSu
     
     return errorResponse;
   }
+};
+
+// Utility: Clears getEvents cache for true pull-to-refresh
+export const clearEventsCache = () => {
+  // @ts-ignore
+  if (getEvents.__cache) {
+    // @ts-ignore
+    getEvents.__cache = { ts: 0, data: [] };
+  }
+  // @ts-ignore
+  if (getEvents.__inflight) {
+    // @ts-ignore
+    getEvents.__inflight = null;
+  }
+  console.log('🗑️ Events cache cleared');
 };
 
 export default api; 

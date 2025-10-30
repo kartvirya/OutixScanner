@@ -33,7 +33,6 @@ import {
     getCheckedInGuestList,
     getCurrentProxyIP,
     getCurrentProxyURL,
-    getEvents,
     getGuestList,
     scanQRCode,
     testProxyConnectivity,
@@ -212,39 +211,28 @@ export default function OptimizedEventDetail() {
     setLoading(true);
     
     try {
-      // Parallel data fetching for better performance
-      const [eventsData, guestListData, checkedInData] = await Promise.all([
-        getEvents().catch(() => null),
+      // Parallel data fetching (avoid fetching events again)
+      const [guestListData, checkedInData] = await Promise.all([
         getGuestList(eventId).catch(() => null),
         getCheckedInGuestList(eventId).catch(() => null)
       ]);
       
       if (!isMounted.current) return;
 
-      // Process event data
-      let apiEvent = null;
-      if (Array.isArray(eventsData)) {
-        apiEvent = eventsData.find(e => 
-          e.id === eventId || 
-          e.eventId === eventId || 
-          String(e.id) === eventId
-        );
-      }
-
-      if (apiEvent) {
-        const eventData: Event = {
-          id: eventId,
-          title: apiEvent.name || apiEvent.title || apiEvent.EventName || 'Event',
-          date: formatAppDateTime(apiEvent.date || apiEvent.datetime || apiEvent.showStart || new Date().toISOString()),
-          time: formatAppTime(apiEvent.time || apiEvent.datetime || apiEvent.showStart || new Date().toISOString()),
-          location: apiEvent.location || apiEvent.venue || apiEvent.VenueName || 'Location TBD',
-          description: apiEvent.description || apiEvent.desc || '',
-          totalTickets: apiEvent.total_tickets || apiEvent.capacity || 100,
-          ticketsSold: 0,
-          revenue: apiEvent.revenue || 0,
-          tickets: [],
-          attendees: []
-        };
+      // Build minimal event data without refetching events
+      const eventData: Event = {
+        id: eventId,
+        title: event?.title || `Event #${eventId}`,
+        date: event?.date || formatAppDateTime(new Date().toISOString()),
+        time: event?.time || formatAppTime(new Date().toISOString()),
+        location: event?.location || 'Location',
+        description: event?.description || '',
+        totalTickets: event?.totalTickets || 0,
+        ticketsSold: 0,
+        revenue: event?.revenue || 0,
+        tickets: [],
+        attendees: []
+      };
 
         // Process guest list
         if (guestListData && Array.isArray(guestListData)) {
@@ -278,10 +266,9 @@ export default function OptimizedEventDetail() {
           setCheckedInGuests(checkedIn);
         }
 
-        // Cache the event data
-        eventCache.set(eventId, { data: eventData, timestamp: Date.now() });
-        setEvent(eventData);
-      }
+      // Cache and set
+      eventCache.set(eventId, { data: eventData, timestamp: Date.now() });
+      setEvent(eventData);
     } catch (err) {
       console.error("Failed to load event details:", err);
     } finally {

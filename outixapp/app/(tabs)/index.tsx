@@ -4,7 +4,6 @@ import { Calendar, CalendarX, ChevronRight, Clock, MapPin } from "lucide-react-n
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Modal, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AppLayout from "../../components/AppLayout";
 import { EventImagePlaceholder } from "../../components/EventImagePlaceholder";
 import { useTheme } from "../../context/ThemeContext";
 import { getEvents, isAuthenticated } from "../../services/api";

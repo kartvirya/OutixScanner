@@ -1,15 +1,14 @@
+import { Check, ChevronDown } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Dimensions,
-  Platform,
+    Dimensions,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { ChevronDown, Check } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 interface AnyEvent {
@@ -39,7 +38,7 @@ const getEventId = (event: AnyEvent): string | undefined => {
 };
 
 const EventDropdown: React.FC<EventDropdownProps> = ({
-  events,
+  events = [],
   selectedEventId,
   onEventSelect,
   placeholder = 'Select an event',
@@ -51,9 +50,10 @@ const EventDropdown: React.FC<EventDropdownProps> = ({
   const allEventsOption = useMemo(() => ({ id: 'all', EventName: 'All Events' }), []);
 
   // Build options with a stable key for each event
+  const safeEvents = Array.isArray(events) ? events : [];
   const eventOptions: AnyEvent[] = useMemo(() => {
-    return [allEventsOption, ...events];
-  }, [events, allEventsOption]);
+    return [allEventsOption, ...safeEvents];
+  }, [safeEvents, allEventsOption]);
 
   const selectedEvent: AnyEvent | undefined = useMemo(() => {
     if (selectedEventId === null || selectedEventId === 'all') return allEventsOption;
