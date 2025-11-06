@@ -181,14 +181,14 @@ export default function GuestListPage() {
           });
         }
         
+        const isCheckedIn = (guest.passout === '1') || (guest.passout === 1) || (guest.is_passed_out === true);
+
         return {
           id: guest.id || guest.guestId || String(Math.random()),
           name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: (guest.checkedin === '1') || (guest.checkedin === 1) ||
-                     !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn ||
-                     !!guest.admitted || !!guest.is_admitted || false,
+          scannedIn: isCheckedIn,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || guest.checkedin_date || undefined,
           scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
@@ -424,24 +424,29 @@ export default function GuestListPage() {
       try {
         console.log('Performing search for:', searchQuery);
         const results = await searchGuestList(eventId, searchQuery);
-        const processedResults = results.map(guest => ({
+        const processedResults = results.map(guest => {
+          const isChecked = (guest.checkedin === '1') || (guest.checkedin === 1) || !!guest.checkedIn || !!guest.checked_in;
+          const isPassedOut = (guest.passout === '1') || (guest.passout === 1) || !!guest.is_passed_out;
+          const isCheckedIn = !!isChecked && !isPassedOut;
+          return {
             id: guest.id || guest.guestId || String(Math.random()),
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
-          ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
-          scanCode: guest.scanCode || undefined,
-          purchased_date: guest.purchased_date || undefined,
-          reference_num: guest.booking_reference || guest.reference_num || undefined,
-          booking_id: guest.booking_id || undefined,
-          ticket_identifier: guest.ticket_identifier || undefined,
-          price: guest.price || undefined,
-          mobile: guest.mobile || undefined,
-          address: guest.address || undefined,
-          notes: guest.notes || undefined,
-          rawData: guest
-        }));
+            ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
+            scannedIn: isCheckedIn,
+            scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
+            scanCode: guest.scanCode || undefined,
+            purchased_date: guest.purchased_date || undefined,
+            reference_num: guest.booking_reference || guest.reference_num || undefined,
+            booking_id: guest.booking_id || undefined,
+            ticket_identifier: guest.ticket_identifier || undefined,
+            price: guest.price || undefined,
+            mobile: guest.mobile || undefined,
+            address: guest.address || undefined,
+            notes: guest.notes || undefined,
+            rawData: guest
+          };
+        });
         
         setSearchResults(processedResults);
         

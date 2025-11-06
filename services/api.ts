@@ -562,15 +562,15 @@ interface Guest {
 // Dedupe + short-lived cache to avoid double calls in StrictMode/navigation
 const __guestListInFlight: Map<string, Promise<Guest[]>> = new Map();
 const __guestListCache: Map<string, { data: Guest[]; ts: number }> = new Map();
-const __GUESTLIST_CACHE_TTL = 120000; // 2 minutes to cover pagination scrolling
+const __GUESTLIST_CACHE_TTL = 0; // Disable cache to ensure fresh guest states
 
 export const getGuestList = async (eventId: string): Promise<Guest[]> => {
   const cached = __guestListCache.get(eventId);
   if (cached && (Date.now() - cached.ts) < __GUESTLIST_CACHE_TTL) {
-    return cached.data;
+    // Cache disabled; fall through to fresh fetch
   }
   const inflight = __guestListInFlight.get(eventId);
-  if (inflight) return await inflight;
+  if (__GUESTLIST_CACHE_TTL > 0 && inflight) return await inflight;
 
   const req = (async (): Promise<Guest[]> => {
     try {
@@ -897,10 +897,13 @@ export const getCheckedInGuestList = async (eventId: string): Promise<Guest[]> =
       checkedinType: typeof guest.checkedin
     })));
 
-    // Filter for only checked-in guests (checkedin === "1" or checkedin === 1)
-    const checkedInGuests = allGuests.filter((guest: any) => 
-      guest.checkedin === "1" || guest.checkedin === 1
-    );
+    // Determine current presence per new rule:
+    // Present (eligible for Pass Out) only if checkedin == 1 AND passout != 1.
+    const checkedInGuests = allGuests.filter((guest: any) => {
+      const isChecked = guest.checkedin === 1 || guest.checkedin === '1';
+      const isPassedOut = guest.passout === 1 || guest.passout === '1';
+      return isChecked && !isPassedOut;
+    });
 
     console.log(`Found ${checkedInGuests.length} checked-in guests out of ${allGuests.length} total guests`);
     
@@ -2191,3 +2194,27 @@ export const clearEventsCache = () => {
 };
 
 export default api; 
+
+// Lightweight event details (counts) endpoint
+export interface EventDetailsResponse {
+  msg: {
+    total: number;
+    scanned: number;
+    tobescanned?: number;
+    datas?: string;
+  };
+  error: boolean;
+  status: number;
+}
+
+export const getEventDetails = async (eventId: string): Promise<EventDetailsResponse | null> => {
+  try {
+    if (!eventId) return null;
+    console.log('Fetching event details (counts) for event:', eventId);
+    const response = await api.get(`/eventdetails/${eventId}`, { timeout: 20000 });
+    return response.data as EventDetailsResponse;
+  } catch (error) {
+    console.error('Error fetching event details:', error);
+    return null;
+  }
+};

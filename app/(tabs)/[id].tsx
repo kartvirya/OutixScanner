@@ -1,46 +1,45 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
-    BarChart,
-    Calendar,
-    ChevronDown,
-    Clock,
-    MapPin,
-    RefreshCw,
-    UserCheck,
-    Users
+  BarChart,
+  Calendar,
+  ChevronDown,
+  Clock,
+  MapPin,
+  UserCheck,
+  Users
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    Modal,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRScanner from '../../components/QRScanner';
 import { useRefresh } from '../../context/RefreshContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
-    getCheckedInGuestList,
-    getCurrentProxyIP,
-    getCurrentProxyURL,
-    getGuestList,
-    scanQRCode,
-    testProxyConnectivity,
-    unscanQRCode,
-    validateQRCode
+  getCurrentProxyIP,
+  getCurrentProxyURL,
+  getEventDetails,
+  getEvents,
+  scanQRCode,
+  testProxyConnectivity,
+  unscanQRCode,
+  validateQRCode
 } from '../../services/api';
 import { feedback, initializeAudio } from '../../services/feedback';
-import { formatAppDateTime, formatAppTime } from '../../utils/date';
+import { formatAppDate, formatAppDateTime, formatAppTime } from '../../utils/date';
 
 // Constants
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -149,9 +148,9 @@ export default function OptimizedEventDetail() {
   const { colors, isDarkMode } = useTheme();
   // Add secondary color fallback
   const theme = {
-    ...colors,
-    secondary: colors.secondary || (isDarkMode ? '#9CA3AF' : '#6B7280')
-  };
+    ...(colors as any),
+    secondary: (colors as any).secondary || (isDarkMode ? '#9CA3AF' : '#6B7280')
+  } as any;
   const { 
     triggerEventRefresh, 
     triggerGuestListRefresh, 
@@ -174,6 +173,9 @@ export default function OptimizedEventDetail() {
   const [guestList, setGuestList] = useState<Attendee[]>([]);
   const [totalGuestsFromAPI, setTotalGuestsFromAPI] = useState(0);
   const [checkedInGuests, setCheckedInGuests] = useState<Attendee[]>([]);
+  const [checkedInCount, setCheckedInCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [presentCount, setPresentCount] = useState(0);
   const [isEventDetailsExpanded, setIsEventDetailsExpanded] = useState(true);
 
   // Animation values
@@ -204,6 +206,17 @@ export default function OptimizedEventDetail() {
       if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
         setEvent(cached.data);
         setLoading(false);
+        // Refresh lightweight counts from event details even when using cache
+        try {
+          const details = await getEventDetails(eventId).catch(() => null);
+          if (isMounted.current && details && (details as any).msg) {
+            const msg: any = (details as any).msg;
+            setTotalGuestsFromAPI(Number(msg.total || 0));
+            setCheckedInCount(Number(msg.scanned || 0));
+            setPendingCount(Number(msg.tobescanned || 0));
+            setPresentCount(Number(msg.present || 0));
+          }
+        } catch {}
         return;
       }
     }
@@ -211,60 +224,56 @@ export default function OptimizedEventDetail() {
     setLoading(true);
     
     try {
-      // Parallel data fetching (avoid fetching events again)
-      const [guestListData, checkedInData] = await Promise.all([
-        getGuestList(eventId).catch(() => null),
-        getCheckedInGuestList(eventId).catch(() => null)
+      // Fetch event meta and lightweight counts (no guestlist calls here)
+      const [eventsList, eventDetails] = await Promise.all([
+        getEvents().catch(() => null),
+        getEventDetails(eventId).catch(() => null)
       ]);
       
       if (!isMounted.current) return;
 
-      // Build minimal event data without refetching events
+      // Derive event meta from events list if available
+      let derivedTitle = event?.title || `Event #${eventId}`;
+      let derivedDate = event?.date || formatAppDateTime(new Date().toISOString());
+      let derivedTime = event?.time || formatAppTime(new Date().toISOString());
+      let derivedLocation = event?.location || 'Location';
+
+      if (Array.isArray(eventsList)) {
+        const found = eventsList.find((e: any) =>
+          String(e.id || e.eventId || e.EventId) === String(eventId)
+        );
+        if (found) {
+          derivedTitle = String(found.title || found.name || found.EventName || found.event_name || derivedTitle);
+          derivedDate = formatAppDate(String(found.date || found.showStart || found.event_date || derivedDate));
+          derivedTime = formatAppTime(String(found.time || found.showStart || found.event_time || derivedTime));
+          derivedLocation = String(found.location || found.venue || found.VenueName || derivedLocation);
+        }
+      }
+
+      // Build event data
       const eventData: Event = {
         id: eventId,
-        title: event?.title || `Event #${eventId}`,
-        date: event?.date || formatAppDateTime(new Date().toISOString()),
-        time: event?.time || formatAppTime(new Date().toISOString()),
-        location: event?.location || 'Location',
+        title: derivedTitle,
+        date: derivedDate,
+        time: derivedTime,
+        location: derivedLocation,
         description: event?.description || '',
-        totalTickets: event?.totalTickets || 0,
+        totalTickets: Number(eventDetails?.msg?.total ?? event?.totalTickets ?? 0),
         ticketsSold: 0,
         revenue: event?.revenue || 0,
         tickets: [],
         attendees: []
       };
 
-        // Process guest list
-        if (guestListData && Array.isArray(guestListData)) {
-          const attendees = guestListData.map(guest => ({
-            id: guest.id || guest.guestId || String(Math.random()),
-            name: extractGuestName(guest),
-            email: guest.email || 'N/A',
-            ticketType: guest.ticketType || guest.ticket_type || 'General',
-            scannedIn: !!guest.checkedIn || !!guest.checked_in || false,
-            scanInTime: guest.checkInTime || guest.check_in_time || undefined,
-            scanCode: guest.scanCode || undefined
-          }));
-          
-          eventData.attendees = attendees;
-          eventData.ticketsSold = attendees.length;
-          setGuestList(attendees);
-          setTotalGuestsFromAPI(attendees.length);
-        }
+      // Set counts from event details
+      setTotalGuestsFromAPI(Number((eventDetails as any)?.msg?.total || 0));
+      setCheckedInCount(Number((eventDetails as any)?.msg?.scanned || 0));
+      setPendingCount(Number((eventDetails as any)?.msg?.tobescanned || 0));
+      setPresentCount(Number((eventDetails as any)?.msg?.present || 0));
 
-        // Process checked-in guests
-        if (checkedInData && Array.isArray(checkedInData)) {
-          const checkedIn = checkedInData.map(guest => ({
-            id: guest.id || String(Math.random()),
-            name: extractGuestName(guest),
-            email: guest.email || 'N/A',
-            ticketType: guest.ticketType || 'General',
-            scannedIn: true,
-            scanInTime: formatAppTime(guest.checkInTime || guest.check_in_time || new Date()),
-            scanCode: guest.scanCode || undefined
-          }));
-          setCheckedInGuests(checkedIn);
-        }
+        // Do not fetch full guest list here (performance). It will be fetched on the Guest List page.
+
+        // Skipped checked-in guests processing to avoid guestlist API here
 
       // Cache and set
       eventCache.set(eventId, { data: eventData, timestamp: Date.now() });
@@ -349,17 +358,12 @@ export default function OptimizedEventDetail() {
 
   // Memoized calculations
   const stats = useMemo(() => {
-    const checkedInCount = checkedInGuests.length;
-    const totalCount = totalGuestsFromAPI || 0;
-    const percentage = totalCount ? Math.round((checkedInCount / totalCount) * 100) : 0;
-    
-    return {
-      total: totalCount,
-      checkedIn: checkedInCount,
-      pending: totalCount - checkedInCount,
-      percentage
-    };
-  }, [checkedInGuests.length, totalGuestsFromAPI]);
+    const totalCount = Number(totalGuestsFromAPI) || 0;
+    const scanned = Number(checkedInCount) || 0;
+    const pending = Number(pendingCount) || Math.max(totalCount - scanned, 0);
+    const present = Number(presentCount) || 0;
+    return { total: totalCount, scanned, pending, present } as const;
+  }, [checkedInCount, totalGuestsFromAPI, pendingCount, presentCount]);
 
   // Navigation handlers
   const handleNavigateToGuestList = useCallback(() => {
@@ -637,27 +641,33 @@ export default function OptimizedEventDetail() {
               textColor={colors.text}
               secondaryColor={theme.secondary}
             />
-            
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-            
-            <StatItem
-              icon={<UserCheck size={20} color="#22C55E" />}
-              iconColor="#22C55E"
-              iconBg="rgba(34, 197, 94, 0.1)"
-              value={stats.checkedIn}
-              label="Present"
-              textColor={colors.text}
-              secondaryColor={theme.secondary}
-            />
-            
-            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-            
             <StatItem
               icon={<BarChart size={20} color="#3B82F6" />}
               iconColor="#3B82F6"
               iconBg="rgba(59, 130, 246, 0.1)"
-              value={`${stats.percentage}%`}
-              label="Rate"
+              value={stats.scanned}
+              label="Scanned"
+              textColor={colors.text}
+              secondaryColor={theme.secondary}
+            />
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <StatItem
+              icon={<Clock size={20} color="#F59E0B" />}
+              iconColor="#F59E0B"
+              iconBg="rgba(245, 158, 11, 0.1)"
+              value={stats.pending}
+              label="Pending"
+              textColor={colors.text}
+              secondaryColor={theme.secondary}
+            />
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <StatItem
+              icon={<UserCheck size={20} color="#22C55E" />}
+              iconColor="#22C55E"
+              iconBg="rgba(34, 197, 94, 0.1)"
+              value={stats.present}
+              label="Present"
               textColor={colors.text}
               secondaryColor={theme.secondary}
             />
@@ -699,63 +709,6 @@ export default function OptimizedEventDetail() {
             onPress={handleNavigateToAttendance}
             textColor={isDarkMode ? '#22C55E' : '#16A34A'}
           />
-        </Animated.View>
-
-        {/* Animated Progress Card */}
-        <Animated.View 
-          style={[
-            styles.progressCard,
-            { 
-              backgroundColor: colors.card,
-              opacity: progressAnimation,
-              transform: [{
-                translateY: progressAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0]
-                })
-              }]
-            }
-          ]}
-        >
-          <View style={styles.progressHeader}>
-            <Text style={[styles.progressTitle, { color: colors.text }]}>Check-in Progress</Text>
-            <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-              <RefreshCw size={18} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.progressContent}>
-            <View style={styles.progressCircle}>
-              <Text style={[styles.progressPercentage, { color: colors.primary }]}>
-                {stats.percentage}%
-              </Text>
-            </View>
-            
-            <View style={styles.progressStats}>
-              <View style={styles.progressStat}>
-                <Text style={[styles.progressStatValue, { color: '#22C55E' }]}>{stats.checkedIn}</Text>
-                <Text style={[styles.progressStatLabel, { color: theme.secondary }]}>Checked In</Text>
-              </View>
-              
-              <View style={styles.progressStat}>
-                <Text style={[styles.progressStatValue, { color: theme.secondary }]}>{stats.pending}</Text>
-                <Text style={[styles.progressStatLabel, { color: theme.secondary }]}>Pending</Text>
-              </View>
-            </View>
-          </View>
-          
-          {/* Progress Bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
-            <Animated.View 
-              style={[
-                styles.progressBar,
-                { 
-                  backgroundColor: colors.primary,
-                  width: `${stats.percentage}%`
-                }
-              ]}
-            />
-          </View>
         </Animated.View>
 
         {/* Quick Actions - Removed per request */}

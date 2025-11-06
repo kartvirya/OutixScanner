@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import WaiverSigningModal from '../../components/WaiverSigningModal';
+import WaiverWebViewModal from '../../components/WaiverWebViewModal';
 import { useTheme } from '../../context/ThemeContext';
 import {
   getRegistrations,
@@ -737,57 +737,13 @@ export default function OptimizedRegistrants() {
         </SafeAreaView>
       </Modal>
 
-      {/* Waiver Signing Modal */}
+      {/* Waiver WebView Modal */}
       {selectedRegistration && selectedRegistration.WaiverLink && selectedWaiver && (
-        <WaiverSigningModal
+        <WaiverWebViewModal
           visible={showWaiverModal}
           onClose={closeWaiverModal}
-          waiver={selectedWaiver}
-          eventName={selectedRegistration.EventName}
-          eventDate={selectedRegistration.showStart}
-          waiverLink={selectedRegistration.WaiverLink}
-          waiverLogo={selectedRegistration.WaiverLogo}
-          waiverBgImage={selectedRegistration.WaiverBgImage}
-          role={selectedRole}
-          onSubmit={async (waiverData) => {
-            try {
-              const submissionData = {
-                waiverType: (selectedRole === 'driver' ? 'Entrant' : 'Crew') as 'Entrant' | 'Crew',
-                waiver_ref: selectedWaiver.Ref || 'unknown-ref',
-                first_name: waiverData.firstName,
-                last_name: waiverData.lastName,
-                date_of_birth: waiverData.dateOfBirth,
-                email_address: waiverData.email,
-                mobile_number: waiverData.mobile,
-                witness_name: waiverData.witnessName,
-                applicant_name: `${waiverData.firstName} ${waiverData.lastName}`,
-                witness_address: waiverData.witnessPhone || 'Not provided',
-                applicantSignFile: waiverData.signature,
-                witnessSignFile: waiverData.witnessSignature,
-                signed_by_parent: waiverData.signedByParent,
-                parent_name: waiverData.signedByParent ? waiverData.parentName : undefined
-              };
-
-              const response = await submitWaiver(submissionData);
-              
-              if (response.success) {
-                Alert.alert(
-                  'Success',
-                  'Waiver submitted successfully!',
-                  [{ text: 'OK', onPress: closeWaiverModal }]
-                );
-              } else {
-                throw new Error(response.message || 'Failed to submit waiver');
-              }
-            } catch (error) {
-              console.error('Error submitting waiver:', error);
-              Alert.alert(
-                'Error',
-                error instanceof Error ? error.message : 'Failed to submit waiver. Please try again.',
-                [{ text: 'OK' }]
-              );
-            }
-          }}
+          waiverUrl={selectedRegistration.WaiverLink}
+          title={`Sign Waiver - ${selectedRole === 'driver' ? 'Driver' : 'Crew'}`}
         />
       )}
     </SafeAreaView>

@@ -2,17 +2,18 @@ import { router } from 'expo-router';
 import { Eye, EyeOff, Lock, User } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { login } from '../../services/api';
@@ -99,8 +100,12 @@ export default function LoginScreen() {
 
           {/* Header */}
           <View style={styles.header}>
-            <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
-              <Lock size={28} color="#FFFFFF" />
+            <View style={styles.logoWrapper}>
+              <Image
+                source={{ uri: 'https://www.outix.co//tickets/images/outix-logo.png' }}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={[styles.title, { color: colors.text }]}>Welcome back</Text>
             <Text style={[styles.subtitle, { color: '#8E8E93' }]}>
@@ -268,18 +273,14 @@ const styles = StyleSheet.create({
     marginBottom: 44,
     alignItems: 'center',
   },
-  logoContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
+  logoWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+  },
+  logoImage: {
+    width: 200,
+    height: 60,
   },
   title: {
     fontSize: 32,

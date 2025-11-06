@@ -31,8 +31,10 @@ import {
     scanQRCode,
     searchGuestList,
     unscanQRCode,
-    validateQRCode
+    validateQRCode,
+    clearGuestListCache
 } from '../../../services/api';
+import { useRefresh } from '../../../context/RefreshContext';
 import { feedback, initializeAudio } from '../../../services/feedback';
 import { formatAppTime } from '../../../utils/date';
 
@@ -59,6 +61,7 @@ interface Attendee {
 
 export default function GuestListPage() {
   const { colors, isDarkMode } = useTheme();
+  const { onGuestListRefresh } = useRefresh();
   // Removed automatic refresh triggers - only refresh on PTR or app open
   const { id } = useLocalSearchParams();
   const eventId = Array.isArray(id) ? id[0] : id || '1';
@@ -181,14 +184,20 @@ export default function GuestListPage() {
           });
         }
         
+        // Rule:
+        // - If checkedin == 0  => show "Check In" (not present) => scannedIn = false
+        // - If checkedin == 1  => look at passout: passout == 0 => show "Pass Out" (present) => scannedIn = true
+        //                                  passout == 1 => show "Check In" (not present) => scannedIn = false
+        const isChecked = (guest.checkedin === '1') || (guest.checkedin === 1) || !!guest.checkedIn || !!guest.checked_in;
+        const isPassedOut = (guest.passout === '1') || (guest.passout === 1) || !!guest.is_passed_out;
+        const isCheckedIn = !!isChecked && !isPassedOut;
+
         return {
           id: guest.id || guest.guestId || String(Math.random()),
           name: extractGuestName(guest),
           email: guest.email || 'N/A',
           ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: (guest.checkedin === '1') || (guest.checkedin === 1) ||
-                     !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn ||
-                     !!guest.admitted || !!guest.is_admitted || false,
+          scannedIn: isCheckedIn,
           scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || guest.checkedin_date || undefined,
           scanCode: guest.scanCode || undefined,
           purchased_date: guest.purchased_date || undefined,
@@ -235,6 +244,8 @@ export default function GuestListPage() {
       isFetchingRef.current = false;
     }
   }, [eventId, extractGuestName, displayedGuests]);
+
+  // (moved below) external refresh listener requires fetchCheckedInGuests to be initialized
 
   const fetchCheckedInGuests = useCallback(async () => {
     try {
@@ -287,6 +298,21 @@ export default function GuestListPage() {
       setCheckedInGuests([]);
     }
   }, [eventId, extractGuestName]);
+
+  // Listen for external refresh triggers from scanner/ticket-action
+  useEffect(() => {
+    const unsubscribe = onGuestListRefresh(eventId, async () => {
+      try {
+        clearGuestListCache(eventId);
+        setCurrentPage(1);
+        await fetchPaginatedGuests(1, true);
+        await fetchCheckedInGuests();
+      } catch (e) {
+        console.log('Guest list refresh callback error:', e);
+      }
+    });
+    return unsubscribe;
+  }, [eventId, onGuestListRefresh, fetchPaginatedGuests, fetchCheckedInGuests]);
 
   // Function to sync check-in status between checked-in guests and displayed guests
   const syncCheckInStatus = useCallback((checkedInList: Attendee[]) => {
@@ -424,24 +450,29 @@ export default function GuestListPage() {
       try {
         console.log('Performing search for:', searchQuery);
         const results = await searchGuestList(eventId, searchQuery);
-        const processedResults = results.map(guest => ({
+        const processedResults = results.map(guest => {
+          const isChecked = (guest.checkedin === '1') || (guest.checkedin === 1) || !!guest.checkedIn || !!guest.checked_in;
+          const isPassedOut = (guest.passout === '1') || (guest.passout === 1) || !!guest.is_passed_out;
+          const isCheckedIn = !!isChecked && !isPassedOut;
+          return {
             id: guest.id || guest.guestId || String(Math.random()),
             name: extractGuestName(guest),
             email: guest.email || 'N/A',
-          ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
-          scannedIn: !!guest.checkedIn || !!guest.checked_in || !!guest.scannedIn || !!guest.admitted || !!guest.is_admitted || false,
-          scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
-          scanCode: guest.scanCode || undefined,
-          purchased_date: guest.purchased_date || undefined,
-          reference_num: guest.booking_reference || guest.reference_num || undefined,
-          booking_id: guest.booking_id || undefined,
-          ticket_identifier: guest.ticket_identifier || undefined,
-          price: guest.price || undefined,
-          mobile: guest.mobile || undefined,
-          address: guest.address || undefined,
-          notes: guest.notes || undefined,
-          rawData: guest
-        }));
+            ticketType: guest.ticket_title || guest.ticketType || guest.ticket_type || 'General',
+            scannedIn: isCheckedIn,
+            scanInTime: guest.checkInTime || guest.check_in_time || guest.admitted_time || undefined,
+            scanCode: guest.scanCode || undefined,
+            purchased_date: guest.purchased_date || undefined,
+            reference_num: guest.booking_reference || guest.reference_num || undefined,
+            booking_id: guest.booking_id || undefined,
+            ticket_identifier: guest.ticket_identifier || undefined,
+            price: guest.price || undefined,
+            mobile: guest.mobile || undefined,
+            address: guest.address || undefined,
+            notes: guest.notes || undefined,
+            rawData: guest
+          };
+        });
         
         setSearchResults(processedResults);
         
@@ -1111,7 +1142,7 @@ export default function GuestListPage() {
           
           console.log(`⚠️ API sync failed for manual check-out: ${errorMessage}`);
           
-          feedback.checkOutError();
+          feedback.error();
           Alert.alert('Check-out Failed', `Failed to check out guest via API: ${errorMessage}`);
         }
       } else {
@@ -1124,7 +1155,7 @@ export default function GuestListPage() {
       
     } catch (error) {
       console.error('❌ Manual check-out error:', error);
-      feedback.checkOutError();
+      feedback.error();
       Alert.alert('Check-out Error', 'An unexpected error occurred while checking out the guest. Please try again.');
     }
   };

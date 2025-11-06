@@ -27,6 +27,7 @@ interface GroupTicket {
   ticketIdentifier: string;
   isCheckedIn: boolean;
   qrCode: string;
+  selectcolor?: string;
 }
 
 interface Purchaser {
@@ -61,7 +62,20 @@ export default function TicketActionScreen() {
     ticketType?: string;
     count: number;
     message?: string;
+    accentColor?: string;
   } | null>(null);
+
+  // Accent color for theming selection screen (derived from validate API selectcolor)
+  const accentColor = (tickets.find(t => t.selectcolor)?.selectcolor as string | undefined) || colors.primary;
+  // If a single ticket is selected, use its color for the confirm action
+  const selectedAccentColor = (() => {
+    if (selectedTickets.size === 1) {
+      const onlyId = Array.from(selectedTickets)[0];
+      const t = tickets.find(x => x.id === onlyId);
+      return (t?.selectcolor as string | undefined) || accentColor;
+    }
+    return accentColor;
+  })();
 
   // Initialize selected tickets
   useEffect(() => {
@@ -175,7 +189,8 @@ export default function TicketActionScreen() {
         count: selectedTickets.size,
         message: isGroupOperation 
           ? `Successfully ${scanMode === 'scan-in' ? 'checked in' : 'checked out'} ${selectedTickets.size} tickets`
-          : undefined
+          : undefined,
+        accentColor: firstTicket?.selectcolor
       });
       setShowSuccessModal(true);
     } catch (error) {
@@ -277,9 +292,9 @@ export default function TicketActionScreen() {
             style={[
               styles.ticketItem,
               {
-                backgroundColor: selectedTickets.has(ticket.id)
-                  ? colors.primary
-                  : colors.card,
+                backgroundColor: colors.card,
+                borderColor: (ticket.selectcolor as string | undefined) || accentColor,
+                borderWidth: selectedTickets.has(ticket.id) ? 3 : 1,
                 minHeight: isVerySmallScreen ? 60 : 70,
                 marginBottom: 8,
               },
@@ -292,9 +307,7 @@ export default function TicketActionScreen() {
                 style={[
                   styles.ticketName,
                   {
-                    color: selectedTickets.has(ticket.id)
-                      ? colors.background
-                      : colors.text,
+                    color: colors.text,
                     fontSize: isSmallScreen ? 15 : 16,
                   },
                 ]}
@@ -307,9 +320,7 @@ export default function TicketActionScreen() {
                 style={[
                   styles.ticketType,
                   {
-                    color: selectedTickets.has(ticket.id)
-                      ? colors.background
-                      : colors.text,
+                    color: colors.text,
                     fontSize: isSmallScreen ? 12 : 13,
                   },
                 ]}
@@ -322,9 +333,7 @@ export default function TicketActionScreen() {
                 style={[
                   styles.ticketType,
                   {
-                    color: selectedTickets.has(ticket.id)
-                      ? colors.background
-                      : colors.text,
+                    color: colors.text,
                     fontSize: isSmallScreen ? 12 : 13,
                   },
                 ]}
@@ -338,7 +347,7 @@ export default function TicketActionScreen() {
               {selectedTickets.has(ticket.id) ? (
                 <Check
                   size={isSmallScreen ? 20 : 24}
-                  color={colors.background}
+                  color={(ticket.selectcolor as string | undefined) || accentColor}
                 />
               ) : (
                 <Square
@@ -415,6 +424,7 @@ export default function TicketActionScreen() {
           ticketType={successData.ticketType}
           count={successData.count}
           message={successData.message}
+          accentColor={successData.accentColor}
         />
       )}
     </SafeAreaView>

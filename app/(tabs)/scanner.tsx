@@ -65,6 +65,7 @@ export default function ScannerScreen() {
     guestName?: string;
     ticketType?: string;
     message?: string;
+    accentColor?: string;
   } | null>(null);
   
   // Animation values
@@ -396,6 +397,7 @@ export default function ScannerScreen() {
     guestName?: string;
     ticketType?: string;
     message?: string;
+    accentColor?: string;
   }) => {
     setSuccessData(successInfo);
     setShowSuccessModalState(true);
@@ -563,8 +565,10 @@ export default function ScannerScreen() {
         };
       } else {
         try {
+          // Allow more time for slower networks and server response
+          const timeoutMs = 20000;
           const validationTimeout = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Validation timed out')), 5000)
+            setTimeout(() => reject(new Error('Validation timed out')), timeoutMs)
           );
           const validationPromise = validateQRCode(currentEventId, data, scanMode === 'scan-out' ? 'ScanOut' : undefined);
           validationResult = await Promise.race([validationPromise, validationTimeout]);
@@ -574,7 +578,7 @@ export default function ScannerScreen() {
           showErrorModal({
             type: 'general',
             title: 'Validation Error',
-            message: 'Failed to validate QR code. Please try again.',
+            message: 'Validation took too long. Please check your connection and try again.',
             guestName: undefined,
             ticketType: undefined
           });
@@ -753,58 +757,30 @@ export default function ScannerScreen() {
       
       // Handle scan-out mode
       if (scanMode === 'scan-out') {
-        if (validationResult.error) {
-          let errorMessage = 'This QR code is not valid for this event.';
-          if (typeof validationResult.msg === 'string') {
-            errorMessage = validationResult.msg;
-          } else if (validationResult.msg && typeof validationResult.msg === 'object' && 'message' in validationResult.msg) {
-            errorMessage = validationResult.msg.message;
-          }
-          
-          const isNotCheckedInError = errorMessage.toLowerCase().includes('not checked in') ||
-                                     errorMessage.toLowerCase().includes('not scanned');
-          
-          if (isNotCheckedInError) {
-            let guestName = 'Guest';
-            let ticketType = 'Ticket';
-            
-            if (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
-              const info = (validationResult.msg as any).info;
-              guestName = info?.fullname || 'Guest';
-              ticketType = info?.ticket_title || 'Ticket';
-            }
-            
-            feedback.checkInError();
-            showErrorModal({
-              type: 'not-checked-in',
-              title: 'Not Checked In',
-              message: 'Ticket is not checked in.',
-              guestName,
-              ticketType
-            });
-            return;
-          }
-        }
-
         const info = (validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg)
           ? (validationResult.msg as any).info
           : {};
-        const isCheckedIn = info?.checkedin === 1 || info?.checkedin === '1' || info?.checkedin === true;
-        
-        if (!isCheckedIn) {
+        const available = Array.isArray(info?.availabletickets) ? info.availabletickets : [];
+
+        // Determine if pass-out is actually possible: either info.passout=="1" or any available ticket shows checkedin/passout true
+        const passable = (info?.passout === '1' || info?.passout === 1) ||
+                         available.some((t: any) => t?.passout === '1' || t?.passout === 1 || t?.checkedin === '1' || t?.checkedin === 1);
+
+        if (!passable && available.length === 0) {
           const guestName = info?.fullname || 'Guest';
           const ticketType = info?.ticket_title || 'Ticket';
           feedback.checkInError();
           showErrorModal({
             type: 'not-checked-in',
             title: 'Not Checked In',
-            message: 'Cannot check out. This ticket has not been checked in yet.',
+            message: 'This ticket is not currently checked in for pass out.',
             guestName,
             ticketType
           });
           return;
         }
 
+        // Always show the availabletickets selection for pass-out (even if only one)
         await performScanOut(data, validationResult);
         return;
       }
@@ -844,7 +820,10 @@ export default function ScannerScreen() {
       const available = Array.isArray(info?.availabletickets) ? info.availabletickets : [];
       
       if (available.length === 1) {
-        const result = await scanQRCode(currentEventId, scanCode);
+        // If validation returns a single available ticket, use that ticket's identifier.
+        // The original scanned code may belong to the same booking but not be the one available.
+        const targetId = (available[0]?.ticket_identifier as string) || scanCode;
+        const result = await scanQRCode(currentEventId, targetId);
         if (!result || result.error) {
           feedback.checkInError();
           setShowCamera(false); // Close camera when showing scan failed alert
@@ -868,7 +847,8 @@ export default function ScannerScreen() {
           type: 'check-in',
           guestName: info?.fullname || 'Guest',
           ticketType: info?.ticket_title || 'Ticket',
-          message: successMessage
+          message: successMessage,
+          accentColor: info?.selectcolor || undefined
         });
         
         // Auto-close success modal and return to scanning after 2 seconds
@@ -893,7 +873,8 @@ export default function ScannerScreen() {
         ticket_title: info?.ticket_title,
         checkedin: info?.checkedin,
         admit_name: info?.fullname,
-        email: info?.email
+        email: info?.email,
+        selectcolor: info?.selectcolor
       }]).map((t: any) => {
         const qr = t.ticket_identifier;
         return {
@@ -903,7 +884,8 @@ export default function ScannerScreen() {
           ticketType: t.ticket_title || 'Ticket',
           ticketIdentifier: qr,
           isCheckedIn: t.checkedin === '1' || t.checkedin === 1 || false,
-          qrCode: qr
+          qrCode: qr,
+          selectcolor: t.selectcolor || info?.selectcolor
         };
       });
 
@@ -944,7 +926,9 @@ export default function ScannerScreen() {
       const available = Array.isArray(info?.availabletickets) ? info.availabletickets : [];
       
       if (available.length === 1) {
-        const result = await unscanQRCode(currentEventId, scanCode);
+        // For pass-out with a single available ticket, use the specific ticket identifier from validation
+        const targetId = (available[0]?.ticket_identifier as string) || scanCode;
+        const result = await unscanQRCode(currentEventId, targetId);
         if (!result || result.error) {
           feedback.checkInError();
           setShowCamera(false); // Close camera when showing check out failed alert
@@ -968,7 +952,8 @@ export default function ScannerScreen() {
           type: 'check-out',
           guestName: info?.fullname || 'Guest',
           ticketType: info?.ticket_title || 'Ticket',
-          message: successMessage
+          message: successMessage,
+          accentColor: info?.selectcolor || undefined
         });
         
         // Auto-close success modal and return to scanning after 2 seconds
@@ -993,7 +978,8 @@ export default function ScannerScreen() {
         ticket_title: info?.ticket_title,
         checkedin: info?.checkedin,
         admit_name: info?.fullname,
-        email: info?.email
+        email: info?.email,
+        selectcolor: info?.selectcolor
       }]).map((t: any) => {
         const qr = t.ticket_identifier;
         return {
@@ -1003,7 +989,8 @@ export default function ScannerScreen() {
           ticketType: t.ticket_title || 'Ticket',
           ticketIdentifier: qr,
           isCheckedIn: t.checkedin === '1' || t.checkedin === 1 || false,
-          qrCode: qr
+          qrCode: qr,
+          selectcolor: t.selectcolor || info?.selectcolor
         };
       });
       
@@ -1193,6 +1180,7 @@ export default function ScannerScreen() {
           ticketType={successData.ticketType}
           message={successData.message}
           hideContinueButton={true}
+          accentColor={successData.accentColor}
         />
       )}
     </SafeAreaView>

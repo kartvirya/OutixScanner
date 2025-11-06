@@ -48,6 +48,7 @@ export default function GuestDetailsPage() {
   const [checkedInDate, setCheckedInDate] = useState<string | null>(guestData?.checkedInDate || guestData?.rawData?.checkedin_date || null);
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(guestData?.scannedIn || false);
   const [isLoadingCheckedInDate, setIsLoadingCheckedInDate] = useState(false);
+  const [checkedInBy, setCheckedInBy] = useState<string | null>(null);
   
   // Initialize checked-in date from guest data if available
   useEffect(() => {
@@ -71,7 +72,8 @@ export default function GuestDetailsPage() {
         const eventId = params.eventId as string;
         const validationResult = await validateQRCode(eventId, guestData.ticket_identifier);
         
-        if (validationResult && !validationResult.error && validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
+        // Parse info regardless of error flag; API may include useful info even on error
+        if (validationResult && validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
           const info = validationResult.msg.info;
           if (info) {
             // Set checked-in status based on checkedin field (0 or 1)
@@ -98,6 +100,14 @@ export default function GuestDetailsPage() {
                 console.log('🔍 Setting fallback checked-in date');
                 setCheckedInDate('Unknown time');
               }
+            }
+            
+            // Set checked-in by if available
+            if (info.CheckedInBy) {
+              console.log(`✅ Found checked-in by from API: ${info.CheckedInBy}`);
+              setCheckedInBy(info.CheckedInBy);
+            } else {
+              setCheckedInBy(null);
             }
           }
         } else {
@@ -138,12 +148,17 @@ export default function GuestDetailsPage() {
         console.log('✅ Check-in successful');
         // Update checked-in status
         setIsCheckedIn(true);
-        // Refresh the checked-in date
+        // Refresh the checked-in date and checked-in by
         const validationResult = await validateQRCode(eventId, guestData.ticket_identifier);
         if (validationResult && !validationResult.error && validationResult.msg && typeof validationResult.msg === 'object' && 'info' in validationResult.msg) {
           const info = validationResult.msg.info;
-          if (info && info.checkedin_date) {
-            setCheckedInDate(info.checkedin_date);
+          if (info) {
+            if (info.checkedin_date) {
+              setCheckedInDate(info.checkedin_date);
+            }
+            if (info.CheckedInBy) {
+              setCheckedInBy(info.CheckedInBy);
+            }
           }
         }
       } else {
@@ -171,8 +186,9 @@ export default function GuestDetailsPage() {
         console.log('✅ Pass-out successful');
         // Update checked-in status
         setIsCheckedIn(false);
-        // Clear the checked-in date
+        // Clear the checked-in date and checked-in by
         setCheckedInDate(null);
+        setCheckedInBy(null);
       } else {
         console.log('❌ Pass-out failed:', result?.msg);
       }
@@ -368,6 +384,18 @@ export default function GuestDetailsPage() {
                   
                   return formatted;
                 })()}
+              </Text>
+            </View>
+          )}
+          
+          {/* Checked-in By */}
+          {checkedInBy && (
+            <View style={styles.checkInInfo}>
+              <Text style={[styles.checkInLabel, { color: colors.text }]}>
+                Checked in by:
+              </Text>
+              <Text style={[styles.checkInTime, { color: colors.text }]}>
+                {checkedInBy}
               </Text>
             </View>
           )}

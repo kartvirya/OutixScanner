@@ -12,6 +12,7 @@ interface SuccessModalProps {
   count?: number;
   message?: string;
   hideContinueButton?: boolean;
+  accentColor?: string; // optional override color (e.g., selectcolor from API)
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -24,22 +25,40 @@ export default function SuccessModal({
   ticketType, 
   count = 1,
   message,
-  hideContinueButton = false
+  hideContinueButton = false,
+  accentColor
 }: SuccessModalProps) {
   const { colors, isDark } = useTheme();
 
-  const getIcon = () => {
+  const getEffectiveColor = () => {
+    if (accentColor && typeof accentColor === 'string' && accentColor.trim() !== '') {
+      return accentColor;
+    }
     switch (type) {
       case 'check-in':
-        return <UserCheck size={48} color="#34C759" />;
-      case 'check-out':
-        return <UserX size={48} color="#FF9500" />;
       case 'group-check-in':
-        return <Users size={48} color="#34C759" />;
+        return '#34C759';
+      case 'check-out':
       case 'group-check-out':
-        return <Users size={48} color="#FF9500" />;
+        return '#FF9500';
       default:
-        return <CheckCircle size={48} color="#34C759" />;
+        return colors.primary;
+    }
+  };
+
+  const getIcon = () => {
+    const color = getEffectiveColor();
+    switch (type) {
+      case 'check-in':
+        return <UserCheck size={48} color={color} />;
+      case 'check-out':
+        return <UserX size={48} color={color} />;
+      case 'group-check-in':
+        return <Users size={48} color={color} />;
+      case 'group-check-out':
+        return <Users size={48} color={color} />;
+      default:
+        return <CheckCircle size={48} color={color} />;
     }
   };
 
@@ -93,6 +112,7 @@ export default function SuccessModal({
     }
   };
 
+  // Button keeps the original type-based color so it's always visible
   const getButtonColor = () => {
     switch (type) {
       case 'check-in':
@@ -116,7 +136,7 @@ export default function SuccessModal({
       <View style={styles.overlay}>
         <View style={[styles.modal, { backgroundColor: colors.card }]}>
           {/* Success Icon */}
-          <View style={[styles.iconContainer, { backgroundColor: `${getButtonColor()}15` }]}>
+          <View style={[styles.iconContainer, { backgroundColor: `${getEffectiveColor()}15` }]}>
             {getIcon()}
           </View>
 
@@ -126,7 +146,7 @@ export default function SuccessModal({
           </Text>
 
           {/* Subtitle */}
-          <Text style={[styles.subtitle, { color: colors.primary }]}>
+          <Text style={[styles.subtitle, { color: getEffectiveColor() }]}>
             {getSubtitle()}
           </Text>
 

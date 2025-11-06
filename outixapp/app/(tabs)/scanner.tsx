@@ -563,8 +563,10 @@ export default function ScannerScreen() {
         };
       } else {
         try {
+          // Allow more time for slower networks and server response
+          const timeoutMs = 20000;
           const validationTimeout = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Validation timed out')), 5000)
+            setTimeout(() => reject(new Error('Validation timed out')), timeoutMs)
           );
           const validationPromise = validateQRCode(currentEventId, data, scanMode === 'scan-out' ? 'ScanOut' : undefined);
           validationResult = await Promise.race([validationPromise, validationTimeout]);
@@ -574,7 +576,7 @@ export default function ScannerScreen() {
           showErrorModal({
             type: 'general',
             title: 'Validation Error',
-            message: 'Failed to validate QR code. Please try again.',
+            message: 'Validation took too long. Please check your connection and try again.',
             guestName: undefined,
             ticketType: undefined
           });
